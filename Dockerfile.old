@@ -1,0 +1,17 @@
+FROM node:21.5.0-alpine3.19
+
+WORKDIR /home/server
+
+COPY nodemon.json .
+COPY tsconfig.json .
+COPY package*.json .
+COPY package.json package.json
+COPY prisma/ prisma/
+RUN npm install
+COPY .env .env
+
+COPY src/ src/
+
+RUN npm run build
+
+CMD ["npm","start"]

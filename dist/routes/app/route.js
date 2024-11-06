@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const error_handler_1 = require("../../error-handler");
+const domainController_1 = require("../../controllers/outlet/domains/domainController");
+const authControl_1 = require("../../controllers/auth/prime/authControl");
+const auth_1 = require("../../middlewares/auth");
+const appRoute = (0, express_1.Router)();
+appRoute.get("/get-site/:subdomain", (0, error_handler_1.errorHandler)(domainController_1.getPrimeDomain));
+appRoute.post("/check-otp", (0, error_handler_1.errorHandler)(authControl_1.otpCheck));
+appRoute.post("/update-otp", (0, error_handler_1.errorHandler)(authControl_1.updateOtp));
+appRoute.post("/customer-login", (0, error_handler_1.errorHandler)(authControl_1.CustomerLogin));
+appRoute.patch("/update-customer-session/:outletId/:customerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(authControl_1.customerUpdateSession));
+exports.default = appRoute;
