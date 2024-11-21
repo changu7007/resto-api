@@ -1159,3 +1159,7 @@ export const inviteCode = () => {
 
   return code;
 };
+
+export const printKotOrder = async (req: Request, res: Response) => {
+  const { orderItems } = req.body;
+};

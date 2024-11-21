@@ -48,7 +48,7 @@ export const paymentRazorpayVerification = async (
 };
 
 export const buyPlan = async (req: Request, res: Response) => {
-  const { paymentId, subscriptionId } = req.body;
+  const { paymentId, subscriptionId, paidAmount } = req.body;
   // @ts-ignore
   const userId = req.user?.id;
 
@@ -95,20 +95,11 @@ export const buyPlan = async (req: Request, res: Response) => {
       userId: findOwner.id,
       isSubscription: true,
       paymentId: paymentId,
+      paidAmount: paidAmount,
       subscribedDate: new Date(),
       planType: findSubscription.planType,
       subscriptionPlan: findSubscription.subscriptionPlan,
       validDate: validDate,
-    },
-  });
-
-  await prismaDB.user.update({
-    where: {
-      id: findOwner.id,
-    },
-    data: {
-      isSubscribed: true,
-      subscribedDate: new Date(),
     },
   });
 

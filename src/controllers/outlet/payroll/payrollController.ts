@@ -119,3 +119,40 @@ export const getThisMonthPayroll = async (req: Request, res: Response) => {
     totalPendingPayouts: newPayrolls.length,
   });
 };
+
+export const updatePayrollStatus = async (req: Request, res: Response) => {
+  const { outletId, id } = req.params;
+
+  const { status } = req.body;
+  const outlet = await getOutletById(outletId);
+
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const findPayroll = await prismaDB.payroll.findFirst({
+    where: {
+      id: id,
+    },
+  });
+
+  if (findPayroll == null || !findPayroll.id) {
+    throw new NotFoundException(
+      "Payroll Not Found",
+      ErrorCode.OUTLET_NOT_FOUND
+    );
+  }
+
+  await prismaDB.payroll.update({
+    where: {
+      id: findPayroll.id,
+    },
+    data: {
+      status: status,
+    },
+  });
+  return res.json({
+    success: true,
+    message: "Updated Payroll Status",
+  });
+};

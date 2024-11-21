@@ -9,6 +9,7 @@ import { ErrorCode } from "../../exceptions/root";
 import { redis } from "../../services/redis";
 import { prismaDB } from "../..";
 import { BadRequestsException } from "../../exceptions/bad-request";
+import { outletOnlinePortalSchema } from "../../schema/staff";
 
 export const getStaffOutlet = async (req: Request, res: Response) => {
   //@ts-ignore
@@ -46,6 +47,9 @@ export const getByOutletId = async (req: Request, res: Response) => {
       // @ts-ignore
       adminId: req.user?.id,
       id: outletId,
+    },
+    include: {
+      integrations: true,
     },
   });
 
@@ -196,5 +200,148 @@ export const addFMCTokenToOutlet = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "FMC TOKEN ADDED SUCCESFULLY",
+  });
+};
+
+export const patchOutletOnlinePOrtalDetails = async (
+  req: Request,
+  res: Response
+) => {
+  const validateFields = outletOnlinePortalSchema.parse(req.body);
+
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  await prismaDB.restaurant.update({
+    where: {
+      id: outlet.id,
+    },
+    data: {
+      onlinePortal: true,
+      openTime: validateFields.openTime,
+      closeTime: validateFields.closeTime,
+      areaLat: validateFields.areaLat,
+      areaLong: validateFields.areaLong,
+      orderRadius: Number(validateFields.orderRadius),
+      isDelivery: validateFields.isDelivery,
+      isDineIn: validateFields.isDineIn,
+      isPickUp: validateFields.isPickUp,
+    },
+  });
+
+  await prismaDB.integration.create({
+    data: {
+      restaurantId: outlet.id,
+      name: "ONLINEHUB",
+      status: true,
+      link: validateFields.subdomain,
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Online Hub Integrated Success",
+  });
+};
+
+export const getIntegration = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getINtegrations = await prismaDB.integration.findMany({
+    where: {
+      restaurantId: outlet.id,
+    },
+  });
+
+  return res.json({
+    success: true,
+    integrations: getINtegrations,
+  });
+};
+
+export const createInvoiceDetails = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const { isGSTEnabled, isPrefix, invoiceNo, prefix } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  await prismaDB.invoice.create({
+    data: {
+      restaurantId: outlet.id,
+      isGSTEnabled,
+      isPrefix,
+      invoiceNo,
+      prefix: isPrefix ? prefix : "",
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Created Tax & Invoice Details",
+  });
+};
+
+export const updateInvoiceDetails = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const { isGSTEnabled, isPrefix, invoiceNo, prefix } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  await prismaDB.invoice.update({
+    where: {
+      restaurantId: outlet.id,
+    },
+    data: {
+      isGSTEnabled,
+      isPrefix,
+      invoiceNo,
+      prefix: isPrefix ? prefix : "",
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Updated Tax & Invoice Details",
+  });
+};
+
+export const fetchInvoiceDetails = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getInvoiceDetails = await prismaDB.invoice.findFirst({
+    where: {
+      restaurantId: outlet.id,
+    },
+  });
+
+  return res.json({
+    success: true,
+    invoiceData: getInvoiceDetails,
   });
 };

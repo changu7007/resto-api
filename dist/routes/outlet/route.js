@@ -16,11 +16,15 @@ const statsController_1 = require("../../controllers/outlet/stats/statsControlle
 const domainController_1 = require("../../controllers/outlet/domains/domainController");
 const staffController_1 = require("../../controllers/outlet/staffs/staffController");
 const payrollController_1 = require("../../controllers/outlet/payroll/payrollController");
+const customerController_1 = require("../../controllers/outlet/customers/customerController");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getStaffOutlet));
 outletRoute.get("/:outletId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getByOutletId));
 outletRoute.patch("/:outletId/add-fmc", (0, error_handler_1.errorHandler)(outletController_1.addFMCTokenToOutlet));
 outletRoute.get("/:outletId/notifications", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getAllNotifications));
+//integration
+outletRoute.get("/:outletId/get-integrations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getIntegration));
+outletRoute.post("/:outletId/patch-online-hub", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.patchOutletOnlinePOrtalDetails));
 //staff
 outletRoute.get("/:outletId/get-staffs", (0, error_handler_1.errorHandler)(staffController_1.getAllStaffs));
 outletRoute.get("/:outletId/get-staff/:staffId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.getStaffId));
@@ -83,8 +87,17 @@ outletRoute.delete("/:outletId/delete-area/:areaId", auth_1.isAuthMiddelware, (0
 outletRoute.get("/:outletId/get-outlet-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.orderStatsForOutlet));
 outletRoute.get("/:outletId/get-staff-outlet-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.orderStatsForOutletByStaff));
 outletRoute.get("/:outletId/get-outlet-top-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.outletTopSellingItems));
+outletRoute.get("/:outletId/get-last-six-orderstats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.lastSixMonthsOrders));
 //domains
 outletRoute.get("/:outletId/get-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.getDomain));
+outletRoute.post("/:outletId/create-sub-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.createSubDomain));
 //payroll
 outletRoute.get("/:outletId/get-monthly-payroll", (0, error_handler_1.errorHandler)(payrollController_1.getThisMonthPayroll));
+outletRoute.patch("/:outletId/staff-payroll-status/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(payrollController_1.updatePayrollStatus));
+//customers
+outletRoute.get("/:outletId/get-customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(customerController_1.getAllCustomer));
+//invoice
+outletRoute.get("/:outletId/get-invoice-data", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.fetchInvoiceDetails));
+outletRoute.post("/:outletId/create-invoice-data", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.createInvoiceDetails));
+outletRoute.patch("/:outletId/update-invoice-data", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.updateInvoiceDetails));
 exports.default = outletRoute;

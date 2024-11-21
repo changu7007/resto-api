@@ -4,6 +4,7 @@ import { getOutletById } from "../../../lib/outlet";
 import { redis } from "../../../services/redis";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
+import { BadRequestsException } from "../../../exceptions/bad-request";
 
 export const getDomain = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -54,7 +55,9 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
   }
 
   const getSite = await prismaDB.site.findUnique({
-    where: subdomain ? { subdomain } : { customDomain: subdomain },
+    where: {
+      subdomain: subdomain,
+    },
     include: { user: true, restaurant: true },
   });
 
@@ -63,5 +66,47 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     site: getSite,
+  });
+};
+
+export const createSubDomain = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { subdomain } = req.body;
+
+  if (!subdomain) {
+    throw new BadRequestsException(
+      "Subdomain is required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  await prismaDB.site.create({
+    data: {
+      // @ts-ignore
+      adminId: req?.user?.id,
+      restaurantId: outlet?.id,
+      subdomain: subdomain,
+    },
+  });
+
+  const getDomain = await prismaDB.site.findFirst({
+    where: {
+      restaurantId: outlet?.id,
+      // @ts-ignore
+      adminId: req.user?.id,
+    },
+  });
+
+  await redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+
+  return res.json({
+    success: true,
+    message: "SubDomain Created Successfully",
   });
 };

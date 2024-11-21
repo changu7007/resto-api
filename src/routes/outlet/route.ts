@@ -1,10 +1,15 @@
 import { Router } from "express";
 import {
   addFMCTokenToOutlet,
+  createInvoiceDetails,
+  fetchInvoiceDetails,
   getAllNotifications,
   getByOutletId,
+  getIntegration,
   getStaffOutlet,
   patchOutletDetails,
+  patchOutletOnlinePOrtalDetails,
+  updateInvoiceDetails,
 } from "../../controllers/outlet/outletController";
 import { errorHandler } from "../../error-handler";
 import { isAuthMiddelware } from "../../middlewares/auth";
@@ -66,11 +71,15 @@ import {
 } from "../../controllers/outlet/variants/variantsController";
 import { s3Upload } from "../../controllers/s3Upload";
 import {
+  lastSixMonthsOrders,
   orderStatsForOutlet,
   orderStatsForOutletByStaff,
   outletTopSellingItems,
 } from "../../controllers/outlet/stats/statsController";
-import { getDomain } from "../../controllers/outlet/domains/domainController";
+import {
+  createSubDomain,
+  getDomain,
+} from "../../controllers/outlet/domains/domainController";
 import {
   createStaff,
   deleteStaff,
@@ -78,7 +87,11 @@ import {
   getStaffId,
   updateStaff,
 } from "../../controllers/outlet/staffs/staffController";
-import { getThisMonthPayroll } from "../../controllers/outlet/payroll/payrollController";
+import {
+  getThisMonthPayroll,
+  updatePayrollStatus,
+} from "../../controllers/outlet/payroll/payrollController";
+import { getAllCustomer } from "../../controllers/outlet/customers/customerController";
 
 const outletRoute: Router = Router();
 
@@ -94,6 +107,20 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getAllNotifications)
 );
+
+//integration
+outletRoute.get(
+  "/:outletId/get-integrations",
+  isAuthMiddelware,
+  errorHandler(getIntegration)
+);
+
+outletRoute.post(
+  "/:outletId/patch-online-hub",
+  isAuthMiddelware,
+  errorHandler(patchOutletOnlinePOrtalDetails)
+);
+
 //staff
 outletRoute.get("/:outletId/get-staffs", errorHandler(getAllStaffs));
 outletRoute.get(
@@ -340,6 +367,11 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(outletTopSellingItems)
 );
+outletRoute.get(
+  "/:outletId/get-last-six-orderstats",
+  isAuthMiddelware,
+  errorHandler(lastSixMonthsOrders)
+);
 
 //domains
 outletRoute.get(
@@ -347,11 +379,47 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getDomain)
 );
+outletRoute.post(
+  "/:outletId/create-sub-domain",
+  isAuthMiddelware,
+  errorHandler(createSubDomain)
+);
 
 //payroll
 outletRoute.get(
   "/:outletId/get-monthly-payroll",
   errorHandler(getThisMonthPayroll)
+);
+outletRoute.patch(
+  "/:outletId/staff-payroll-status/:id",
+  isAuthMiddelware,
+  errorHandler(updatePayrollStatus)
+);
+
+//customers
+outletRoute.get(
+  "/:outletId/get-customers",
+  isAuthMiddelware,
+  errorHandler(getAllCustomer)
+);
+
+//invoice
+outletRoute.get(
+  "/:outletId/get-invoice-data",
+  isAuthMiddelware,
+  errorHandler(fetchInvoiceDetails)
+);
+
+outletRoute.post(
+  "/:outletId/create-invoice-data",
+  isAuthMiddelware,
+  errorHandler(createInvoiceDetails)
+);
+
+outletRoute.patch(
+  "/:outletId/update-invoice-data",
+  isAuthMiddelware,
+  errorHandler(updateInvoiceDetails)
 );
 
 export default outletRoute;

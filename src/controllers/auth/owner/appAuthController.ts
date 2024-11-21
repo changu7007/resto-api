@@ -9,13 +9,12 @@ import { NotFoundException } from "../../../exceptions/not-found";
 import { sendToken } from "../../../services/jwt";
 import { redis } from "../../../services/redis";
 import { getOwnerUserByEmail } from "../../../lib/get-users";
-import { User, UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { prismaDB } from "../../..";
-import {
-  generateVerificationToken,
-  getVerificationTokenByEmail,
-} from "../../../lib/utils";
+import { generateVerificationToken } from "../../../lib/utils";
+import { v4 as uuidv4 } from "uuid";
+import { differenceInDays } from "date-fns";
 
 export type FUser = {
   id: string;
@@ -50,17 +49,13 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
     },
   });
 
-  const findSubscription =
-    findOwner?.billings.filter((billing) => billing.userId === findOwner.id) ||
-    [];
-
-  const paymentDate = findSubscription.find(
-    (subscription) => subscription.subscribedDate === findOwner?.subscribedDate
+  const findSubscription = findOwner?.billings.find(
+    (billing) => billing?.userId === findOwner.id
   );
 
   const renewalDay =
-    paymentDate?.isSubscription === true
-      ? getDaysRemaining(paymentDate.subscribedDate as Date)
+    findSubscription?.userId === findOwner?.id
+      ? getDaysRemaining(findSubscription?.validDate as Date)
       : 0;
 
   const formatToSend = {
@@ -72,9 +67,23 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
     image: findOwner?.image,
     role: findOwner?.role,
     onboardingStatus: findOwner?.onboardingStatus,
-    isSubscribed: findOwner?.isSubscribed,
+    isSubscribed: renewalDay > 0 ? true : false,
+    subscriptions: findOwner?.billings.map((billing) => ({
+      id: billing.id,
+      planName: billing.subscriptionPlan,
+      paymentId: billing.paymentId,
+      startDate: billing.subscribedDate,
+      validDate: billing.validDate,
+      amount: billing.paidAmount,
+      validityDays: differenceInDays(
+        new Date(billing.validDate),
+        new Date(billing.subscribedDate)
+      ),
+      purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
+      status: renewalDay === 0 ? "EXPIRED" : "VALID",
+    })),
     toRenewal: renewalDay,
-    plan: paymentDate?.subscriptionPlan,
+    plan: findSubscription?.subscriptionPlan,
     outlets: findOwner?.restaurant.map((outlet) => ({
       id: outlet.id,
       name: outlet.name,
@@ -97,30 +106,41 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
       },
     });
 
-    const findSubscription =
-      user?.billings.filter((billing) => billing.userId === user.id) || [];
-
-    const paymentDate = findSubscription.find(
-      (subscription) => subscription.subscribedDate === user?.subscribedDate
+    const findSubscription = user?.billings.find(
+      (billing) => billing?.userId === user.id
     );
 
     const renewalDay =
-      paymentDate?.isSubscription === true
-        ? getDaysRemaining(paymentDate?.subscribedDate as Date)
+      findSubscription?.userId === user.id
+        ? getDaysRemaining(findSubscription.validDate as Date)
         : 0;
 
     const formatToSend = {
       id: user?.id,
       name: user?.name,
       email: user?.email,
-      emailVerified: findOwner?.emailVerified,
+      emailVerified: user?.emailVerified,
       phoneNo: user?.phoneNo,
       image: user?.image,
       role: user?.role,
       onboardingStatus: user?.onboardingStatus,
-      isSubscribed: user?.isSubscribed,
+      isSubscribed: renewalDay > 0 ? true : false,
+      subscriptions: user?.billings.map((billing) => ({
+        id: billing.id,
+        planName: billing.subscriptionPlan,
+        paymentId: billing.paymentId,
+        startDate: billing.subscribedDate,
+        validDate: billing.validDate,
+        amount: billing.paidAmount,
+        validityDays: differenceInDays(
+          new Date(billing.validDate),
+          new Date(billing.subscribedDate)
+        ),
+        purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
+        status: renewalDay === 0 ? "EXPIRED" : "VALID",
+      })),
       toRenewal: renewalDay,
-      plan: paymentDate?.subscriptionPlan,
+      plan: findSubscription?.subscriptionPlan,
       outlets: user?.restaurant.map((outlet) => ({
         id: outlet.id,
         name: outlet.name,
@@ -154,17 +174,13 @@ export const OwnerLogin = async (req: Request, res: Response) => {
     );
   }
 
-  const findSubscription =
-    findOwner?.billings.filter((billing) => billing.userId === findOwner.id) ||
-    [];
-
-  const paymentDate = findSubscription.find(
-    (subscription) => subscription.subscribedDate === findOwner?.subscribedDate
+  const findSubscription = findOwner?.billings.find(
+    (billing) => billing?.userId === findOwner.id
   );
 
   const renewalDay =
-    paymentDate?.isSubscription === true
-      ? getDaysRemaining(paymentDate.subscribedDate as Date)
+    findSubscription?.userId === findOwner.id
+      ? getDaysRemaining(findSubscription.validDate as Date)
       : 0;
 
   const formatToSend = {
@@ -176,9 +192,23 @@ export const OwnerLogin = async (req: Request, res: Response) => {
     image: findOwner?.image,
     role: findOwner?.role,
     onboardingStatus: findOwner?.onboardingStatus,
-    isSubscribed: findOwner?.isSubscribed,
+    isSubscribed: renewalDay > 0 ? true : false,
+    subscriptions: findOwner?.billings.map((billing) => ({
+      id: billing.id,
+      planName: billing.subscriptionPlan,
+      paymentId: billing.paymentId,
+      startDate: billing.subscribedDate,
+      validDate: billing.validDate,
+      amount: billing.paidAmount,
+      validityDays: differenceInDays(
+        new Date(billing.validDate),
+        new Date(billing.subscribedDate)
+      ),
+      purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
+      status: renewalDay === 0 ? "EXPIRED" : "VALID",
+    })),
     toRenewal: renewalDay,
-    plan: paymentDate?.subscriptionPlan,
+    plan: findSubscription?.subscriptionPlan,
     outlets: findOwner?.restaurant.map((outlet) => ({
       id: outlet.id,
       name: outlet.name,
@@ -473,7 +503,21 @@ export const getUserInfo = async (req: Request, res: Response) => {
     image: findOwner?.image,
     role: findOwner?.role,
     onboardingStatus: findOwner?.onboardingStatus,
-    isSubscribed: findOwner?.isSubscribed,
+    isSubscribed: renewalDay > 0 ? true : false,
+    subscriptions: findOwner?.billings.map((billing) => ({
+      id: billing.id,
+      planName: billing.subscriptionPlan,
+      paymentId: billing.paymentId,
+      startDate: billing.subscribedDate,
+      validDate: billing.validDate,
+      amount: billing.paidAmount,
+      validityDays: differenceInDays(
+        new Date(billing.validDate),
+        new Date(billing.subscribedDate)
+      ),
+      purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
+      status: renewalDay === 0 ? "EXPIRED" : "VALID",
+    })),
     toRenewal: renewalDay,
     plan: findSubscription?.subscriptionPlan,
     outlets: findOwner?.restaurant.map((outlet) => ({
@@ -504,3 +548,80 @@ function getDaysRemaining(subscribedDate: Date) {
 
   return daysRemaining;
 }
+
+export const getPasswordResetTokenByToken = async (
+  req: Request,
+  res: Response
+) => {
+  const { token } = req.body;
+  const passwordResetToken = await prismaDB.passwordResetToken.findFirst({
+    where: { token },
+  });
+
+  return res.json({
+    success: true,
+    passwordResetToken,
+  });
+};
+
+export const getPasswordResetTokenByEmail = async (
+  req: Request,
+  res: Response
+) => {
+  const { email } = req.body;
+
+  const passwordResetToken = await prismaDB.passwordResetToken.findFirst({
+    where: { email },
+  });
+  return res.json({
+    success: true,
+    passwordResetToken,
+  });
+};
+
+export const updatePassword = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { hashedPassword } = req.body;
+  await prismaDB.user.update({
+    where: {
+      id: id,
+    },
+    data: {
+      hashedPassword: hashedPassword,
+    },
+  });
+  return res.json({
+    success: true,
+  });
+};
+
+export const deletePasswordResetToken = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  await prismaDB.passwordResetToken.delete({
+    where: { id: id },
+  });
+  return res.json({
+    success: true,
+    mesage: "Password Reset Token Deleted",
+  });
+};
+
+export const generatePasswordResetToken = async (
+  req: Request,
+  res: Response
+) => {
+  const { email } = req.body;
+  const token = uuidv4();
+  const expires = new Date(new Date().getTime() + 3600 * 1000);
+
+  const passwordResetToken = await prismaDB.passwordResetToken.create({
+    data: {
+      email,
+      token,
+      expires,
+    },
+  });
+
+  return res.json({ success: true, passwordResetToken });
+};

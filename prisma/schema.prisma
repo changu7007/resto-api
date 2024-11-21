@@ -25,6 +25,15 @@ model Restaurant {
   city           String?
   pincode        String?
   fcmToken       String?
+  openTime       String?
+  areaLat        String?
+  areaLong       String?
+  orderRadius    Int?
+  closeTime      String?
+  isDelivery     Boolean        @default(false)
+  isPickUp       Boolean        @default(false)
+  isDineIn       Boolean        @default(false)
+  onlinePortal   Boolean        @default(false)
   users          User           @relation("RestaurantToUsers", fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   customers      Customer[]     @relation("RestaurantToCustomer")
   assets         Assets[]       @relation("RestaurantToAssets")
@@ -37,12 +46,49 @@ model Restaurant {
   tables         Table[]        @relation("RestaurantToTable")
   staffs         Staff[]        @relation("RestaurantToStaffs")
   areas          Areas[]        @relation("RestaurantToAreas")
+  invoice        Invoice?       @relation("RestaurantToInvoice")
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
-  isGSTEnabled   Boolean        @default(false)
   Areas          Areas[]
+  integrations   Integration[]  @relation("RestaurantToIntegration")
   notifications  Notification[] @relation("RestaurantToNotification")
   orderSession   OrderSession[] @relation("RestaurantToOrderSession")
+}
+
+model Invoice {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String     @db.ObjectId
+  restaurant   Restaurant @relation("RestaurantToInvoice", fields: [restaurantId], references: [id])
+  isGSTEnabled Boolean
+  isPrefix     Boolean
+  prefix       String?
+  invoiceNo    Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([restaurantId])
+}
+
+enum Integrations {
+  RAZORAPY
+  ONLINEHUB
+  ZOMATO
+  SWIGGY
+}
+
+model Integration {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String       @db.ObjectId
+  restaurant   Restaurant   @relation("RestaurantToIntegration", fields: [restaurantId], references: [id])
+  name         Integrations
+  link         String?
+  status       Boolean
+  apiId        String?
+  apiSecretKey String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([restaurantId])
 }
 
 enum SubscriptionPlan {
@@ -71,8 +117,14 @@ enum UserRole {
   CUSTOMER
 }
 
+enum StaffActive {
+  ACTIVE
+  UNACTIVE
+}
+
 model Staff {
   id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  active        StaffActive    @default(ACTIVE)
   name          String
   email         String         @unique
   emailVerified Boolean?
@@ -135,8 +187,6 @@ model User {
   isTwoFactorEnabled Boolean                @default(false)
   twoFactorEnabled   TwoFactorConfirmation?
   onboardingStatus   Boolean                @default(false)
-  isSubscribed       Boolean?
-  subscribedDate     DateTime?
   restaurant         Restaurant[]           @relation("RestaurantToUsers")
   onboarding         OnboardingStatus?
   createdAt          DateTime               @default(now())
@@ -154,6 +204,7 @@ model SubscriptionBilling {
   isSubscription   Boolean
   subscriptionPlan SubscriptionPlan
   planType         PlanType
+  paidAmount       Int
   subscribedDate   DateTime
   validDate        DateTime
   paymentId        String
@@ -237,7 +288,7 @@ model Customer {
   id             String          @id @default(auto()) @map("_id") @db.ObjectId
   name           String
   phoneNo        String          @unique
-  email          String?         @unique
+  email          String?
   role           UserRole        @default(CUSTOMER)
   emailVerified  DateTime?
   image          String?
@@ -438,6 +489,7 @@ model MenuGroupAddOns {
 }
 
 enum OrderType {
+  EXPRESS
   DINEIN
   DELIVERY
   TAKEAWAY
@@ -471,6 +523,7 @@ model OrderSession {
   createdAt     DateTime           @default(now())
   subTotal      String?
   isPaid        Boolean?           @default(false)
+  invoiceUrl    String?
   paymentMethod PaymentMethod?
   updatedAt     DateTime           @updatedAt
 
@@ -564,7 +617,7 @@ model Site {
   adminId      String     @db.ObjectId
   user         User?      @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   subdomain    String     @unique
-  customDomain String?    @unique
+  customDomain String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

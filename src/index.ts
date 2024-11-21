@@ -8,9 +8,6 @@ import cors from "cors";
 import morgan from "morgan";
 import http from "http";
 import { websocketManager } from "./services/ws";
-import cron from "node-cron";
-
-import { createPayrollForStaff } from "./lib/payroll";
 
 const app: Express = express();
 const server = http.createServer(app);
@@ -25,5 +22,12 @@ app.use("/api", rootRouter);
 export const prismaDB = new PrismaClient();
 
 app.use(errorMiddelware);
+
+app.get("/health", async (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: "I am Healhty",
+  });
+});
 
 server.listen(PORT, () => console.log(`Main Server Working on PORT:${PORT}`));

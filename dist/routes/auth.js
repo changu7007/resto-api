@@ -8,6 +8,7 @@ const appAuthController_1 = require("../controllers/auth/owner/appAuthController
 const verificationController_1 = require("../controllers/auth/verificationController");
 const outletController_1 = require("../controllers/outlet/outletController");
 const planController_1 = require("../controllers/outlet/plans/planController");
+const orderSessionController_1 = require("../controllers/outlet/order/orderSession/orderSessionController");
 const authRoute = (0, express_1.Router)();
 authRoute.post("/app-login", (0, error_handler_1.errorHandler)(appAuthController_1.OwnerLogin));
 authRoute.post("/register-app-user", (0, error_handler_1.errorHandler)(appAuthController_1.registerOwner));
@@ -39,4 +40,11 @@ authRoute.patch("/update-verify-email-user", (0, error_handler_1.errorHandler)(v
 authRoute.delete("/delete-email-verification/:id", (0, error_handler_1.errorHandler)(verificationController_1.deleteVerificationToken));
 authRoute.get("/get-all-plans", (0, error_handler_1.errorHandler)(planController_1.getAllPlans));
 authRoute.post("/subscribe-splan", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.buyPlan));
+//password
+authRoute.post("/get-password-by-token", (0, error_handler_1.errorHandler)(appAuthController_1.getPasswordResetTokenByToken));
+authRoute.post("/get-password-by-email", (0, error_handler_1.errorHandler)(appAuthController_1.getPasswordResetTokenByEmail));
+authRoute.patch("/update-password/:id", (0, error_handler_1.errorHandler)(appAuthController_1.updatePassword));
+authRoute.delete("/delete-pasword-token/:id", (0, error_handler_1.errorHandler)(appAuthController_1.deletePasswordResetToken));
+authRoute.post("/create-reset-password-token", (0, error_handler_1.errorHandler)(appAuthController_1.generatePasswordResetToken));
+authRoute.post("/generate-pdf", (0, error_handler_1.errorHandler)(orderSessionController_1.generatePdfInvoice));
 exports.default = authRoute;

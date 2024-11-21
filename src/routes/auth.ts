@@ -13,9 +13,13 @@ import {
   AppUpdateAccessToken,
   createTwoFactorConfirmation,
   delete2FAConfirmation,
+  deletePasswordResetToken,
+  generatePasswordResetToken,
   generateTwoFactorToken,
   get2FAConfirmationUser,
   get2FATokenByEmail,
+  getPasswordResetTokenByEmail,
+  getPasswordResetTokenByToken,
   getTwoFactorTokenByToken,
   getUserByEmail,
   getUserById,
@@ -27,6 +31,7 @@ import {
   registerOwner,
   socialAuthLogin,
   twoFactorTokenDelete,
+  updatePassword,
 } from "../controllers/auth/owner/appAuthController";
 import {
   deleteVerificationToken,
@@ -39,6 +44,7 @@ import {
   buyPlan,
   getAllPlans,
 } from "../controllers/outlet/plans/planController";
+import { generatePdfInvoice } from "../controllers/outlet/order/orderSession/orderSessionController";
 
 const authRoute: Router = Router();
 
@@ -107,4 +113,23 @@ authRoute.delete(
 authRoute.get("/get-all-plans", errorHandler(getAllPlans));
 authRoute.post("/subscribe-splan", isAuthMiddelware, errorHandler(buyPlan));
 
+//password
+authRoute.post(
+  "/get-password-by-token",
+  errorHandler(getPasswordResetTokenByToken)
+);
+authRoute.post(
+  "/get-password-by-email",
+  errorHandler(getPasswordResetTokenByEmail)
+);
+authRoute.patch("/update-password/:id", errorHandler(updatePassword));
+authRoute.delete(
+  "/delete-pasword-token/:id",
+  errorHandler(deletePasswordResetToken)
+);
+authRoute.post(
+  "/create-reset-password-token",
+  errorHandler(generatePasswordResetToken)
+);
+authRoute.post("/generate-pdf", errorHandler(generatePdfInvoice));
 export default authRoute;

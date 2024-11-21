@@ -9,13 +9,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.getAllNotifications = exports.getByOutletId = exports.getStaffOutlet = void 0;
+exports.fetchInvoiceDetails = exports.updateInvoiceDetails = exports.createInvoiceDetails = exports.getIntegration = exports.patchOutletOnlinePOrtalDetails = exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.getAllNotifications = exports.getByOutletId = exports.getStaffOutlet = void 0;
 const outlet_1 = require("../../lib/outlet");
 const not_found_1 = require("../../exceptions/not-found");
 const root_1 = require("../../exceptions/root");
 const redis_1 = require("../../services/redis");
 const __1 = require("../..");
 const bad_request_1 = require("../../exceptions/bad-request");
+const staff_1 = require("../../schema/staff");
 const getStaffOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     //@ts-ignore
@@ -48,6 +49,9 @@ const getByOutletId = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             // @ts-ignore
             adminId: (_c = req.user) === null || _c === void 0 ? void 0 : _c.id,
             id: outletId,
+        },
+        include: {
+            integrations: true,
         },
     });
     return res.json({ success: true, outlet: getOutlet });
@@ -169,3 +173,120 @@ const addFMCTokenToOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 });
 exports.addFMCTokenToOutlet = addFMCTokenToOutlet;
+const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const validateFields = staff_1.outletOnlinePortalSchema.parse(req.body);
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    yield __1.prismaDB.restaurant.update({
+        where: {
+            id: outlet.id,
+        },
+        data: {
+            onlinePortal: true,
+            openTime: validateFields.openTime,
+            closeTime: validateFields.closeTime,
+            areaLat: validateFields.areaLat,
+            areaLong: validateFields.areaLong,
+            orderRadius: Number(validateFields.orderRadius),
+            isDelivery: validateFields.isDelivery,
+            isDineIn: validateFields.isDineIn,
+            isPickUp: validateFields.isPickUp,
+        },
+    });
+    yield __1.prismaDB.integration.create({
+        data: {
+            restaurantId: outlet.id,
+            name: "ONLINEHUB",
+            status: true,
+            link: validateFields.subdomain,
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Online Hub Integrated Success",
+    });
+});
+exports.patchOutletOnlinePOrtalDetails = patchOutletOnlinePOrtalDetails;
+const getIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getINtegrations = yield __1.prismaDB.integration.findMany({
+        where: {
+            restaurantId: outlet.id,
+        },
+    });
+    return res.json({
+        success: true,
+        integrations: getINtegrations,
+    });
+});
+exports.getIntegration = getIntegration;
+const createInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const { isGSTEnabled, isPrefix, invoiceNo, prefix } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    yield __1.prismaDB.invoice.create({
+        data: {
+            restaurantId: outlet.id,
+            isGSTEnabled,
+            isPrefix,
+            invoiceNo,
+            prefix: isPrefix ? prefix : "",
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Created Tax & Invoice Details",
+    });
+});
+exports.createInvoiceDetails = createInvoiceDetails;
+const updateInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const { isGSTEnabled, isPrefix, invoiceNo, prefix } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    yield __1.prismaDB.invoice.update({
+        where: {
+            restaurantId: outlet.id,
+        },
+        data: {
+            isGSTEnabled,
+            isPrefix,
+            invoiceNo,
+            prefix: isPrefix ? prefix : "",
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Updated Tax & Invoice Details",
+    });
+});
+exports.updateInvoiceDetails = updateInvoiceDetails;
+const fetchInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getInvoiceDetails = yield __1.prismaDB.invoice.findFirst({
+        where: {
+            restaurantId: outlet.id,
+        },
+    });
+    return res.json({
+        success: true,
+        invoiceData: getInvoiceDetails,
+    });
+});
+exports.fetchInvoiceDetails = fetchInvoiceDetails;

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.printKotOrder = exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -879,3 +879,7 @@ const inviteCode = () => {
     return code;
 };
 exports.inviteCode = inviteCode;
+const printKotOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { orderItems } = req.body;
+});
+exports.printKotOrder = printKotOrder;

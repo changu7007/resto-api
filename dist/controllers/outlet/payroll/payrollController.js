@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getThisMonthPayroll = void 0;
+exports.updatePayrollStatus = exports.getThisMonthPayroll = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -112,3 +112,32 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 });
 exports.getThisMonthPayroll = getThisMonthPayroll;
+const updatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, id } = req.params;
+    const { status } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (outlet === undefined || !outlet.id) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const findPayroll = yield __1.prismaDB.payroll.findFirst({
+        where: {
+            id: id,
+        },
+    });
+    if (findPayroll == null || !findPayroll.id) {
+        throw new not_found_1.NotFoundException("Payroll Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    yield __1.prismaDB.payroll.update({
+        where: {
+            id: findPayroll.id,
+        },
+        data: {
+            status: status,
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Updated Payroll Status",
+    });
+});
+exports.updatePayrollStatus = updatePayrollStatus;

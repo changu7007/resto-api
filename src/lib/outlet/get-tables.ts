@@ -20,6 +20,7 @@ export const getFetchAllTablesToRedis = async (outletId: string) => {
       createdAt: "asc",
     },
   });
+
   await redis.set(`tables-${outletId}`, JSON.stringify(tables));
   return tables;
 };
@@ -36,7 +37,9 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
             include: {
               orders: {
                 include: {
-                  orderItems: true,
+                  orderItems: {
+                    include: { menuItem: true },
+                  },
                 },
               },
             },
@@ -46,6 +49,63 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`a-${outletId}`, JSON.stringify(allAreas));
+  const filteredAreas = allAreas.map((area) => ({
+    id: area.id,
+    restaurantId: area.restaurantId,
+    name: area.name,
+    createdAt: area.createdAt,
+    updatedAt: area.updatedAt,
+    table: area.table.map((tab) => ({
+      id: tab.id,
+      restaurantId: tab.restaurantId,
+      name: tab.name,
+      shortCode: tab.shortCode,
+      capacity: tab.capacity,
+      uniqueId: tab.uniqueId,
+      inviteCode: tab.inviteCode,
+      qrcode: tab.qrcode,
+      areaId: tab.areaId,
+      currentOrderSessionId: tab.currentOrderSessionId,
+      staffId: tab.staffId,
+      customerId: tab.customerId,
+      createdAt: tab.createdAt,
+      occupied: tab.occupied,
+      orderSession: tab.orderSession.map((orderSess) => ({
+        id: orderSess.id,
+        name: orderSess.username,
+        billNo: orderSess.billId,
+        phoneNo: orderSess.phoneNo,
+        sessionStatus: orderSess.sessionStatus,
+        isPaid: orderSess.isPaid,
+        paymentmethod: orderSess.paymentMethod,
+        active: orderSess.active,
+        orderMode: orderSess.orderType,
+        table: orderSess.tableId,
+        subTotal: orderSess.subTotal,
+        orders: orderSess.orders.map((order) => ({
+          id: order.id,
+          generatedOrderId: order.generatedOrderId,
+          mode: order.orderType,
+          orderStatus: order.orderStatus,
+          paid: order.isPaid,
+          totalAmount: order.totalAmount,
+          createdAt: order.createdAt,
+          date: order.createdAt,
+          orderItems: order.orderItems.map((item) => ({
+            id: item.id,
+            menuItem: {
+              name: item.menuItem.name,
+            },
+            quantity: item.quantity,
+            totalPrice: item.price,
+          })),
+          updatedAt: order.updatedAt,
+        })),
+        date: orderSess.createdAt,
+      })),
+    })),
+  }));
+
+  await redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
   return allAreas;
 };

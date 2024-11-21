@@ -9,3 +9,6 @@ export const ACCESS_TOKEN = process.env.PRIVATE_ACCESS_TOKEN as string;
 export const REFRESH_TOKEN = process.env.PRIVATE_REFRESH_TOKEN as string;
 export const ACCESS_TOKEN_EXPIRE = process.env.ACCESS_TOKEN_EXPIRE!;
 export const REFRESH_TOKEN_EXPIRE = process.env.REFRESH_TOKEN_EXPIRE!;
+export const ENV = process.env.ENV as "development" | "production";
+export const CHROMIUM_EXECUTABLE_PATH =
+  "https://github.com/Sparticuz/chromium/releases/download/v122.0.0/chromium-v122.0.0-pack.tar";

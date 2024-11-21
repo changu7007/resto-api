@@ -112,6 +112,7 @@ export const getOrderSessionById = async (
     },
     include: {
       table: true,
+      orders: true,
     },
   });
 

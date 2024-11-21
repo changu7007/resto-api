@@ -59,7 +59,7 @@ const paymentRazorpayVerification = (req, res) => __awaiter(void 0, void 0, void
 exports.paymentRazorpayVerification = paymentRazorpayVerification;
 const buyPlan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const { paymentId, subscriptionId } = req.body;
+    const { paymentId, subscriptionId, paidAmount } = req.body;
     // @ts-ignore
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
     if (!paymentId || !subscriptionId) {
@@ -93,19 +93,11 @@ const buyPlan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             userId: findOwner.id,
             isSubscription: true,
             paymentId: paymentId,
+            paidAmount: paidAmount,
             subscribedDate: new Date(),
             planType: findSubscription.planType,
             subscriptionPlan: findSubscription.subscriptionPlan,
             validDate: validDate,
-        },
-    });
-    yield __1.prismaDB.user.update({
-        where: {
-            id: findOwner.id,
-        },
-        data: {
-            isSubscribed: true,
-            subscribedDate: new Date(),
         },
     });
     return res.json({
