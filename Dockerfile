@@ -42,10 +42,7 @@ COPY --from=builder /home/build/firebaseAdminSDK.json .
 COPY --from=builder /home/build/prisma prisma/
 COPY --from=builder /home/build/templates templates/
 
-
 RUN npm install --omit=dev
-RUN npm install pm2 -g
 RUN npx prisma generate
-
 
 CMD ["npm","run","dev"]
