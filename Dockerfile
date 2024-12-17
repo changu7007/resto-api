@@ -44,7 +44,7 @@ COPY --from=builder /home/build/templates templates/
 
 
 RUN npm install --omit=dev
-RUN npm install -g pm2
+RUN npm install pm2 -g
 RUN npx prisma generate
 
 

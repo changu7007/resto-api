@@ -50,7 +50,8 @@
     "build": "npx prisma generate && tsc -p .",
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "npx nodemon",
-    "dev": "pm2 start dist/index.js"
+    "dev": "node dist/index",
+    "prod": "pm2 start dist/index.js"
   },
   "author": "",
   "license": "ISC",
