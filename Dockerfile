@@ -21,7 +21,7 @@ COPY firebaseAdminSDK.json .
 COPY tsconfig.json .
 COPY package*.json .
 COPY prisma/ prisma/
-RUN npm install
+RUN npm install 
 COPY .env .env
 COPY templates/ templates/
 
@@ -44,6 +44,7 @@ COPY --from=builder /home/build/templates templates/
 
 
 RUN npm install --omit=dev
+RUN npm install -g pm2
 RUN npx prisma generate
 
 
