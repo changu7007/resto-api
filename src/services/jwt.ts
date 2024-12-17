@@ -36,7 +36,7 @@ export const refreshTokenOptions: ITokenOptions = {
   sameSite: "lax",
 };
 
-export const sendToken = (
+export const sendToken = async (
   user: Staff | FUser | Customer,
   statusCode: number,
   res: Response
@@ -49,7 +49,7 @@ export const sendToken = (
     expiresIn: "7d",
   });
 
-  redis.set(user.id, JSON.stringify(user));
+  await redis.set(user.id, JSON.stringify(user));
 
   if (process.env.NODE_ENV === "production") {
     accessTokenOptions.secure = true;

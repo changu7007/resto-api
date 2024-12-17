@@ -4,10 +4,13 @@ import { getPrimeDomain } from "../../controllers/outlet/domains/domainControlle
 import {
   CustomerLogin,
   customerUpdateSession,
+  getCurrentOrderForCustomer,
+  getCustomerOrdersById,
   otpCheck,
   updateOtp,
 } from "../../controllers/auth/prime/authControl";
 import { isAuthMiddelware } from "../../middlewares/auth";
+import { CreateRazorPayOrderForOutlet } from "../../controllers/outlet/plans/planController";
 
 const appRoute: Router = Router();
 
@@ -20,5 +23,19 @@ appRoute.patch(
   isAuthMiddelware,
   errorHandler(customerUpdateSession)
 );
-
+appRoute.get(
+  "/outlet/:outletId/customer/:customerId/get-orders",
+  isAuthMiddelware,
+  errorHandler(getCustomerOrdersById)
+);
+appRoute.get(
+  "/outlet/:outletId/customer/:customerId/get-current-orders",
+  isAuthMiddelware,
+  errorHandler(getCurrentOrderForCustomer)
+);
+appRoute.post(
+  "/outlet/:outletId/create-razorpay-order",
+  isAuthMiddelware,
+  errorHandler(CreateRazorPayOrderForOutlet)
+);
 export default appRoute;

@@ -174,6 +174,7 @@ export const updateAddon = async (req: Request, res: Response) => {
       // Create new variant
       return prismaDB.addOnVariants.create({
         data: {
+          restaurantId: outlet?.id,
           name: variant.name,
           price: variant.price,
           type: variant.type,

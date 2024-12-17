@@ -35,7 +35,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generatePasswordResetToken = exports.deletePasswordResetToken = exports.updatePassword = exports.getPasswordResetTokenByEmail = exports.getPasswordResetTokenByToken = exports.getUserInfo = exports.generateTwoFactorToken = exports.createTwoFactorConfirmation = exports.twoFactorTokenDelete = exports.getTwoFactorTokenByToken = exports.get2FATokenByEmail = exports.delete2FAConfirmation = exports.get2FAConfirmationUser = exports.getUserByIdAndVerifyEmail = exports.getVerificationToken = exports.getUserByEmail = exports.getUserById = exports.registerOwner = exports.AppUpdateAccessToken = exports.AppLogout = exports.OwnerUser = exports.OwnerLogin = exports.socialAuthLogin = void 0;
+exports.updateUserProfileDetails = exports.generatePasswordResetToken = exports.deletePasswordResetToken = exports.updatePassword = exports.getPasswordResetTokenByEmail = exports.getPasswordResetTokenByToken = exports.getUserInfo = exports.generateTwoFactorToken = exports.createTwoFactorConfirmation = exports.twoFactorTokenDelete = exports.getTwoFactorTokenByToken = exports.get2FATokenByEmail = exports.delete2FAConfirmation = exports.get2FAConfirmationUser = exports.getUserByIdAndVerifyEmail = exports.getVerificationToken = exports.getUserByEmail = exports.getUserById = exports.registerOwner = exports.AppUpdateAccessToken = exports.AppLogout = exports.OwnerUser = exports.OwnerLogin = exports.socialAuthLogin = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const jwt = __importStar(require("jsonwebtoken"));
 const secrets_1 = require("../../../secrets");
@@ -52,6 +52,7 @@ const __1 = require("../../..");
 const utils_1 = require("../../../lib/utils");
 const uuid_1 = require("uuid");
 const date_fns_1 = require("date-fns");
+const unauthorized_1 = require("../../../exceptions/unauthorized");
 const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { providerAccountId, name, email, image } = req.body;
     const findOwner = yield __1.prismaDB.user.findFirst({
@@ -61,12 +62,16 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
         },
         include: {
             restaurant: true,
-            billings: true,
+            billings: {
+                orderBy: {
+                    createdAt: "desc",
+                },
+            },
         },
     });
     const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
     const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === (findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)
-        ? getDaysRemaining(findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.validDate)
+        ? (0, utils_1.getDaysRemaining)(findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.validDate)
         : 0;
     const formatToSend = {
         id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
@@ -76,6 +81,7 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
         phoneNo: findOwner === null || findOwner === void 0 ? void 0 : findOwner.phoneNo,
         image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
         role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
+        isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
         onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
         isSubscribed: renewalDay > 0 ? true : false,
         subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
@@ -113,7 +119,7 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
         });
         const findSubscription = user === null || user === void 0 ? void 0 : user.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === user.id);
         const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === user.id
-            ? getDaysRemaining(findSubscription.validDate)
+            ? (0, utils_1.getDaysRemaining)(findSubscription.validDate)
             : 0;
         const formatToSend = {
             id: user === null || user === void 0 ? void 0 : user.id,
@@ -124,6 +130,7 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
             image: user === null || user === void 0 ? void 0 : user.image,
             role: user === null || user === void 0 ? void 0 : user.role,
             onboardingStatus: user === null || user === void 0 ? void 0 : user.onboardingStatus,
+            isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
             isSubscribed: renewalDay > 0 ? true : false,
             subscriptions: user === null || user === void 0 ? void 0 : user.billings.map((billing) => ({
                 id: billing.id,
@@ -163,7 +170,7 @@ const OwnerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
     const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
     const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === findOwner.id
-        ? getDaysRemaining(findSubscription.validDate)
+        ? (0, utils_1.getDaysRemaining)(findSubscription.validDate)
         : 0;
     const formatToSend = {
         id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
@@ -174,6 +181,7 @@ const OwnerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
         role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
         onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
+        isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
         isSubscribed: renewalDay > 0 ? true : false,
         subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
             id: billing.id,
@@ -272,14 +280,25 @@ const registerOwner = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 exports.registerOwner = registerOwner;
 const getUserById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
+    const ruser = yield redis_1.redis.get(id);
+    if (ruser) {
+        return res.json({
+            success: true,
+            user: JSON.parse(ruser),
+        });
+    }
     const user = yield __1.prismaDB.user.findFirst({
         where: {
             id,
         },
     });
+    if (!(user === null || user === void 0 ? void 0 : user.id)) {
+        throw new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const formatToSend = yield (0, get_users_1.getFormatUserAndSendToRedis)(user === null || user === void 0 ? void 0 : user.id);
     return res.json({
         success: true,
-        user,
+        user: formatToSend,
         message: "Fetched User",
     });
 });
@@ -427,56 +446,13 @@ const getUserInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
         throw new not_found_1.NotFoundException("User not found", root_1.ErrorCode.UNAUTHORIZED);
     }
-    const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
-    const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === findOwner.id
-        ? getDaysRemaining(findSubscription.validDate)
-        : 0;
-    const formatToSend = {
-        id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
-        name: findOwner === null || findOwner === void 0 ? void 0 : findOwner.name,
-        email: findOwner === null || findOwner === void 0 ? void 0 : findOwner.email,
-        emailVerified: findOwner === null || findOwner === void 0 ? void 0 : findOwner.emailVerified,
-        phoneNo: findOwner === null || findOwner === void 0 ? void 0 : findOwner.phoneNo,
-        image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
-        role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
-        onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
-        isSubscribed: renewalDay > 0 ? true : false,
-        subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
-            id: billing.id,
-            planName: billing.subscriptionPlan,
-            paymentId: billing.paymentId,
-            startDate: billing.subscribedDate,
-            validDate: billing.validDate,
-            amount: billing.paidAmount,
-            validityDays: (0, date_fns_1.differenceInDays)(new Date(billing.validDate), new Date(billing.subscribedDate)),
-            purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-            status: renewalDay === 0 ? "EXPIRED" : "VALID",
-        })),
-        toRenewal: renewalDay,
-        plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
-        outlets: findOwner === null || findOwner === void 0 ? void 0 : findOwner.restaurant.map((outlet) => ({
-            id: outlet.id,
-            name: outlet.name,
-            image: outlet.imageUrl,
-        })),
-    };
+    const formatToSend = yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id);
     return res.json({
         success: true,
         users: formatToSend,
     });
 });
 exports.getUserInfo = getUserInfo;
-function getDaysRemaining(subscribedDate) {
-    // Parse the subscribed date
-    const subscribed = new Date(subscribedDate);
-    // Get today's date
-    const today = new Date();
-    // Calculate the difference in time (in milliseconds)
-    const timeDiff = subscribed.getTime() - today.getTime();
-    // Calculate the difference in days
-    const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-    return daysRemaining;
-}
 const getPasswordResetTokenByToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { token } = req.body;
     const passwordResetToken = yield __1.prismaDB.passwordResetToken.findFirst({
@@ -540,3 +516,48 @@ const generatePasswordResetToken = (req, res) => __awaiter(void 0, void 0, void 
     return res.json({ success: true, passwordResetToken });
 });
 exports.generatePasswordResetToken = generatePasswordResetToken;
+const updateUserProfileDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _b;
+    const { userId } = req.params;
+    // @ts-ignore
+    const reqUserId = (_b = req.user) === null || _b === void 0 ? void 0 : _b.id;
+    const { name, phoneNo, isTwoFA, imageUrl } = req.body;
+    if (userId !== reqUserId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const findUser = yield __1.prismaDB.user.findFirst({
+        where: {
+            id: userId,
+        },
+    });
+    if (!(findUser === null || findUser === void 0 ? void 0 : findUser.id)) {
+        throw new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    if (findUser.phoneNo !== phoneNo) {
+        const uniqueNo = yield __1.prismaDB.user.findFirst({
+            where: {
+                phoneNo: phoneNo,
+            },
+        });
+        if (uniqueNo === null || uniqueNo === void 0 ? void 0 : uniqueNo.id) {
+            throw new bad_request_1.BadRequestsException("This Phone No. is already assigned to different USer", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+    }
+    const updateUSer = yield __1.prismaDB.user.update({
+        where: {
+            id: findUser === null || findUser === void 0 ? void 0 : findUser.id,
+        },
+        data: {
+            name: name,
+            image: imageUrl,
+            phoneNo: phoneNo,
+            isTwoFactorEnabled: isTwoFA,
+        },
+    });
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(updateUSer === null || updateUSer === void 0 ? void 0 : updateUSer.id);
+    return res.json({
+        success: true,
+        message: "Update Profile Success ✅",
+    });
+});
+exports.updateUserProfileDetails = updateUserProfileDetails;

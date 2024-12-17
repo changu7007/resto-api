@@ -13,7 +13,6 @@ exports.getAllCustomer = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
-const __1 = require("../../..");
 const redis_1 = require("../../../services/redis");
 const getAllCustomer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
@@ -29,19 +28,7 @@ const getAllCustomer = (req, res) => __awaiter(void 0, void 0, void 0, function*
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const customers = yield __1.prismaDB.customer.findMany({
-        where: {
-            restaurantId: getOutlet.id,
-        },
-        include: {
-            orderSession: {
-                include: {
-                    orders: true,
-                },
-            },
-        },
-    });
-    yield redis_1.redis.set(`customers-${getOutlet.id}`, JSON.stringify(customers));
+    const customers = yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id);
     return res.json({
         success: true,
         customers: customers,

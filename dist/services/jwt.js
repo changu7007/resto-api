@@ -22,6 +22,15 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendToken = exports.refreshTokenOptions = exports.accessTokenOptions = void 0;
 const jwt = __importStar(require("jsonwebtoken"));
@@ -41,14 +50,14 @@ exports.refreshTokenOptions = {
     httpOnly: true,
     sameSite: "lax",
 };
-const sendToken = (user, statusCode, res) => {
+const sendToken = (user, statusCode, res) => __awaiter(void 0, void 0, void 0, function* () {
     const accessToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.ACCESS_TOKEN, {
         expiresIn: "1h",
     });
     const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
         expiresIn: "7d",
     });
-    redis_1.redis.set(user.id, JSON.stringify(user));
+    yield redis_1.redis.set(user.id, JSON.stringify(user));
     if (process.env.NODE_ENV === "production") {
         exports.accessTokenOptions.secure = true;
     }
@@ -60,5 +69,5 @@ const sendToken = (user, statusCode, res) => {
             refreshToken,
         },
     });
-};
+});
 exports.sendToken = sendToken;

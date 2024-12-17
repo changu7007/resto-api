@@ -9,27 +9,70 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCategoryByOutletId = exports.getAddOnByOutletId = exports.getVariantByOutletId = exports.getItemByOutletId = exports.generatedOrderId = exports.getOrderSessionById = exports.getOrderByOutketId = exports.generateBillNo = exports.getOutletByIdForStaff = exports.getOutletByAdminId = exports.getOutletById = void 0;
+exports.getCategoryByOutletId = exports.getAddOnByOutletId = exports.getVariantByOutletId = exports.getItemByOutletId = exports.generatedOrderId = exports.getOrderSessionById = exports.getOrderByOutketId = exports.generateBillNo = exports.generatePurchaseNo = exports.getOutletByIdForStaff = exports.getOutletByAdminId = exports.getOutletCustomerAndFetchToRedis = exports.fetchOutletByIdToRedis = exports.getOutletById = void 0;
+const date_fns_1 = require("date-fns");
 const __1 = require("../..");
 const not_found_1 = require("../../exceptions/not-found");
 const root_1 = require("../../exceptions/root");
+const redis_1 = require("../../services/redis");
 const getOutletById = (id) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const getOutlet = yield __1.prismaDB.restaurant.findFirst({
-            where: {
-                id: id,
-            },
-        });
-        if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
-            throw new not_found_1.NotFoundException("Outlet Not Found In", root_1.ErrorCode.OUTLET_NOT_FOUND);
-        }
-        return getOutlet;
+    const getOutlet = yield __1.prismaDB.restaurant.findFirst({
+        where: {
+            id: id,
+        },
+        include: {
+            integrations: true,
+            razorpayInfo: true,
+            invoice: true,
+        },
+    });
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found In", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    catch (error) {
-        console.log("Something Went Wrong");
-    }
+    return getOutlet;
 });
 exports.getOutletById = getOutletById;
+const fetchOutletByIdToRedis = (id) => __awaiter(void 0, void 0, void 0, function* () {
+    const getOutlet = yield __1.prismaDB.restaurant.findFirst({
+        where: {
+            id: id,
+        },
+        include: {
+            integrations: true,
+        },
+    });
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found In", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id) {
+        return yield redis_1.redis.set(`O-${getOutlet.id}`, JSON.stringify(getOutlet));
+    }
+    return getOutlet;
+});
+exports.fetchOutletByIdToRedis = fetchOutletByIdToRedis;
+const getOutletCustomerAndFetchToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const customers = yield __1.prismaDB.customer.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        include: {
+            orderSession: {
+                include: {
+                    orders: true,
+                },
+            },
+        },
+    });
+    if ((customers === null || customers === void 0 ? void 0 : customers.length) > 0) {
+        yield redis_1.redis.set(`customers-${outletId}`, JSON.stringify(customers));
+        return customers;
+    }
+    else {
+        yield redis_1.redis.del(`customers-${outletId}`);
+        return customers;
+    }
+});
+exports.getOutletCustomerAndFetchToRedis = getOutletCustomerAndFetchToRedis;
 const getOutletByAdminId = (id, adminId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const getOutlet = yield __1.prismaDB.restaurant.findFirst({
@@ -74,6 +117,14 @@ const getTodayOrdersCount = (restaurantId) => __awaiter(void 0, void 0, void 0, 
     });
     return getOrdersCount.length;
 });
+const getTotalPurchase = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const orderCount = yield __1.prismaDB.purchase.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+    });
+    return orderCount.length;
+});
 const getTotalOrderSession = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
     const orderCount = yield __1.prismaDB.orderSession.findMany({
         where: {
@@ -82,6 +133,12 @@ const getTotalOrderSession = (outletId) => __awaiter(void 0, void 0, void 0, fun
     });
     return orderCount.length;
 });
+const generatePurchaseNo = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const orderCount = yield getTotalPurchase(outletId);
+    const billId = `#${orderCount + 1}/${(0, date_fns_1.getYear)(new Date())}`;
+    return billId;
+});
+exports.generatePurchaseNo = generatePurchaseNo;
 const generateBillNo = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
     const orderCount = yield getTotalOrderSession(outletId);
     const billId = `#${orderCount + 1}`;

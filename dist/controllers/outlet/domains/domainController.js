@@ -9,13 +9,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSubDomain = exports.getPrimeDomain = exports.getDomain = void 0;
+exports.deleteSite = exports.createSubDomain = exports.getPrimeDomain = exports.getDomain = void 0;
 const __1 = require("../../..");
 const outlet_1 = require("../../../lib/outlet");
 const redis_1 = require("../../../services/redis");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
 const bad_request_1 = require("../../../exceptions/bad-request");
+const unauthorized_1 = require("../../../exceptions/unauthorized");
 const getDomain = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { outletId } = req.params;
@@ -62,7 +63,9 @@ const getPrimeDomain = (req, res) => __awaiter(void 0, void 0, void 0, function*
         },
         include: { user: true, restaurant: true },
     });
-    yield redis_1.redis.set(`app-domain-${getSite === null || getSite === void 0 ? void 0 : getSite.subdomain}`, JSON.stringify(getSite));
+    if (getSite === null || getSite === void 0 ? void 0 : getSite.id) {
+        yield redis_1.redis.set(`app-domain-${getSite === null || getSite === void 0 ? void 0 : getSite.subdomain}`, JSON.stringify(getSite));
+    }
     return res.json({
         success: true,
         site: getSite,
@@ -95,10 +98,47 @@ const createSubDomain = (req, res) => __awaiter(void 0, void 0, void 0, function
             adminId: (_c = req.user) === null || _c === void 0 ? void 0 : _c.id,
         },
     });
-    yield redis_1.redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+    if (getDomain === null || getDomain === void 0 ? void 0 : getDomain.id) {
+        yield redis_1.redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+    }
     return res.json({
         success: true,
         message: "SubDomain Created Successfully",
     });
 });
 exports.createSubDomain = createSubDomain;
+const deleteSite = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _d;
+    const { outletId, siteId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    const userId = (_d = req === null || req === void 0 ? void 0 : req.user) === null || _d === void 0 ? void 0 : _d.id;
+    if (outlet === undefined || !outlet.id) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (outlet.adminId !== userId) {
+        throw new unauthorized_1.UnauthorizedException("Your Unauthorized To delete this Settings", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const findDomain = yield __1.prismaDB.site.findFirst({
+        where: {
+            id: siteId,
+        },
+    });
+    if (!(findDomain === null || findDomain === void 0 ? void 0 : findDomain.id)) {
+        throw new bad_request_1.BadRequestsException("Domain settings not Found", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    yield __1.prismaDB.site.delete({
+        where: {
+            id: findDomain === null || findDomain === void 0 ? void 0 : findDomain.id,
+            restaurantId: outletId,
+            adminId: userId,
+        },
+    });
+    yield redis_1.redis.del(`app-domain-${findDomain === null || findDomain === void 0 ? void 0 : findDomain.subdomain}`);
+    yield redis_1.redis.del(`o-domain-${outletId}`);
+    return res.json({
+        success: true,
+        message: "Domain Settings Deleted Success",
+    });
+});
+exports.deleteSite = deleteSite;

@@ -8,13 +8,20 @@ import { userSchema } from "../../../schema/staff";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { sendToken } from "../../../services/jwt";
 import { redis } from "../../../services/redis";
-import { getOwnerUserByEmail } from "../../../lib/get-users";
+import {
+  getFormatUserAndSendToRedis,
+  getOwnerUserByEmail,
+} from "../../../lib/get-users";
 import { UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { prismaDB } from "../../..";
-import { generateVerificationToken } from "../../../lib/utils";
+import {
+  generateVerificationToken,
+  getDaysRemaining,
+} from "../../../lib/utils";
 import { v4 as uuidv4 } from "uuid";
 import { differenceInDays } from "date-fns";
+import { UnauthorizedException } from "../../../exceptions/unauthorized";
 
 export type FUser = {
   id: string;
@@ -26,6 +33,7 @@ export type FUser = {
   role: "ADMIN";
   onboardingStatus: boolean;
   isSubscribed: boolean;
+  isTwoFA: boolean;
   toRenewal: number | null;
   plan: "FREETRIAL" | "STANDARD" | "PREMIUM" | "ENTERPRISE";
   outlets: {
@@ -45,7 +53,11 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
     },
     include: {
       restaurant: true,
-      billings: true,
+      billings: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
     },
   });
 
@@ -66,6 +78,7 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
     phoneNo: findOwner?.phoneNo,
     image: findOwner?.image,
     role: findOwner?.role,
+    isTwoFA: findOwner?.isTwoFactorEnabled,
     onboardingStatus: findOwner?.onboardingStatus,
     isSubscribed: renewalDay > 0 ? true : false,
     subscriptions: findOwner?.billings.map((billing) => ({
@@ -124,6 +137,7 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
       image: user?.image,
       role: user?.role,
       onboardingStatus: user?.onboardingStatus,
+      isTwoFA: findOwner?.isTwoFactorEnabled,
       isSubscribed: renewalDay > 0 ? true : false,
       subscriptions: user?.billings.map((billing) => ({
         id: billing.id,
@@ -192,6 +206,8 @@ export const OwnerLogin = async (req: Request, res: Response) => {
     image: findOwner?.image,
     role: findOwner?.role,
     onboardingStatus: findOwner?.onboardingStatus,
+    isTwoFA: findOwner?.isTwoFactorEnabled,
+
     isSubscribed: renewalDay > 0 ? true : false,
     subscriptions: findOwner?.billings.map((billing) => ({
       id: billing.id,
@@ -310,15 +326,30 @@ export const registerOwner = async (req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
+  const ruser = await redis.get(id);
+
+  if (ruser) {
+    return res.json({
+      success: true,
+      user: JSON.parse(ruser),
+    });
+  }
+
   const user = await prismaDB.user.findFirst({
     where: {
       id,
     },
   });
 
+  if (!user?.id) {
+    throw new NotFoundException("User Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const formatToSend = await getFormatUserAndSendToRedis(user?.id);
+
   return res.json({
     success: true,
-    user,
+    user: formatToSend,
     message: "Fetched User",
   });
 };
@@ -485,69 +516,13 @@ export const getUserInfo = async (req: Request, res: Response) => {
     throw new NotFoundException("User not found", ErrorCode.UNAUTHORIZED);
   }
 
-  const findSubscription = findOwner?.billings.find(
-    (billing) => billing?.userId === findOwner.id
-  );
-
-  const renewalDay =
-    findSubscription?.userId === findOwner.id
-      ? getDaysRemaining(findSubscription.validDate as Date)
-      : 0;
-
-  const formatToSend = {
-    id: findOwner?.id,
-    name: findOwner?.name,
-    email: findOwner?.email,
-    emailVerified: findOwner?.emailVerified,
-    phoneNo: findOwner?.phoneNo,
-    image: findOwner?.image,
-    role: findOwner?.role,
-    onboardingStatus: findOwner?.onboardingStatus,
-    isSubscribed: renewalDay > 0 ? true : false,
-    subscriptions: findOwner?.billings.map((billing) => ({
-      id: billing.id,
-      planName: billing.subscriptionPlan,
-      paymentId: billing.paymentId,
-      startDate: billing.subscribedDate,
-      validDate: billing.validDate,
-      amount: billing.paidAmount,
-      validityDays: differenceInDays(
-        new Date(billing.validDate),
-        new Date(billing.subscribedDate)
-      ),
-      purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-      status: renewalDay === 0 ? "EXPIRED" : "VALID",
-    })),
-    toRenewal: renewalDay,
-    plan: findSubscription?.subscriptionPlan,
-    outlets: findOwner?.restaurant.map((outlet) => ({
-      id: outlet.id,
-      name: outlet.name,
-      image: outlet.imageUrl,
-    })),
-  };
+  const formatToSend = await getFormatUserAndSendToRedis(findOwner?.id);
 
   return res.json({
     success: true,
     users: formatToSend,
   });
 };
-
-function getDaysRemaining(subscribedDate: Date) {
-  // Parse the subscribed date
-  const subscribed = new Date(subscribedDate);
-
-  // Get today's date
-  const today = new Date();
-
-  // Calculate the difference in time (in milliseconds)
-  const timeDiff = subscribed.getTime() - today.getTime();
-
-  // Calculate the difference in days
-  const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-
-  return daysRemaining;
-}
 
 export const getPasswordResetTokenByToken = async (
   req: Request,
@@ -624,4 +599,63 @@ export const generatePasswordResetToken = async (
   });
 
   return res.json({ success: true, passwordResetToken });
+};
+
+export const updateUserProfileDetails = async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  // @ts-ignore
+  const reqUserId = req.user?.id;
+
+  const { name, phoneNo, isTwoFA, imageUrl } = req.body;
+
+  if (userId !== reqUserId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findUser = await prismaDB.user.findFirst({
+    where: {
+      id: userId,
+    },
+  });
+
+  if (!findUser?.id) {
+    throw new NotFoundException("User Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  if (findUser.phoneNo !== phoneNo) {
+    const uniqueNo = await prismaDB.user.findFirst({
+      where: {
+        phoneNo: phoneNo,
+      },
+    });
+
+    if (uniqueNo?.id) {
+      throw new BadRequestsException(
+        "This Phone No. is already assigned to different USer",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+  }
+
+  const updateUSer = await prismaDB.user.update({
+    where: {
+      id: findUser?.id,
+    },
+    data: {
+      name: name,
+      image: imageUrl,
+      phoneNo: phoneNo,
+      isTwoFactorEnabled: isTwoFA,
+    },
+  });
+
+  await getFormatUserAndSendToRedis(updateUSer?.id);
+
+  return res.json({
+    success: true,
+    message: "Update Profile Success ✅",
+  });
 };

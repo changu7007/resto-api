@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOAllCategories = exports.getOAllItems = void 0;
+exports.getFetchAllNotificationToRedis = exports.getOAllCategories = exports.getOAllItems = void 0;
 const __1 = require("../..");
 const redis_1 = require("../../services/redis");
 const getOAllItems = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -36,8 +36,33 @@ const getOAllItems = (outletId) => __awaiter(void 0, void 0, void 0, function* (
             },
         },
     });
-    return yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(getItems));
+    if ((getItems === null || getItems === void 0 ? void 0 : getItems.length) > 0) {
+        yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(getItems));
+    }
+    else {
+        yield redis_1.redis.del(`${outletId}-all-items`);
+    }
+    return getItems;
 });
 exports.getOAllItems = getOAllItems;
 const getOAllCategories = (outletId) => __awaiter(void 0, void 0, void 0, function* () { });
 exports.getOAllCategories = getOAllCategories;
+const getFetchAllNotificationToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const notifications = yield __1.prismaDB.notification.findMany({
+        where: {
+            restaurantId: outletId,
+            status: true,
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+    if ((notifications === null || notifications === void 0 ? void 0 : notifications.length) > 0) {
+        yield redis_1.redis.set(`o-n-${outletId}`, JSON.stringify(notifications));
+    }
+    else {
+        yield redis_1.redis.del(`o-n-${outletId}`);
+    }
+    return notifications;
+});
+exports.getFetchAllNotificationToRedis = getFetchAllNotificationToRedis;

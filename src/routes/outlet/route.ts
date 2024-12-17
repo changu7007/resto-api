@@ -2,10 +2,14 @@ import { Router } from "express";
 import {
   addFMCTokenToOutlet,
   createInvoiceDetails,
+  deleteAllNotifications,
+  deleteNotificationById,
+  deleteOutlet,
   fetchInvoiceDetails,
   getAllNotifications,
   getByOutletId,
   getIntegration,
+  getrazorpayConfig,
   getStaffOutlet,
   patchOutletDetails,
   patchOutletOnlinePOrtalDetails,
@@ -32,6 +36,9 @@ import {
   getAddONById,
   getAllItem,
   getItemById,
+  getMenuVariants,
+  getShortCodeStatus,
+  getSingleAddons,
   getVariantById,
   postItem,
   updateItembyId,
@@ -78,6 +85,7 @@ import {
 } from "../../controllers/outlet/stats/statsController";
 import {
   createSubDomain,
+  deleteSite,
   getDomain,
 } from "../../controllers/outlet/domains/domainController";
 import {
@@ -92,6 +100,42 @@ import {
   updatePayrollStatus,
 } from "../../controllers/outlet/payroll/payrollController";
 import { getAllCustomer } from "../../controllers/outlet/customers/customerController";
+import {
+  createVendorAccount,
+  fetchBankAccountStatus,
+} from "../../controllers/outlet/plans/planController";
+import {
+  allStocks,
+  createItemRecipe,
+  createRawMaterial,
+  createRawMaterialCategory,
+  createRequestPurchase,
+  createUnit,
+  createVendor,
+  deleteCategoryById,
+  deleteRawMaterialById,
+  deleteRequestPurchase,
+  deleteUnitById,
+  deleteVendor,
+  getAllItemRecipe,
+  getAllPurcahses,
+  getAllRawMaterialCategory,
+  getAllRawMaterials,
+  getAllRawMaterialUnit,
+  getAllVendors,
+  getCategoryById,
+  getPurchaseId,
+  getRawMaterialById,
+  getRecipeById,
+  getUnitById,
+  updateCategoryById,
+  updateItemRecipe,
+  updateRawMaterialById,
+  updateRequestPurchase,
+  updateUnitById,
+  updateVendor,
+  validatePurchasenRestock,
+} from "../../controllers/outlet/inventory/inventory-controller";
 
 const outletRoute: Router = Router();
 
@@ -100,12 +144,30 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getStaffOutlet)
 );
+outletRoute.get(
+  "/:outletId/get-razorpay-config",
+  isAuthMiddelware,
+  errorHandler(getrazorpayConfig)
+);
 outletRoute.get("/:outletId", isAuthMiddelware, errorHandler(getByOutletId));
 outletRoute.patch("/:outletId/add-fmc", errorHandler(addFMCTokenToOutlet));
 outletRoute.get(
   "/:outletId/notifications",
   isAuthMiddelware,
   errorHandler(getAllNotifications)
+);
+outletRoute.delete(
+  "/:outletId/delete-all-notification",
+  errorHandler(deleteAllNotifications)
+);
+outletRoute.delete(
+  "/:outletId/delete-notification/:id",
+  errorHandler(deleteNotificationById)
+);
+outletRoute.delete(
+  "/:outletId/delete-outlet",
+  isAuthMiddelware,
+  errorHandler(deleteOutlet)
 );
 
 //integration
@@ -223,6 +285,8 @@ outletRoute.post(
 );
 outletRoute.get("/:outletId/get-items", errorHandler(getAllItem));
 outletRoute.get("/:outletId/get-categories", errorHandler(getAllCategories));
+outletRoute.get("/:outletId/get-menu-variants", errorHandler(getMenuVariants));
+outletRoute.get("/:outletId/get-addons-items", errorHandler(getSingleAddons));
 outletRoute.get(
   "/:outletId/items/:itemId",
   isAuthMiddelware,
@@ -238,7 +302,10 @@ outletRoute.delete(
   isAuthMiddelware,
   errorHandler(deleteItem)
 );
-
+outletRoute.post(
+  "/:outletId/check-short-code",
+  errorHandler(getShortCodeStatus)
+);
 //categories
 outletRoute.post(
   "/:outletId/create-category",
@@ -385,6 +452,12 @@ outletRoute.post(
   errorHandler(createSubDomain)
 );
 
+outletRoute.delete(
+  "/:outletId/delete-domain-settings/:siteId",
+  isAuthMiddelware,
+  errorHandler(deleteSite)
+);
+
 //payroll
 outletRoute.get(
   "/:outletId/get-monthly-payroll",
@@ -420,6 +493,193 @@ outletRoute.patch(
   "/:outletId/update-invoice-data",
   isAuthMiddelware,
   errorHandler(updateInvoiceDetails)
+);
+
+//create-vendor-account
+outletRoute.post(
+  "/:outletId/create-vendor-account",
+  isAuthMiddelware,
+  errorHandler(createVendorAccount)
+);
+outletRoute.get(
+  "/:outletId/bank-account-status",
+  isAuthMiddelware,
+  errorHandler(fetchBankAccountStatus)
+);
+
+// Raw Material GETALL,GETBYID,POST,PATCH,DELETE START
+outletRoute.get(
+  "/:outletId/inventory/get-raw-materials",
+  isAuthMiddelware,
+  errorHandler(getAllRawMaterials)
+);
+outletRoute.get(
+  "/:outletId/inventory/get-raw-materials/:id",
+  isAuthMiddelware,
+  errorHandler(getRawMaterialById)
+);
+outletRoute.post(
+  "/:outletId/inventory/create-raw-material",
+  isAuthMiddelware,
+  errorHandler(createRawMaterial)
+);
+
+outletRoute.patch(
+  "/:outletId/inventory/update-raw-material/:id",
+  isAuthMiddelware,
+  errorHandler(updateRawMaterialById)
+);
+
+outletRoute.delete(
+  "/:outletId/inventory/delete-raw-material/:id",
+  isAuthMiddelware,
+  errorHandler(deleteRawMaterialById)
+);
+// Raw Material POST,PATCH,DELETE END
+
+//Category GETALL,GETBYID,POST,PATCH,DELETE START
+
+outletRoute.get(
+  "/:outletId/inventory/get-raw-material-categories",
+  isAuthMiddelware,
+  errorHandler(getAllRawMaterialCategory)
+);
+outletRoute.get(
+  "/:outletId/inventory/get-raw-material-categories/:categoryId",
+  isAuthMiddelware,
+  errorHandler(getCategoryById)
+);
+
+outletRoute.post(
+  "/:outletId/inventory/create-raw-material-category",
+  isAuthMiddelware,
+  errorHandler(createRawMaterialCategory)
+);
+
+outletRoute.patch(
+  "/:outletId/inventory/update-raw-material-category/:categoryId",
+  isAuthMiddelware,
+  errorHandler(updateCategoryById)
+);
+
+outletRoute.delete(
+  "/:outletId/inventory/delete-raw-material-category/:categoryId",
+  isAuthMiddelware,
+  errorHandler(deleteCategoryById)
+);
+//Category POST,PATCH,DELETE END
+
+//Unit GETALL,GETBYID,POST,PATCH,DELETE START
+outletRoute.get(
+  "/:outletId/inventory/get-raw-material-units",
+  isAuthMiddelware,
+  errorHandler(getAllRawMaterialUnit)
+);
+outletRoute.get(
+  "/:outletId/inventory/get-raw-material-unit/:unitId",
+  isAuthMiddelware,
+  errorHandler(getUnitById)
+);
+outletRoute.post(
+  "/:outletId/inventory/create-raw-material-unit",
+  isAuthMiddelware,
+  errorHandler(createUnit)
+);
+
+outletRoute.patch(
+  "/:outletId/inventory/update-raw-material-unit/:unitId",
+  isAuthMiddelware,
+  errorHandler(updateUnitById)
+);
+
+outletRoute.delete(
+  "/:outletId/inventory/delete-raw-material-unit/:unitId",
+  isAuthMiddelware,
+  errorHandler(deleteUnitById)
+);
+//Unit POST,PATCH,DELETE END
+
+//Purchase GET,CREATE START
+outletRoute.get(
+  "/:outletId/inventory/get-all-purchases",
+  isAuthMiddelware,
+  errorHandler(getAllPurcahses)
+);
+outletRoute.get(
+  "/:outletId/inventory/get-purchase/:id",
+  isAuthMiddelware,
+  errorHandler(getPurchaseId)
+);
+outletRoute.post(
+  "/:outletId/inventory/create-request-purchase",
+  isAuthMiddelware,
+  errorHandler(createRequestPurchase)
+);
+outletRoute.patch(
+  "/:outletId/inventory/update-request-purchase/:id",
+  isAuthMiddelware,
+  errorHandler(updateRequestPurchase)
+);
+outletRoute.delete(
+  "/:outletId/inventory/delete-request-purchase/:id",
+  isAuthMiddelware,
+  errorHandler(deleteRequestPurchase)
+);
+outletRoute.post(
+  "/:outletId/inventory/validate-purchase/:id",
+  isAuthMiddelware,
+  errorHandler(validatePurchasenRestock)
+);
+//PURCHASE GET,CREATE END
+
+//Vendors GET,CREATE START
+outletRoute.get(
+  "/:outletId/inventory/get-all-vendors",
+  isAuthMiddelware,
+  errorHandler(getAllVendors)
+);
+outletRoute.post(
+  "/:outletId/inventory/create-vendor",
+  isAuthMiddelware,
+  errorHandler(createVendor)
+);
+outletRoute.patch(
+  "/:outletId/inventory/update-vendor/:id",
+  isAuthMiddelware,
+  errorHandler(updateVendor)
+);
+outletRoute.delete(
+  "/:outletId/inventory/delete-vendor/:id",
+  isAuthMiddelware,
+  errorHandler(deleteVendor)
+);
+//Vendors GET,CREATE END
+outletRoute.get(
+  "/:outletId/inventory/get-all-stocks",
+  isAuthMiddelware,
+  errorHandler(allStocks)
+);
+
+//Item REcipe CREATE START
+outletRoute.post(
+  "/:outletId/inventory/create-item-recipe",
+  isAuthMiddelware,
+  errorHandler(createItemRecipe)
+);
+outletRoute.get(
+  "/:outletId/inventory/all-recipes",
+  isAuthMiddelware,
+  errorHandler(getAllItemRecipe)
+);
+outletRoute.get(
+  "/:outletId/inventory/get-recipe/:id",
+  isAuthMiddelware,
+  errorHandler(getRecipeById)
+);
+outletRoute.patch(
+  "/:outletId/inventory/update-recipe/:id",
+  isAuthMiddelware,
+  errorHandler(updateItemRecipe)
 );
 
 export default outletRoute;

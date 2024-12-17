@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.outletOnlinePortalSchema = exports.userSchema = exports.staffSchema = void 0;
+exports.rawMaterialSchema = exports.outletOnlinePortalSchema = exports.userSchema = exports.staffSchema = void 0;
 const z = __importStar(require("zod"));
 exports.staffSchema = z.object({
     email: z.string().min(1, { message: "Provide email address" }),
@@ -39,8 +39,19 @@ exports.outletOnlinePortalSchema = z.object({
     closeTime: z.string().min(1, "Close Time is Required"),
     areaLat: z.string().min(1, "Area Latitude is required"),
     areaLong: z.string().min(1, "Area Longitude is required"),
-    orderRadius: z.string().min(1, "Order Radius in KM for Customer is Required"),
+    orderRadius: z.number().min(1, "Order Radius in KM for Customer is Required"),
     isDelivery: z.boolean().optional(),
     isPickUp: z.boolean().optional(),
     isDineIn: z.boolean().optional(),
+});
+exports.rawMaterialSchema = z.object({
+    name: z.string().min(1, "Name is required"),
+    barcode: z.string().min(1, "ShortCode / Barcode is required"),
+    categoryId: z.string().min(1, "Category is required"),
+    conversionFactor: z.string().min(1, "Conversion Factor is required"),
+    consumptionUnitId: z.string().min(1, "Consumption unit is required"),
+    minimumStockLevelUnitId: z
+        .string()
+        .min(1, "Minimum stock level unit is required"),
+    minimumStockLevel: z.string().min(1, "Minimum stock level is required"),
 });

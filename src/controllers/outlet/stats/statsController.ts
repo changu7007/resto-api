@@ -30,43 +30,79 @@ export const orderStatsForOutlet = async (req: Request, res: Response) => {
     select: {
       totalAmount: true,
       orderType: true,
+      orderItems: {
+        select: {
+          menuItem: {
+            select: {
+              price: true,
+              isVariants: true,
+              grossProfit: true,
+              menuItemVariants: {
+                select: {
+                  grossProfit: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 
   // Initialize totals for all types and the "All" category
   const totals = {
-    all: { revenue: 0, orders: 0 },
-    express: { revenue: 0, orders: 0 },
-    dineIn: { revenue: 0, orders: 0 },
-    delivery: { revenue: 0, orders: 0 },
-    takeaway: { revenue: 0, orders: 0 },
+    all: { revenue: 0, orders: 0, grossProfit: 0 },
+    express: { revenue: 0, orders: 0, grossProfit: 0 },
+    dineIn: { revenue: 0, orders: 0, grossProfit: 0 },
+    delivery: { revenue: 0, orders: 0, grossProfit: 0 },
+    takeaway: { revenue: 0, orders: 0, grossProfit: 0 },
   };
 
-  // Sum up the revenue and order counts for each category and the total
+  // Calculate revenue, orders, and gross profit
   orders.forEach((order) => {
     const amount = parseFloat(order.totalAmount);
+
+    // Calculate gross profit for this order
+    let orderGrossProfit = 0;
+    order.orderItems.forEach((item) => {
+      if (item.menuItem.isVariants) {
+        // Use gross profit from menuItemVariants if available
+        orderGrossProfit += item.menuItem.menuItemVariants.reduce(
+          (acc, variant) => acc + (variant.grossProfit || 0),
+          0
+        );
+      } else {
+        // Use gross profit from menuItem directly
+        orderGrossProfit += item.menuItem.grossProfit || 0;
+      }
+    });
 
     // Sum for all orders
     totals.all.revenue += amount;
     totals.all.orders++;
+    totals.all.grossProfit += orderGrossProfit;
 
     // Sum for each orderType
     switch (order.orderType) {
       case "EXPRESS":
         totals.express.revenue += amount;
         totals.express.orders++;
+        totals.express.grossProfit += orderGrossProfit;
         break;
       case "DINEIN":
         totals.dineIn.revenue += amount;
         totals.dineIn.orders++;
+        totals.dineIn.grossProfit += orderGrossProfit;
         break;
       case "DELIVERY":
         totals.delivery.revenue += amount;
         totals.delivery.orders++;
+        totals.delivery.grossProfit += orderGrossProfit;
         break;
       case "TAKEAWAY":
         totals.takeaway.revenue += amount;
         totals.takeaway.orders++;
+        totals.takeaway.grossProfit += orderGrossProfit;
         break;
     }
   });
@@ -75,21 +111,25 @@ export const orderStatsForOutlet = async (req: Request, res: Response) => {
   const expressFormattedStats = {
     totalRevenue: totals.all.revenue,
     totalOrders: totals.all.orders,
+    grossProfit: totals.all.grossProfit,
     stats: [
       {
         type: "EXPRESS",
         revenue: totals.express.revenue,
         orders: totals.express.orders,
+        grossProfit: totals.express.grossProfit,
       },
       {
         type: "DELIVERY",
         revenue: totals.delivery.revenue,
         orders: totals.delivery.orders,
+        grossProfit: totals.delivery.grossProfit,
       },
       {
         type: "TAKEAWAY",
         revenue: totals.takeaway.revenue,
         orders: totals.takeaway.orders,
+        grossProfit: totals.takeaway.grossProfit,
       },
     ],
   };
@@ -97,21 +137,25 @@ export const orderStatsForOutlet = async (req: Request, res: Response) => {
   const formattedStats = {
     totalRevenue: totals.all.revenue,
     totalOrders: totals.all.orders,
+    grossProfit: totals.all.grossProfit,
     stats: [
       {
         type: "DINEIN",
         revenue: totals.dineIn.revenue,
         orders: totals.dineIn.orders,
+        grossProfit: totals.dineIn.grossProfit,
       },
       {
         type: "DELIVERY",
         revenue: totals.delivery.revenue,
         orders: totals.delivery.orders,
+        grossProfit: totals.delivery.grossProfit,
       },
       {
         type: "TAKEAWAY",
         revenue: totals.takeaway.revenue,
         orders: totals.takeaway.orders,
+        grossProfit: totals.takeaway.grossProfit,
       },
     ],
   };
@@ -236,7 +280,7 @@ type TopItem = {
   category: string;
   orders: number;
   revenue: number;
-  imageUrl: string; // Assuming you have an image URL for the food item
+  imageUrl: string | null; // Assuming you have an image URL for the food item
 };
 
 export const outletTopSellingItems = async (req: Request, res: Response) => {
@@ -290,11 +334,12 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
         category: item.menuItem.category.name,
         orders: 0,
         revenue: 0,
-        imageUrl: item.menuItem.images[0].url, // Adjust as needed
+        imageUrl:
+          item.menuItem.images.length > 0 ? item.menuItem.images[0].url : null, // Adjust as needed
       };
     }
     aggregated[foodId].orders += Number(item.quantity);
-    aggregated[foodId].revenue += Number(item.price);
+    aggregated[foodId].revenue += Number(item.totalPrice);
   });
 
   // Convert the aggregated object to an array and sort by orders

@@ -9,12 +9,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.customerUpdateSession = exports.CustomerLogin = exports.generateOtp = exports.updateOtp = exports.checkCustomer = exports.otpCheck = void 0;
+exports.getCurrentOrderForCustomer = exports.getCustomerOrdersById = exports.customerUpdateSession = exports.CustomerLogin = exports.generateOtp = exports.updateOtp = exports.checkCustomer = exports.otpCheck = void 0;
 const __1 = require("../../..");
 const jwt_1 = require("../../../services/jwt");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
+const outlet_1 = require("../../../lib/outlet");
+const get_users_1 = require("../../../lib/get-users");
 const otpCheck = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { mobile } = req.body;
     const otpRecord = yield __1.prismaDB.otp.findUnique({
@@ -89,6 +91,7 @@ const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             role: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.role,
             restaurantId: updateCustomer.restaurantId,
         };
+        yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(restaurantId);
         (0, jwt_1.sendToken)(customerData, 200, res);
     }
     else {
@@ -108,6 +111,7 @@ const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             role: createCustomer === null || createCustomer === void 0 ? void 0 : createCustomer.role,
             restaurantId: createCustomer.restaurantId,
         };
+        yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(restaurantId);
         (0, jwt_1.sendToken)(customerData, 200, res);
     }
 });
@@ -154,9 +158,94 @@ const customerUpdateSession = (req, res) => __awaiter(void 0, void 0, void 0, fu
             },
         });
     }
+    yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(outletId);
     return res.json({
         success: true,
         message: "Profile Session ot updated",
     });
 });
 exports.customerUpdateSession = customerUpdateSession;
+const getCustomerOrdersById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, customerId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const customer = yield (0, get_users_1.getCustomerById)(customerId, outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    if (!(customer === null || customer === void 0 ? void 0 : customer.id)) {
+        throw new not_found_1.NotFoundException("Customer Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const formattedOrder = customer === null || customer === void 0 ? void 0 : customer.orderSession.filter((s) => s.active === false).map((session) => {
+        var _a;
+        return ({
+            id: session === null || session === void 0 ? void 0 : session.id,
+            billId: session === null || session === void 0 ? void 0 : session.billId,
+            active: session === null || session === void 0 ? void 0 : session.active,
+            invoiceUrl: session === null || session === void 0 ? void 0 : session.invoiceUrl,
+            orderType: session === null || session === void 0 ? void 0 : session.orderType,
+            status: session === null || session === void 0 ? void 0 : session.sessionStatus,
+            isPaid: session === null || session === void 0 ? void 0 : session.isPaid,
+            subTotal: session === null || session === void 0 ? void 0 : session.subTotal,
+            paymentMethod: session === null || session === void 0 ? void 0 : session.paymentMethod,
+            orders: (_a = session === null || session === void 0 ? void 0 : session.orders) === null || _a === void 0 ? void 0 : _a.map((order) => ({
+                id: order === null || order === void 0 ? void 0 : order.generatedOrderId,
+                status: order === null || order === void 0 ? void 0 : order.orderStatus,
+                s: order === null || order === void 0 ? void 0 : order.totalAmount,
+                orderItems: order === null || order === void 0 ? void 0 : order.orderItems.map((item) => ({
+                    id: item === null || item === void 0 ? void 0 : item.id,
+                    name: item === null || item === void 0 ? void 0 : item.name,
+                    quantity: item.quantity,
+                    originalRate: item.originalRate,
+                    total: item === null || item === void 0 ? void 0 : item.totalPrice,
+                })),
+            })),
+        });
+    });
+    return res.json({
+        success: true,
+        orders: formattedOrder,
+    });
+});
+exports.getCustomerOrdersById = getCustomerOrdersById;
+const getCurrentOrderForCustomer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, customerId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const customer = yield (0, get_users_1.getCustomerById)(customerId, outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    if (!(customer === null || customer === void 0 ? void 0 : customer.id)) {
+        throw new not_found_1.NotFoundException("Customer Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const formattedOrder = customer === null || customer === void 0 ? void 0 : customer.orderSession.filter((s) => s.active === true).map((session) => {
+        var _a;
+        return ({
+            id: session === null || session === void 0 ? void 0 : session.id,
+            billId: session === null || session === void 0 ? void 0 : session.billId,
+            active: session === null || session === void 0 ? void 0 : session.active,
+            invoiceUrl: session === null || session === void 0 ? void 0 : session.invoiceUrl,
+            orderType: session === null || session === void 0 ? void 0 : session.orderType,
+            status: session === null || session === void 0 ? void 0 : session.sessionStatus,
+            isPaid: session === null || session === void 0 ? void 0 : session.isPaid,
+            subTotal: session === null || session === void 0 ? void 0 : session.subTotal,
+            paymentMethod: session === null || session === void 0 ? void 0 : session.paymentMethod,
+            orders: (_a = session === null || session === void 0 ? void 0 : session.orders) === null || _a === void 0 ? void 0 : _a.map((order) => ({
+                id: order === null || order === void 0 ? void 0 : order.generatedOrderId,
+                orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus,
+                totalAmount: order === null || order === void 0 ? void 0 : order.totalAmount,
+                orderItems: order === null || order === void 0 ? void 0 : order.orderItems.map((item) => ({
+                    id: item === null || item === void 0 ? void 0 : item.id,
+                    name: item === null || item === void 0 ? void 0 : item.name,
+                    quantity: item.quantity,
+                    originalRate: item.originalRate,
+                    total: item === null || item === void 0 ? void 0 : item.totalPrice,
+                })),
+            })),
+        });
+    });
+    return res.json({
+        success: true,
+        orders: formattedOrder,
+    });
+});
+exports.getCurrentOrderForCustomer = getCurrentOrderForCustomer;

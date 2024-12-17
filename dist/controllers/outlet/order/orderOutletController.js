@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.printKotOrder = exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -22,6 +22,9 @@ const ws_1 = require("../../../services/ws");
 const get_order_1 = require("../../../lib/outlet/get-order");
 const get_tables_1 = require("../../../lib/outlet/get-tables");
 const firebase_1 = require("../../../services/firebase");
+const get_items_1 = require("../../../lib/outlet/get-items");
+const orderSessionController_1 = require("./orderSession/orderSessionController");
+const date_fns_1 = require("date-fns");
 const getLiveOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisLiveOrder = yield redis_1.redis.get(`liv-o-${outletId}`);
@@ -141,165 +144,176 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     var _a;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { adminId, username, isPaid, phoneNo, orderType, totalAmount, orderItems, tableId, orderMode, } = req.body;
+    const { adminId, username, isPaid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, orderMode, } = req.body;
+    // Authorization and basic validation
     // @ts-ignore
     if (adminId !== ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
-    const findUser = yield __1.prismaDB.user.findFirst({
-        where: {
-            id: adminId,
-        },
-    });
-    if (!(findUser === null || findUser === void 0 ? void 0 : findUser.id)) {
-        throw new bad_request_1.BadRequestsException("You Need to login & place the order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-    if (orderType === "DINEIN" && !tableId) {
-        throw new bad_request_1.BadRequestsException("Please Assign the table , if you have choose order type has DINEIN", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    const [findUser, getOutlet] = yield Promise.all([
+        __1.prismaDB.user.findFirst({ where: { id: adminId } }),
+        (0, outlet_1.getOutletById)(outletId),
+    ]);
+    if (!(findUser === null || findUser === void 0 ? void 0 : findUser.id) || !(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("User or Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     if (!validTypes.includes(orderType)) {
-        throw new bad_request_1.BadRequestsException("Please Select Order Type", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        throw new bad_request_1.BadRequestsException("Invalid Order Type", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    if (!outletId) {
-        throw new bad_request_1.BadRequestsException("Outlet Id is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    if (orderType === "DINEIN" && !tableId) {
+        throw new bad_request_1.BadRequestsException("Table ID is required for DINEIN order type", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
-    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
-        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
-    }
-    const orderId = yield (0, outlet_1.generatedOrderId)(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id);
-    const billNo = yield (0, outlet_1.generateBillNo)(getOutlet.id);
+    // Generate IDs
+    const [orderId, billNo] = yield Promise.all([
+        (0, outlet_1.generatedOrderId)(getOutlet.id),
+        (0, outlet_1.generateBillNo)(getOutlet.id),
+    ]);
+    // Determine order status
     const orderStatus = orderMode === "KOT"
         ? "INCOMMING"
         : orderMode === "EXPRESS"
             ? "FOODREADY"
             : "SERVED";
-    const orderSession = yield __1.prismaDB.orderSession.create({
-        data: {
-            billId: billNo,
-            orderType: orderType,
-            username: username !== null && username !== void 0 ? username : findUser.name,
-            phoneNo: phoneNo !== null && phoneNo !== void 0 ? phoneNo : null,
-            adminId: findUser.id,
-            tableId: tableId,
-            isPaid: isPaid,
-            restaurantId: getOutlet.id,
-            orders: {
-                create: {
-                    restaurantId: getOutlet.id,
-                    isPaid: isPaid,
-                    active: true,
-                    orderStatus: orderStatus,
-                    totalAmount: totalAmount.toString(),
-                    generatedOrderId: orderId,
-                    orderType: orderType,
-                    orderItems: {
-                        create: orderItems.map((item) => ({
-                            menuId: item.menuId,
-                            quantity: item.quantity.toString(),
-                            sizeVariantsId: item.sizeVariantsId,
-                            addOnSelected: {
-                                create: item.addOnSelected.map((addon) => ({
-                                    addOnId: addon.id,
-                                    selectedAddOnVariantsId: {
-                                        create: addon.selectedVariantsId.map((variant) => ({
-                                            selectedAddOnVariantId: variant.id,
-                                        })),
+    const result = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        var _b, _c, _d;
+        const orderSession = yield prisma.orderSession.create({
+            data: {
+                billId: ((_b = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _b === void 0 ? void 0 : _b.isGSTEnabled)
+                    ? `${(_c = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _c === void 0 ? void 0 : _c.prefix}${(_d = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _d === void 0 ? void 0 : _d.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
+                    : billNo,
+                orderType: orderType,
+                username: username !== null && username !== void 0 ? username : findUser.name,
+                phoneNo: phoneNo !== null && phoneNo !== void 0 ? phoneNo : null,
+                adminId: findUser.id,
+                tableId: tableId,
+                isPaid: isPaid,
+                restaurantId: getOutlet.id,
+                createdBy: findUser === null || findUser === void 0 ? void 0 : findUser.name,
+                orders: {
+                    create: {
+                        restaurantId: getOutlet.id,
+                        createdBy: findUser === null || findUser === void 0 ? void 0 : findUser.name,
+                        isPaid: isPaid,
+                        active: true,
+                        orderStatus: orderStatus,
+                        totalNetPrice: totalNetPrice,
+                        gstPrice: gstPrice,
+                        totalAmount: totalAmount.toString(),
+                        totalGrossProfit: totalGrossProfit,
+                        generatedOrderId: orderId,
+                        orderType: orderType,
+                        orderItems: {
+                            create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
+                                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+                                return ({
+                                    menuId: item === null || item === void 0 ? void 0 : item.menuId,
+                                    name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
+                                    strike: false,
+                                    isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
+                                    originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
+                                    quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                    netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
+                                    gst: item === null || item === void 0 ? void 0 : item.gst,
+                                    grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
+                                    totalPrice: item === null || item === void 0 ? void 0 : item.price,
+                                    selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
+                                        ? {
+                                            create: {
+                                                sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
+                                                name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
+                                                type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
+                                                price: Number((_l = (_k = (_j = item === null || item === void 0 ? void 0 : item.menuItem) === null || _j === void 0 ? void 0 : _j.menuItemVariants) === null || _k === void 0 ? void 0 : _k.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.price),
+                                            },
+                                        }
+                                        : undefined,
+                                    addOnSelected: {
+                                        create: (_m = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _m === void 0 ? void 0 : _m.map((addon) => {
+                                            var _a, _b, _c;
+                                            const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
+                                            return {
+                                                addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
+                                                name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
+                                                selectedAddOnVariantsId: {
+                                                    create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
+                                                        var _a;
+                                                        const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
+                                                        return {
+                                                            selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                                                            name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
+                                                            type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
+                                                            price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                                        };
+                                                    }),
+                                                },
+                                            };
+                                        }),
                                     },
-                                })),
-                            },
-                            price: item.price.toString(),
-                        })),
+                                });
+                            }),
+                        },
                     },
                 },
             },
-        },
-    });
-    if (tableId) {
-        const findTable = yield __1.prismaDB.table.findFirst({
-            where: {
-                id: tableId,
-                restaurantId: getOutlet.id,
-            },
         });
-        if (!(findTable === null || findTable === void 0 ? void 0 : findTable.id)) {
-            throw new not_found_1.NotFoundException("No Table found", root_1.ErrorCode.NOT_FOUND);
-        }
-        else {
-            yield __1.prismaDB.table.update({
-                where: {
-                    id: findTable.id,
-                    restaurantId: getOutlet.id,
-                },
+        if (tableId) {
+            const table = yield prisma.table.findFirst({
+                where: { id: tableId, restaurantId: getOutlet.id },
+            });
+            if (!table) {
+                throw new not_found_1.NotFoundException("No Table found", root_1.ErrorCode.NOT_FOUND);
+            }
+            yield prisma.table.update({
+                where: { id: table.id, restaurantId: getOutlet.id },
                 data: {
                     occupied: true,
                     inviteCode: (0, exports.inviteCode)(),
                     currentOrderSessionId: orderSession.id,
                 },
             });
-            yield __1.prismaDB.notification.create({
-                data: {
-                    restaurantId: getOutlet.id,
-                    orderId: orderId,
-                    message: "You have a new Order",
-                    orderType: findTable.name,
-                },
-            });
-            yield Promise.all([
-                (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
-                (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
-                (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
-                (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
-                (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
-                (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
-            ]);
-            ws_1.websocketManager.notifyClients(JSON.stringify({
-                type: "NEW_ORDER_SESSION_CREATED",
-                orderId: orderSession.id,
-            }));
-            return res.json({
-                success: true,
-                orderSessionId: orderSession.id,
-                message: "Order Created from Admin ✅",
-            });
         }
-    }
-    else {
-        yield __1.prismaDB.notification.create({
+        yield prisma.notification.create({
             data: {
                 restaurantId: getOutlet.id,
                 orderId: orderId,
                 message: "You have a new Order",
-                orderType: orderType,
+                orderType: tableId ? "DINEIN" : orderType,
             },
         });
-        yield Promise.all([
-            (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
-            (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
-            (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
-            (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
-            (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
-            (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
-        ]);
-        ws_1.websocketManager.notifyClients(JSON.stringify({
-            type: "NEW_ORDER_SESSION_CREATED",
-            orderId: orderSession.id,
-        }));
-        return res.json({
-            success: true,
-            orderSessionId: orderSession.id,
-            message: "Order Created from Admin ✅",
+        yield prisma.invoice.update({
+            where: {
+                restaurantId: getOutlet.id,
+            },
+            data: {
+                invoiceNo: { increment: 1 },
+            },
         });
-    }
+        return orderSession;
+    }));
+    // Post-transaction tasks
+    yield Promise.all([
+        (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
+        (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
+        (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
+        (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+        (0, get_items_1.getFetchAllNotificationToRedis)(outletId),
+    ]);
+    ws_1.websocketManager.notifyClients(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id, "NEW_ORDER_SESSION_CREATED");
+    return res.json({
+        success: true,
+        orderSessionId: result.id,
+        message: "Order Created from Admin ✅",
+    });
 });
 exports.postOrderForOwner = postOrderForOwner;
 const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b;
+    var _e;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
     const { billerId, username, isPaid, phoneNo, orderType, totalAmount, orderItems, tableId, orderMode, } = req.body;
     // @ts-ignore
-    if (billerId !== ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id)) {
+    if (billerId !== ((_e = req.user) === null || _e === void 0 ? void 0 : _e.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const findBiller = yield __1.prismaDB.staff.findFirst({
@@ -351,22 +365,50 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     generatedOrderId: orderId,
                     orderType: orderType,
                     orderItems: {
-                        create: orderItems.map((item) => ({
-                            menuId: item.menuId,
-                            quantity: item.quantity.toString(),
-                            sizeVariantsId: item.sizeVariantsId,
-                            addOnSelected: {
-                                create: item.addOnSelected.map((addon) => ({
-                                    addOnId: addon.id,
-                                    selectedAddOnVariantsId: {
-                                        create: addon.selectedVariantsId.map((variant) => ({
-                                            selectedAddOnVariantId: variant.id,
-                                        })),
-                                    },
-                                })),
-                            },
-                            price: item.price.toString(),
-                        })),
+                        create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
+                            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+                            return ({
+                                menuId: item === null || item === void 0 ? void 0 : item.menuId,
+                                name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
+                                strike: false,
+                                isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
+                                originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
+                                quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                totalPrice: item === null || item === void 0 ? void 0 : item.price,
+                                selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
+                                    ? {
+                                        create: {
+                                            sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
+                                            name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
+                                            type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
+                                            price: Number((_l = (_k = (_j = item === null || item === void 0 ? void 0 : item.menuItem) === null || _j === void 0 ? void 0 : _j.menuItemVariants) === null || _k === void 0 ? void 0 : _k.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.price),
+                                        },
+                                    }
+                                    : undefined,
+                                addOnSelected: {
+                                    create: (_m = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _m === void 0 ? void 0 : _m.map((addon) => {
+                                        var _a, _b, _c;
+                                        const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
+                                        return {
+                                            addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
+                                            name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
+                                            selectedAddOnVariantsId: {
+                                                create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
+                                                    var _a;
+                                                    const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
+                                                    return {
+                                                        selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                                                        name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
+                                                        type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
+                                                        price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                                    };
+                                                }),
+                                            },
+                                        };
+                                    }),
+                                },
+                            });
+                        }),
                     },
                 },
             },
@@ -409,11 +451,9 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 (0, get_order_1.getFetchAllStaffOrderSessionToRedis)(outletId, findBiller.id),
                 (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
                 (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+                (0, get_items_1.getFetchAllNotificationToRedis)(outletId),
             ]);
-            ws_1.websocketManager.notifyClients(JSON.stringify({
-                type: "NEW_ORDER_SESSION_CREATED",
-                orderId: orderSession.id,
-            }));
+            ws_1.websocketManager.notifyClients(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id, "NEW_ORDER_SESSION_CREATED");
             return res.json({
                 success: true,
                 orderSessionId: orderSession.id,
@@ -438,11 +478,9 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
             (0, get_order_1.getFetchAllStaffOrderSessionToRedis)(outletId, findBiller.id),
             (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
             (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+            (0, get_items_1.getFetchAllNotificationToRedis)(outletId),
         ]);
-        ws_1.websocketManager.notifyClients(JSON.stringify({
-            type: "NEW_ORDER_SESSION_CREATED",
-            orderId: orderSession.id,
-        }));
+        ws_1.websocketManager.notifyClients(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id, "NEW_ORDER_SESSION_CREATED");
         return res.json({
             success: true,
             orderSessionId: orderSession.id,
@@ -452,12 +490,12 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.postOrderForStaf = postOrderForStaf;
 const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _c;
+    var _f;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { customerId, isPaid, orderType, totalAmount, orderItems, tableId } = req.body;
+    const { customerId, isPaid, orderType, totalAmount, orderItems, tableId, paymentId, } = req.body;
     // @ts-ignore
-    if (customerId !== ((_c = req.user) === null || _c === void 0 ? void 0 : _c.id)) {
+    if (customerId !== ((_f = req.user) === null || _f === void 0 ? void 0 : _f.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const validCustomer = yield __1.prismaDB.customer.findFirst({
@@ -477,6 +515,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
     if (!outletId) {
         throw new bad_request_1.BadRequestsException("Outlet Id is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
+    const calculate = (0, orderSessionController_1.calculateTotalsForTakewayAndDelivery)(orderItems);
     const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
@@ -495,22 +534,50 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             totalAmount: totalAmount.toString(),
             orderStatus: orderStatus,
             orderItems: {
-                create: orderItems.map((item) => ({
-                    menuId: item.menuId,
-                    quantity: item.quantity.toString(),
-                    sizeVariantsId: item.sizeVariantsId,
-                    addOnSelected: {
-                        create: item.addOnSelected.map((addon) => ({
-                            addOnId: addon.id,
-                            selectedAddOnVariantsId: {
-                                create: addon.selectedVariantsId.map((variant) => ({
-                                    selectedAddOnVariantId: variant.id,
-                                })),
-                            },
-                        })),
-                    },
-                    price: item.price.toString(),
-                })),
+                create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
+                    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+                    return ({
+                        menuId: item === null || item === void 0 ? void 0 : item.menuId,
+                        name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
+                        strike: false,
+                        isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
+                        originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
+                        quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                        totalPrice: item === null || item === void 0 ? void 0 : item.price,
+                        selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
+                            ? {
+                                create: {
+                                    sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
+                                    name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
+                                    type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
+                                    price: Number((_l = (_k = (_j = item === null || item === void 0 ? void 0 : item.menuItem) === null || _j === void 0 ? void 0 : _j.menuItemVariants) === null || _k === void 0 ? void 0 : _k.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.price),
+                                },
+                            }
+                            : undefined,
+                        addOnSelected: {
+                            create: (_m = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _m === void 0 ? void 0 : _m.map((addon) => {
+                                var _a, _b, _c;
+                                const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
+                                return {
+                                    addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
+                                    name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
+                                    selectedAddOnVariantsId: {
+                                        create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
+                                            var _a;
+                                            const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
+                                            return {
+                                                selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                                                name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
+                                                type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
+                                                price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                            };
+                                        }),
+                                    },
+                                };
+                            }),
+                        },
+                    });
+                }),
             },
         };
     };
@@ -570,6 +637,9 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 phoneNo: validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.phoneNo,
                 customerId: validCustomer.id,
                 restaurantId: getOutlet.id,
+                isPaid: true,
+                paymentMethod: paymentId.length ? "UPI" : "CASH",
+                subTotal: calculate.roundedTotal.toString(),
                 orders: {
                     create: createOrderData(getOutlet.id, isPaid, orderId, orderType, totalAmount, "INCOMMING", orderItems),
                 },
@@ -577,6 +647,15 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         });
         yield firebase_1.NotificationService.sendNotification(getOutlet.fcmToken, `${orderType}: You have got new Order from ${validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.name}`, `Order: ${orderItems === null || orderItems === void 0 ? void 0 : orderItems.length}`);
     }
+    yield __1.prismaDB.notification.create({
+        data: {
+            restaurantId: getOutlet.id,
+            orderId: orderId,
+            message: "You have a new Order",
+            orderType: orderType,
+        },
+    });
+    ws_1.websocketManager.notifyClients(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id, "NEW_ORDER_SESSION_CREATED");
     yield Promise.all([
         (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
         (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
@@ -584,6 +663,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
         (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
         (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+        (0, get_items_1.getFetchAllNotificationToRedis)(outletId),
     ]);
     return res.json({
         success: true,
@@ -593,11 +673,11 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.postOrderForUser = postOrderForUser;
 const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _d, _e;
+    var _g, _h;
     const { outletId, orderId } = req.params;
     const { billerId, isPaid, totalAmount, orderItems, orderMode } = req.body;
     // @ts-ignore
-    if (billerId !== ((_d = req.user) === null || _d === void 0 ? void 0 : _d.id)) {
+    if (billerId !== ((_g = req.user) === null || _g === void 0 ? void 0 : _g.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const findBiller = yield __1.prismaDB.staff.findFirst({
@@ -646,22 +726,50 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
                     generatedOrderId: generatedId,
                     orderType: getOrder.orderType,
                     orderItems: {
-                        create: orderItems.map((item) => ({
-                            menuId: item.menuId,
-                            quantity: item.quantity.toString(),
-                            sizeVariantsId: item.sizeVariantsId,
-                            addOnSelected: {
-                                create: item.addOnSelected.map((addon) => ({
-                                    addOnId: addon.id,
-                                    selectedAddOnVariantsId: {
-                                        create: addon.selectedVariantsId.map((variant) => ({
-                                            selectedAddOnVariantId: variant.id,
-                                        })),
-                                    },
-                                })),
-                            },
-                            price: item.price.toString(),
-                        })),
+                        create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
+                            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+                            return ({
+                                menuId: item === null || item === void 0 ? void 0 : item.menuId,
+                                name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
+                                strike: false,
+                                isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
+                                originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
+                                quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                totalPrice: item === null || item === void 0 ? void 0 : item.price,
+                                selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
+                                    ? {
+                                        create: {
+                                            sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
+                                            name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
+                                            type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
+                                            price: Number((_l = (_k = (_j = item === null || item === void 0 ? void 0 : item.menuItem) === null || _j === void 0 ? void 0 : _j.menuItemVariants) === null || _k === void 0 ? void 0 : _k.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.price),
+                                        },
+                                    }
+                                    : undefined,
+                                addOnSelected: {
+                                    create: (_m = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _m === void 0 ? void 0 : _m.map((addon) => {
+                                        var _a, _b, _c;
+                                        const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
+                                        return {
+                                            addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
+                                            name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
+                                            selectedAddOnVariantsId: {
+                                                create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
+                                                    var _a;
+                                                    const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
+                                                    return {
+                                                        selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                                                        name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
+                                                        type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
+                                                        price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                                    };
+                                                }),
+                                            },
+                                        };
+                                    }),
+                                },
+                            });
+                        }),
                     },
                 },
             },
@@ -673,7 +781,7 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
             orderId: generatedId,
             message: "You have a new Order",
             orderType: getOrder.orderType === "DINEIN"
-                ? (_e = getOrder.table) === null || _e === void 0 ? void 0 : _e.name
+                ? (_h = getOrder.table) === null || _h === void 0 ? void 0 : _h.name
                 : getOrder.orderType,
         },
     });
@@ -685,11 +793,9 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
         (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
         (0, get_order_1.getFetchAllStaffOrderSessionToRedis)(outletId, findBiller.id),
         (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+        (0, get_items_1.getFetchAllNotificationToRedis)(outletId),
     ]);
-    ws_1.websocketManager.notifyClients(JSON.stringify({
-        type: "NEW_ORDER_SESSION_UPDATED",
-        orderId: orderSession.id,
-    }));
+    ws_1.websocketManager.notifyClients(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id, "NEW_ORDER_SESSION_UPDATED");
     return res.json({
         success: true,
         orderSessionId: orderSession.id,
@@ -698,27 +804,19 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
 });
 exports.existingOrderPatch = existingOrderPatch;
 const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _f, _g;
+    var _j, _k;
     const { outletId, orderId } = req.params;
-    const { billerId, isPaid, totalAmount, orderItems, orderMode } = req.body;
+    const { billerId, isPaid, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, orderMode, } = req.body;
     // @ts-ignore
-    if (billerId !== ((_f = req.user) === null || _f === void 0 ? void 0 : _f.id)) {
+    if (billerId !== ((_j = req.user) === null || _j === void 0 ? void 0 : _j.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
-    const findBiller = yield __1.prismaDB.user.findFirst({
-        where: {
-            id: billerId,
-        },
-    });
-    if (!(findBiller === null || findBiller === void 0 ? void 0 : findBiller.id)) {
-        throw new bad_request_1.BadRequestsException("You Need to login & place the order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-    if (!outletId) {
-        throw new bad_request_1.BadRequestsException("Outlet Id is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
-    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
-        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+    const [findBiller, getOutlet] = yield Promise.all([
+        __1.prismaDB.user.findFirst({ where: { id: billerId } }),
+        (0, outlet_1.getOutletById)(outletId),
+    ]);
+    if (!(findBiller === null || findBiller === void 0 ? void 0 : findBiller.id) || !(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("User or Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const getOrder = yield (0, outlet_1.getOrderSessionById)(getOutlet.id, orderId);
     if (!(getOrder === null || getOrder === void 0 ? void 0 : getOrder.id)) {
@@ -740,32 +838,68 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
             adminId: findBiller.id,
             isPaid: isPaid,
             restaurantId: getOutlet.id,
+            createdBy: findBiller === null || findBiller === void 0 ? void 0 : findBiller.name,
             orders: {
                 create: {
                     active: true,
                     restaurantId: getOutlet.id,
                     isPaid: isPaid,
                     orderStatus: orderStatus,
+                    totalNetPrice: totalNetPrice,
+                    gstPrice: gstPrice,
                     totalAmount: totalAmount.toString(),
+                    totalGrossProfit: totalGrossProfit,
                     generatedOrderId: generatedId,
                     orderType: getOrder.orderType,
+                    createdBy: findBiller === null || findBiller === void 0 ? void 0 : findBiller.name,
                     orderItems: {
-                        create: orderItems.map((item) => ({
-                            menuId: item.menuId,
-                            quantity: item.quantity.toString(),
-                            sizeVariantsId: item.sizeVariantsId,
-                            addOnSelected: {
-                                create: item.addOnSelected.map((addon) => ({
-                                    addOnId: addon.id,
-                                    selectedAddOnVariantsId: {
-                                        create: addon.selectedVariantsId.map((variant) => ({
-                                            selectedAddOnVariantId: variant.id,
-                                        })),
-                                    },
-                                })),
-                            },
-                            price: item.price.toString(),
-                        })),
+                        create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
+                            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+                            return ({
+                                menuId: item === null || item === void 0 ? void 0 : item.menuId,
+                                name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
+                                strike: false,
+                                isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
+                                originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
+                                quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
+                                gst: item === null || item === void 0 ? void 0 : item.gst,
+                                grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
+                                totalPrice: item === null || item === void 0 ? void 0 : item.price,
+                                selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
+                                    ? {
+                                        create: {
+                                            sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
+                                            name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
+                                            type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
+                                            price: Number((_l = (_k = (_j = item === null || item === void 0 ? void 0 : item.menuItem) === null || _j === void 0 ? void 0 : _j.menuItemVariants) === null || _k === void 0 ? void 0 : _k.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.price),
+                                        },
+                                    }
+                                    : undefined,
+                                addOnSelected: {
+                                    create: (_m = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _m === void 0 ? void 0 : _m.map((addon) => {
+                                        var _a, _b, _c;
+                                        const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
+                                        return {
+                                            addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
+                                            name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
+                                            selectedAddOnVariantsId: {
+                                                create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
+                                                    var _a;
+                                                    const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
+                                                    return {
+                                                        selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                                                        name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
+                                                        type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
+                                                        price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                                    };
+                                                }),
+                                            },
+                                        };
+                                    }),
+                                },
+                            });
+                        }),
                     },
                 },
             },
@@ -777,7 +911,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
             orderId: generatedId,
             message: "You have a new Order",
             orderType: getOrder.orderType === "DINEIN"
-                ? (_g = getOrder.table) === null || _g === void 0 ? void 0 : _g.name
+                ? (_k = getOrder.table) === null || _k === void 0 ? void 0 : _k.name
                 : getOrder.orderType,
         },
     });
@@ -788,11 +922,9 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
         (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
         (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
         (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+        (0, get_items_1.getFetchAllNotificationToRedis)(outletId),
     ]);
-    ws_1.websocketManager.notifyClients(JSON.stringify({
-        type: "NEW_ORDER_SESSION_UPDATED",
-        orderId: orderSession.id,
-    }));
+    ws_1.websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
     return res.json({
         success: true,
         orderSessionId: orderSession.id,
@@ -832,9 +964,7 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
         (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
         (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
     ]);
-    ws_1.websocketManager.notifyClients(JSON.stringify({
-        type: "ORDER_UPDATED",
-    }));
+    ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "ORDER_UPDATED");
     return res.json({
         success: true,
         message: "Order Status Update Success ✅",
@@ -842,7 +972,7 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.orderStatusPatch = orderStatusPatch;
 const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _h;
+    var _l;
     const { outletId } = req.params;
     const redisOrderByStaff = yield redis_1.redis.get(`all-order-staff-${outletId}`);
     if (redisOrderByStaff) {
@@ -857,7 +987,7 @@ const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, funct
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     // @ts-ignore
-    const staff = yield (0, get_users_1.getStaffById)(outletId, (_h = req.user) === null || _h === void 0 ? void 0 : _h.id);
+    const staff = yield (0, get_users_1.getStaffById)(outletId, (_l = req.user) === null || _l === void 0 ? void 0 : _l.id);
     if (!(staff === null || staff === void 0 ? void 0 : staff.id)) {
         throw new not_found_1.NotFoundException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }
@@ -879,7 +1009,3 @@ const inviteCode = () => {
     return code;
 };
 exports.inviteCode = inviteCode;
-const printKotOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { orderItems } = req.body;
-});
-exports.printKotOrder = printKotOrder;

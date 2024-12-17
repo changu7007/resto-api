@@ -21,7 +21,12 @@ export const getFetchAllTablesToRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`tables-${outletId}`, JSON.stringify(tables));
+  if (tables?.length > 0) {
+    await redis.set(`tables-${outletId}`, JSON.stringify(tables));
+  } else {
+    await redis.del(`tables-${outletId}`);
+  }
+
   return tables;
 };
 
@@ -38,7 +43,11 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
               orders: {
                 include: {
                   orderItems: {
-                    include: { menuItem: true },
+                    include: {
+                      selectedVariant: true,
+                      addOnSelected: true,
+                      menuItem: true,
+                    },
                   },
                 },
               },
@@ -82,6 +91,7 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
         orderMode: orderSess.orderType,
         table: orderSess.tableId,
         subTotal: orderSess.subTotal,
+        createdBy: orderSess.createdBy,
         orders: orderSess.orders.map((order) => ({
           id: order.id,
           generatedOrderId: order.generatedOrderId,
@@ -89,15 +99,22 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
           orderStatus: order.orderStatus,
           paid: order.isPaid,
           totalAmount: order.totalAmount,
+          totalNetPrice: order?.totalNetPrice,
+          gstPrice: order?.gstPrice,
+          totalGrossProfit: order?.totalGrossProfit,
           createdAt: order.createdAt,
           date: order.createdAt,
           orderItems: order.orderItems.map((item) => ({
             id: item.id,
-            menuItem: {
-              name: item.menuItem.name,
-            },
+            name: item.name,
             quantity: item.quantity,
-            totalPrice: item.price,
+            netPrice: item.netPrice,
+            gst: item.gst,
+            gstPrice:
+              (item.originalRate! - parseFloat(item.netPrice!)) *
+              Number(item.quantity),
+            grossProfit: item.grossProfit,
+            totalPrice: item.totalPrice,
           })),
           updatedAt: order.updatedAt,
         })),
@@ -106,6 +123,11 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
     })),
   }));
 
-  await redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
+  if (allAreas?.length > 0) {
+    await redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
+  } else {
+    await redis.del(`a-${outletId}`);
+  }
+
   return allAreas;
 };

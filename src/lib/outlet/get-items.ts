@@ -26,7 +26,31 @@ export const getOAllItems = async (outletId: string) => {
     },
   });
 
-  return await redis.set(`${outletId}-all-items`, JSON.stringify(getItems));
+  if (getItems?.length > 0) {
+    await redis.set(`${outletId}-all-items`, JSON.stringify(getItems));
+  } else {
+    await redis.del(`${outletId}-all-items`);
+  }
+  return getItems;
 };
 
 export const getOAllCategories = async (outletId: string) => {};
+
+export const getFetchAllNotificationToRedis = async (outletId: string) => {
+  const notifications = await prismaDB.notification.findMany({
+    where: {
+      restaurantId: outletId,
+      status: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (notifications?.length > 0) {
+    await redis.set(`o-n-${outletId}`, JSON.stringify(notifications));
+  } else {
+    await redis.del(`o-n-${outletId}`);
+  }
+  return notifications;
+};

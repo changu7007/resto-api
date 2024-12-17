@@ -13,6 +13,7 @@ import { FoodRole } from "@prisma/client";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import { getOAllItems } from "../../../lib/outlet/get-items";
+import { z } from "zod";
 
 export const getAllItem = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -107,85 +108,141 @@ export const getAddONById = async (req: Request, res: Response) => {
   });
 };
 
+const menuSchema = z.object({
+  name: z.string().min(1),
+  shortCode: z.string().optional(),
+  description: z.string().min(1),
+  images: z.object({ url: z.string() }).array(),
+  price: z.string().optional(),
+  netPrice: z.string().optional(),
+  gst: z.coerce.number().optional(),
+  chooseProfit: z
+    .enum(["manualProfit", "itemRecipe"], {
+      required_error: "You need to select a gross profit type.",
+    })
+    .optional(),
+  grossProfit: z.coerce.number().optional(),
+  grossProfitType: z
+    .enum(["INR", "PER"], {
+      required_error: "You need to select a gross profit type.",
+    })
+    .optional(),
+  grossProfitPer: z.string().optional(),
+  type: z.enum(
+    ["VEG", "NONVEG", "EGG", "SOFTDRINKS", "ALCOHOL", "NONALCOHOLIC", "MILK"],
+    {
+      required_error: "You need to select a food type.",
+    }
+  ),
+  menuItemVariants: z.array(
+    z.object({
+      id: z.string().optional(),
+      variantId: z.string(),
+      price: z.string(),
+      netPrice: z.string(),
+      gst: z.coerce.number().min(1, { message: "Gst Required" }),
+      chooseProfit: z.enum(["manualProfit", "itemRecipe"], {
+        required_error: "You need to select a gross profit type.",
+      }),
+      grossProfit: z.coerce.number().optional(),
+      grossProfitType: z.enum(["INR", "PER"], {
+        required_error: "You need to select a gross profit type.",
+      }),
+      grossProfitPer: z.string().optional(),
+      foodType: z.enum(
+        [
+          "VEG",
+          "NONVEG",
+          "EGG",
+          "SOFTDRINKS",
+          "ALCOHOL",
+          "NONALCOHOLIC",
+          "MILK",
+        ],
+        {
+          required_error: "You need to select a food type.",
+        }
+      ),
+    })
+  ),
+  menuGroupAddOns: z.array(
+    z.object({
+      id: z.string().optional(),
+      addOnGroupId: z.string(),
+    })
+  ),
+  isVariants: z.boolean().default(false),
+  isAddons: z.boolean().default(false),
+  categoryId: z.string().min(1),
+  isDelivery: z.boolean().optional(),
+  isPickUp: z.boolean().optional(),
+  isDineIn: z.boolean().optional(),
+  isOnline: z.boolean().optional(),
+});
+
 export const updateItembyId = async (req: Request, res: Response) => {
   const { itemId, outletId } = req.params;
+  const validateFields = menuSchema.parse(req.body);
 
   const validFoodTypes = Object.values(FoodRole);
 
-  const {
-    name,
-    shortCode,
-    description,
-    categoryId,
-    isFeatured,
-    isArchived,
-    isVariants,
-    isAddons,
-    isDelivery,
-    isPickUp,
-    isDineIn,
-    isOnline,
-    type,
-    price,
-    menuItemVariants,
-    menuGroupAddOns,
-    images,
-  } = req.body;
-
-  if (!name) {
+  if (!validateFields.name) {
     throw new BadRequestsException(
       "Name is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  if (isVariants === false) {
-    if (!price) {
+  if (validateFields.isVariants === false) {
+    if (!validateFields.price) {
       throw new BadRequestsException(
         "Price is Required",
         ErrorCode.UNPROCESSABLE_ENTITY
       );
     }
   } else {
-    if (!menuItemVariants || !menuItemVariants.length)
+    if (
+      !validateFields.menuItemVariants ||
+      !validateFields.menuItemVariants.length
+    )
       throw new BadRequestsException(
         "Variants is Required if this food has Multiples",
         ErrorCode.UNPROCESSABLE_ENTITY
       );
   }
 
-  if (isAddons && !menuGroupAddOns.length) {
+  if (validateFields.isAddons && !validateFields.menuGroupAddOns.length) {
     throw new BadRequestsException(
       "If Add-Ons Selected, Assign required Group AddOn to it",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  if (!description) {
+  if (!validateFields.description) {
     throw new BadRequestsException(
       "Description is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
-  if (!categoryId) {
+  if (!validateFields.categoryId) {
     throw new BadRequestsException(
       "CategoryId is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
-  if (!validFoodTypes.includes(type)) {
+  if (!validFoodTypes.includes(validateFields.type)) {
     throw new BadRequestsException(
       "Meal Type is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  if (!images || !images.length) {
-    throw new BadRequestsException(
-      "Images are Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
+  // if (!images || !images.length) {
+  //   throw new BadRequestsException(
+  //     "Images are Required",
+  //     ErrorCode.UNPROCESSABLE_ENTITY
+  //   );
+  // }
 
   const outlet = await getOutletById(outletId);
 
@@ -198,7 +255,10 @@ export const updateItembyId = async (req: Request, res: Response) => {
   if (!menuItem?.id) {
     throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
   }
-  const category = await getCategoryByOutletId(outlet.id, categoryId);
+  const category = await getCategoryByOutletId(
+    outlet.id,
+    validateFields?.categoryId
+  );
 
   if (!category?.id) {
     throw new NotFoundException(
@@ -207,26 +267,9 @@ export const updateItembyId = async (req: Request, res: Response) => {
     );
   }
 
-  let updateData = {
-    name,
-    shortCode,
-    description,
-    isFeatured,
-    categoryId,
-    isArchived,
-    isVariants,
-    isAddons,
-    isDelivery,
-    isPickUp,
-    isDineIn,
-    isOnline,
-    type,
-    price: isVariants ? "0" : price,
-  };
-
   // Prepare updates for variants
-  const variantUpdates = isVariants
-    ? menuItemVariants.map((variant: any) => {
+  const variantUpdates = validateFields?.isVariants
+    ? validateFields?.menuItemVariants.map((variant) => {
         console.log("Variant", variant);
         const existingVariant = menuItem.menuItemVariants.find(
           (ev) => ev.id === variant.id
@@ -236,16 +279,35 @@ export const updateItembyId = async (req: Request, res: Response) => {
             where: { id: existingVariant.id },
             data: {
               foodType: variant.foodType,
+              netPrice: variant?.netPrice,
+              gst: variant?.gst,
               price: variant.price,
+              chooseProfit: variant?.chooseProfit,
+              grossProfitType: variant?.grossProfitType,
+              grossProfitPer:
+                variant?.grossProfitType === "PER"
+                  ? variant?.grossProfitPer
+                  : null,
+              grossProfit: variant?.grossProfit,
               variantId: variant.variantId,
             },
           });
         } else {
           return prismaDB.menuItemVariant.create({
             data: {
+              restaurantId: outlet?.id,
               foodType: variant.foodType,
+              netPrice: variant?.netPrice,
+              gst: variant?.gst,
               price: variant.price,
-              variantId: variant.variantId,
+              chooseProfit: variant?.chooseProfit,
+              grossProfitType: variant?.grossProfitType,
+              grossProfitPer:
+                variant?.grossProfitType === "PER"
+                  ? variant?.grossProfitPer
+                  : null,
+              grossProfit: variant?.grossProfit,
+              variantId: variant?.variantId,
               menuItemId: menuItem.id,
             },
           });
@@ -253,16 +315,16 @@ export const updateItembyId = async (req: Request, res: Response) => {
       })
     : [];
 
-  const variantIdsToKeep = isVariants
-    ? menuItemVariants.map((v: any) => v.id).filter(Boolean)
+  const variantIdsToKeep = validateFields?.isVariants
+    ? validateFields?.menuItemVariants.map((v: any) => v.id).filter(Boolean)
     : [];
   const variantsToDelete = menuItem.menuItemVariants.filter(
     (ev) => !variantIdsToKeep.includes(ev.id)
   );
 
   // Prepare updates for addons
-  const addonUpdates = isAddons
-    ? menuGroupAddOns.map((addon: any) => {
+  const addonUpdates = validateFields?.isAddons
+    ? validateFields?.menuGroupAddOns.map((addon) => {
         const existingAddon = menuItem.menuGroupAddOns.find(
           (ea) => ea.id === addon.id
         );
@@ -281,8 +343,8 @@ export const updateItembyId = async (req: Request, res: Response) => {
       })
     : [];
 
-  const addonIdsToKeep = isAddons
-    ? menuGroupAddOns.map((a: any) => a.id).filter(Boolean)
+  const addonIdsToKeep = validateFields?.isAddons
+    ? validateFields?.menuGroupAddOns.map((a) => a.id).filter(Boolean)
     : [];
 
   const addonsToDelete = menuItem.menuGroupAddOns.filter(
@@ -290,7 +352,7 @@ export const updateItembyId = async (req: Request, res: Response) => {
   );
 
   // Prepare updates for images
-  const imageUpdates = images?.map((image: any) => {
+  const imageUpdates = validateFields?.images?.map((image) => {
     const existingImage = menuItem.images.find((ei) => ei.url === image?.url);
     if (existingImage) {
       return prismaDB.image.update({
@@ -306,7 +368,7 @@ export const updateItembyId = async (req: Request, res: Response) => {
     }
   });
 
-  const imageUrlsToKeep = images.map((i: any) => i.url);
+  const imageUrlsToKeep = validateFields?.images.map((i) => i.url);
   const imagesToDelete = menuItem.images.filter(
     (ei) => !imageUrlsToKeep.includes(ei.url)
   );
@@ -319,7 +381,36 @@ export const updateItembyId = async (req: Request, res: Response) => {
       where: {
         id: menuItem.id,
       },
-      data: updateData,
+      data: {
+        name: validateFields?.name,
+        shortCode: validateFields?.shortCode,
+        description: validateFields?.description,
+        categoryId: validateFields?.categoryId,
+        isVariants: validateFields?.isVariants,
+        isAddons: validateFields?.isAddons,
+        isDelivery: validateFields?.isDelivery,
+        isPickUp: validateFields?.isPickUp,
+        isDineIn: validateFields?.isDineIn,
+        isOnline: validateFields?.isOnline,
+        type: validateFields?.type,
+        price: validateFields?.isVariants ? "0" : validateFields?.price,
+        gst: validateFields?.isVariants ? null : validateFields?.gst,
+        netPrice: validateFields?.isVariants ? null : validateFields?.netPrice,
+        chooseProfit: validateFields?.isVariants
+          ? null
+          : validateFields?.chooseProfit,
+        grossProfitType: validateFields?.isVariants
+          ? null
+          : validateFields?.grossProfitType,
+        grossProfitPer: validateFields?.isVariants
+          ? null
+          : validateFields?.grossProfitType === "PER"
+          ? validateFields?.grossProfitPer
+          : null,
+        grossProfit: validateFields?.isVariants
+          ? null
+          : validateFields?.grossProfit,
+      },
     });
 
     // Handle variants
@@ -358,82 +449,67 @@ export const updateItembyId = async (req: Request, res: Response) => {
 export const postItem = async (req: Request, res: Response) => {
   const { outletId } = req.params;
 
+  const validateFields = menuSchema.parse(req.body);
+
   const validFoodTypes = Object.values(FoodRole);
 
-  const {
-    name,
-    shortCode,
-    description,
-    categoryId,
-    isFeatured,
-    isArchived,
-    isVariants,
-    isAddons,
-    isDelivery,
-    isPickUp,
-    isDineIn,
-    isOnline,
-    type,
-    price,
-    menuItemVariants,
-    menuGroupAddOns,
-    images,
-  } = req.body;
-
-  if (!name) {
+  if (!validateFields.name) {
     throw new BadRequestsException(
       "Name is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  if (isVariants === false) {
-    if (!price) {
+  if (validateFields.isVariants === false) {
+    if (!validateFields.price) {
       throw new BadRequestsException(
         "Price is Required",
         ErrorCode.UNPROCESSABLE_ENTITY
       );
     }
   } else {
-    if (!menuItemVariants || !menuItemVariants.length)
+    if (
+      !validateFields.menuItemVariants ||
+      !validateFields.menuItemVariants.length
+    )
       throw new BadRequestsException(
         "Variants is Required if this food has Multiples",
         ErrorCode.UNPROCESSABLE_ENTITY
       );
   }
 
-  if (isAddons && !menuGroupAddOns.length) {
+  if (validateFields.isAddons && !validateFields.menuGroupAddOns.length) {
     throw new BadRequestsException(
       "If Add-Ons Selected, Assign required Group AddOn to it",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  if (!description) {
+  if (!validateFields.description) {
     throw new BadRequestsException(
       "Description is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
-  if (!categoryId) {
+  if (!validateFields.categoryId) {
     throw new BadRequestsException(
       "CategoryId is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
-  if (!validFoodTypes.includes(type)) {
+  if (!validFoodTypes.includes(validateFields.type)) {
     throw new BadRequestsException(
       "Meal Type is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  if (!images || !images.length) {
-    throw new BadRequestsException(
-      "Images are Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
+  // if (!images || !images.length) {
+  //   throw new BadRequestsException(
+  //     "Images are Required",
+  //     ErrorCode.UNPROCESSABLE_ENTITY
+  //   );
+  // }
 
   const outlet = await getOutletById(outletId);
 
@@ -441,38 +517,59 @@ export const postItem = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const validPrice = isVariants ? "0" : price;
+  const validPrice = validateFields?.isVariants ? "0" : validateFields?.price;
   const validVariants =
-    isVariants && menuItemVariants.length > 0 ? menuItemVariants : [];
+    validateFields?.isVariants && validateFields?.menuItemVariants.length > 0
+      ? validateFields?.menuItemVariants
+      : [];
   const validAddons =
-    isAddons && menuGroupAddOns.length > 0 ? menuGroupAddOns : [];
+    validateFields?.isAddons && validateFields?.menuGroupAddOns.length > 0
+      ? validateFields?.menuGroupAddOns
+      : [];
 
   const menuItem = await prismaDB.menuItem.create({
     data: {
-      name,
-      shortCode,
-      description,
-      categoryId,
-      isFeatured,
-      isArchived,
-      isVariants,
-      isAddons,
-      isDelivery,
-      isPickUp,
-      isDineIn,
-      isOnline,
+      name: validateFields?.name,
+      shortCode: validateFields?.shortCode,
+      description: validateFields?.description,
+      categoryId: validateFields?.categoryId,
+      isVariants: validateFields?.isVariants,
+      isAddons: validateFields?.isAddons,
+      isDelivery: validateFields?.isDelivery,
+      isPickUp: validateFields?.isPickUp,
+      isDineIn: validateFields?.isDineIn,
+      isOnline: validateFields?.isOnline,
       price: validPrice,
-      type,
+      type: validateFields?.type,
       menuItemVariants: {
-        create: validVariants,
+        create: validVariants.map((variant) => ({
+          restaurantId: outlet?.id,
+          variantId: variant?.variantId,
+          foodType: variant?.foodType,
+          netPrice: variant?.netPrice,
+          gst: variant?.gst,
+          price: variant?.price,
+          chooseProfit: variant?.chooseProfit,
+          grossProfitType: variant?.grossProfitType,
+          grossProfitPer:
+            variant?.grossProfitType === "PER" ? variant?.grossProfitPer : null,
+          grossProfit: variant?.grossProfit,
+        })),
       },
       menuGroupAddOns: {
         create: validAddons,
       },
       images: {
-        createMany: {
-          data: [...images.map((image: { url: string }) => image)],
-        },
+        createMany:
+          validateFields?.images.length > 0
+            ? {
+                data: [
+                  ...validateFields?.images.map(
+                    (image: { url: string }) => image
+                  ),
+                ],
+              }
+            : undefined,
       },
       restaurantId: outlet.id,
     },
@@ -514,5 +611,86 @@ export const deleteItem = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "Item Deleted ",
+  });
+};
+
+export const getShortCodeStatus = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { shortCode } = req.body;
+  console.log("Short Code", shortCode);
+  const findShortCode = await prismaDB.menuItem.findFirst({
+    where: {
+      restaurantId: outletId,
+      shortCode: shortCode,
+    },
+  });
+
+  if (findShortCode?.id) {
+    return res.json({
+      success: true,
+    });
+  } else {
+    return res.json({
+      success: false,
+    });
+  }
+};
+
+export const getMenuVariants = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getVariants = await prismaDB.menuItemVariant.findMany({
+    where: {
+      restaurantId: outlet?.id,
+    },
+    include: {
+      menuItem: true,
+      variant: true,
+    },
+  });
+
+  const formattedVariants = getVariants?.map((variant) => ({
+    id: variant?.id,
+    name: `${variant?.menuItem?.name}-${variant?.variant?.name}`,
+    price: variant?.price,
+  }));
+
+  return res.json({
+    success: true,
+    menuVariants: formattedVariants,
+  });
+};
+
+export const getSingleAddons = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getAddons = await prismaDB.addOnVariants.findMany({
+    where: {
+      restaurantId: outlet?.id,
+    },
+    include: {
+      addon: true,
+    },
+  });
+
+  const formattedAddOns = getAddons?.map((addOn) => ({
+    id: addOn?.id,
+    name: addOn?.name,
+    price: addOn?.price,
+  }));
+
+  return res.json({
+    success: true,
+    addOnItems: formattedAddOns,
   });
 };

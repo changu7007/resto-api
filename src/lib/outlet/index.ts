@@ -1,25 +1,75 @@
+import { getYear } from "date-fns";
 import { prismaDB } from "../..";
 import { NotFoundException } from "../../exceptions/not-found";
 import { ErrorCode } from "../../exceptions/root";
+import { redis } from "../../services/redis";
 
 export const getOutletById = async (id: string) => {
-  try {
-    const getOutlet = await prismaDB.restaurant.findFirst({
-      where: {
-        id: id,
+  const getOutlet = await prismaDB.restaurant.findFirst({
+    where: {
+      id: id,
+    },
+    include: {
+      integrations: true,
+      razorpayInfo: true,
+      invoice: true,
+    },
+  });
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException(
+      "Outlet Not Found In",
+      ErrorCode.OUTLET_NOT_FOUND
+    );
+  }
+
+  return getOutlet;
+};
+
+export const fetchOutletByIdToRedis = async (id: string) => {
+  const getOutlet = await prismaDB.restaurant.findFirst({
+    where: {
+      id: id,
+    },
+    include: {
+      integrations: true,
+    },
+  });
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException(
+      "Outlet Not Found In",
+      ErrorCode.OUTLET_NOT_FOUND
+    );
+  }
+
+  if (getOutlet?.id) {
+    return await redis.set(`O-${getOutlet.id}`, JSON.stringify(getOutlet));
+  }
+
+  return getOutlet;
+};
+
+export const getOutletCustomerAndFetchToRedis = async (outletId: string) => {
+  const customers = await prismaDB.customer.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    include: {
+      orderSession: {
+        include: {
+          orders: true,
+        },
       },
-    });
+    },
+  });
 
-    if (!getOutlet?.id) {
-      throw new NotFoundException(
-        "Outlet Not Found In",
-        ErrorCode.OUTLET_NOT_FOUND
-      );
-    }
-
-    return getOutlet;
-  } catch (error) {
-    console.log("Something Went Wrong");
+  if (customers?.length > 0) {
+    await redis.set(`customers-${outletId}`, JSON.stringify(customers));
+    return customers;
+  } else {
+    await redis.del(`customers-${outletId}`);
+    return customers;
   }
 };
 
@@ -75,6 +125,15 @@ const getTodayOrdersCount = async (restaurantId: string) => {
   return getOrdersCount.length;
 };
 
+const getTotalPurchase = async (outletId: string) => {
+  const orderCount = await prismaDB.purchase.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+  });
+  return orderCount.length;
+};
+
 const getTotalOrderSession = async (outletId: string) => {
   const orderCount = await prismaDB.orderSession.findMany({
     where: {
@@ -82,6 +141,12 @@ const getTotalOrderSession = async (outletId: string) => {
     },
   });
   return orderCount.length;
+};
+
+export const generatePurchaseNo = async (outletId: string) => {
+  const orderCount = await getTotalPurchase(outletId);
+  const billId = `#${orderCount + 1}/${getYear(new Date())}`;
+  return billId;
 };
 
 export const generateBillNo = async (outletId: string) => {

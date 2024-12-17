@@ -144,6 +144,7 @@ const updateAddon = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             // Create new variant
             return __1.prismaDB.addOnVariants.create({
                 data: {
+                    restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
                     name: variant.name,
                     price: variant.price,
                     type: variant.type,

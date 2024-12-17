@@ -22,7 +22,6 @@ export const isAuthMiddelware = async (
 
   try {
     const payload = jwt.verify(token, ACCESS_TOKEN) as jwt.JwtPayload;
-
     if (!payload) {
       throw next(
         new NotFoundException(

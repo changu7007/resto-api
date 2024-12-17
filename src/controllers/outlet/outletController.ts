@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  fetchOutletByIdToRedis,
   getOutletByAdminId,
   getOutletById,
   getOutletByIdForStaff,
@@ -10,6 +11,8 @@ import { redis } from "../../services/redis";
 import { prismaDB } from "../..";
 import { BadRequestsException } from "../../exceptions/bad-request";
 import { outletOnlinePortalSchema } from "../../schema/staff";
+import { getFetchAllNotificationToRedis } from "../../lib/outlet/get-items";
+import { UnauthorizedException } from "../../exceptions/unauthorized";
 
 export const getStaffOutlet = async (req: Request, res: Response) => {
   //@ts-ignore
@@ -42,6 +45,16 @@ export const getStaffOutlet = async (req: Request, res: Response) => {
 export const getByOutletId = async (req: Request, res: Response) => {
   const { outletId } = req.params;
 
+  const outlet = await redis.get(`O-${outletId}`);
+
+  if (outlet) {
+    return res.json({
+      success: true,
+      outlet: JSON.parse(outlet),
+      message: "Powered up ⚡",
+    });
+  }
+
   const getOutlet = await prismaDB.restaurant.findFirst({
     where: {
       // @ts-ignore
@@ -50,6 +63,7 @@ export const getByOutletId = async (req: Request, res: Response) => {
     },
     include: {
       integrations: true,
+      invoice: true,
     },
   });
 
@@ -92,6 +106,49 @@ export const getAllNotifications = async (req: Request, res: Response) => {
     success: true,
     notifications: notifications,
     message: "Powering UP",
+  });
+};
+
+export const deleteAllNotifications = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+  await prismaDB.notification.deleteMany({
+    where: {
+      restaurantId: getOutlet.id,
+    },
+  });
+
+  await getFetchAllNotificationToRedis(outletId);
+
+  return res.json({
+    success: true,
+    message: "Marked All Read",
+  });
+};
+
+export const deleteNotificationById = async (req: Request, res: Response) => {
+  const { outletId, id } = req.params;
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  await prismaDB.notification.delete({
+    where: {
+      id: id,
+      restaurantId: getOutlet?.id,
+    },
+  });
+
+  await getFetchAllNotificationToRedis(outletId);
+  return res.json({
+    success: true,
+    message: "Marked as Read",
   });
 };
 
@@ -177,6 +234,9 @@ export const patchOutletDetails = async (req: Request, res: Response) => {
       pincode: pincode ?? getOutlet.pincode,
     },
   });
+
+  await fetchOutletByIdToRedis(getOutlet?.id);
+
   return res.json({ success: true, message: "Updated Success" });
 };
 
@@ -195,7 +255,7 @@ export const addFMCTokenToOutlet = async (req: Request, res: Response) => {
     },
   });
 
-  await redis.set(`O-${getOutlet?.id}`, JSON.stringify(updateOutlet));
+  await fetchOutletByIdToRedis(updateOutlet?.id);
 
   return res.json({
     success: true,
@@ -234,14 +294,19 @@ export const patchOutletOnlinePOrtalDetails = async (
     },
   });
 
-  await prismaDB.integration.create({
-    data: {
-      restaurantId: outlet.id,
-      name: "ONLINEHUB",
-      status: true,
-      link: validateFields.subdomain,
-    },
-  });
+  if (!outlet.integrations.find((outlet) => outlet?.name === "ONLINEHUB")) {
+    await prismaDB.integration.create({
+      data: {
+        restaurantId: outlet.id,
+        name: "ONLINEHUB",
+        connected: true,
+        status: true,
+        link: validateFields.subdomain,
+      },
+    });
+  }
+
+  await fetchOutletByIdToRedis(outlet?.id);
 
   return res.json({
     success: true,
@@ -343,5 +408,63 @@ export const fetchInvoiceDetails = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     invoiceData: getInvoiceDetails,
+  });
+};
+
+export const deleteOutlet = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (outlet.adminId !== userId) {
+    throw new UnauthorizedException(
+      "Your Unauthorized To delete this Settings",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  await prismaDB.restaurant.delete({
+    where: {
+      id: outlet?.id,
+      adminId: userId,
+    },
+  });
+
+  await prismaDB.onboardingStatus.delete({
+    where: {
+      userId: userId,
+    },
+  });
+
+  await redis.del(`O-${outletId}`);
+
+  return res.json({ success: true, message: "Outlet Deleted" });
+};
+
+export const getrazorpayConfig = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const razorpayConfig = await prismaDB.razorpayIntegration.findFirst({
+    where: {
+      restaurantId: outlet?.id,
+    },
+  });
+
+  return res.json({
+    success: true,
+    config: razorpayConfig,
   });
 };

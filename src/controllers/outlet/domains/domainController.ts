@@ -5,6 +5,7 @@ import { redis } from "../../../services/redis";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { BadRequestsException } from "../../../exceptions/bad-request";
+import { UnauthorizedException } from "../../../exceptions/unauthorized";
 
 export const getDomain = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -61,7 +62,12 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
     include: { user: true, restaurant: true },
   });
 
-  await redis.set(`app-domain-${getSite?.subdomain}`, JSON.stringify(getSite));
+  if (getSite?.id) {
+    await redis.set(
+      `app-domain-${getSite?.subdomain}`,
+      JSON.stringify(getSite)
+    );
+  }
 
   return res.json({
     success: true,
@@ -103,10 +109,60 @@ export const createSubDomain = async (req: Request, res: Response) => {
     },
   });
 
-  await redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+  if (getDomain?.id) {
+    await redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+  }
 
   return res.json({
     success: true,
     message: "SubDomain Created Successfully",
+  });
+};
+
+export const deleteSite = async (req: Request, res: Response) => {
+  const { outletId, siteId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (outlet.adminId !== userId) {
+    throw new UnauthorizedException(
+      "Your Unauthorized To delete this Settings",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findDomain = await prismaDB.site.findFirst({
+    where: {
+      id: siteId,
+    },
+  });
+
+  if (!findDomain?.id) {
+    throw new BadRequestsException(
+      "Domain settings not Found",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  await prismaDB.site.delete({
+    where: {
+      id: findDomain?.id,
+      restaurantId: outletId,
+      adminId: userId,
+    },
+  });
+
+  await redis.del(`app-domain-${findDomain?.subdomain}`);
+  await redis.del(`o-domain-${outletId}`);
+
+  return res.json({
+    success: true,
+    message: "Domain Settings Deleted Success",
   });
 };

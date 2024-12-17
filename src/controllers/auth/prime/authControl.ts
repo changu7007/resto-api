@@ -4,6 +4,11 @@ import { sendToken } from "../../../services/jwt";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
+import {
+  getOutletById,
+  getOutletCustomerAndFetchToRedis,
+} from "../../../lib/outlet";
+import { getCustomerById } from "../../../lib/get-users";
 
 export interface Customer {
   id: string;
@@ -96,7 +101,7 @@ export const CustomerLogin = async (req: Request, res: Response) => {
       role: updateCustomer?.role,
       restaurantId: updateCustomer.restaurantId,
     };
-
+    await getOutletCustomerAndFetchToRedis(restaurantId);
     sendToken(customerData as Customer, 200, res);
   } else {
     const createCustomer = await prismaDB.customer.create({
@@ -116,7 +121,7 @@ export const CustomerLogin = async (req: Request, res: Response) => {
       role: createCustomer?.role,
       restaurantId: createCustomer.restaurantId,
     };
-
+    await getOutletCustomerAndFetchToRedis(restaurantId);
     sendToken(customerData as Customer, 200, res);
   }
 };
@@ -174,8 +179,105 @@ export const customerUpdateSession = async (req: Request, res: Response) => {
     });
   }
 
+  await getOutletCustomerAndFetchToRedis(outletId);
+
   return res.json({
     success: true,
     message: "Profile Session ot updated",
+  });
+};
+
+export const getCustomerOrdersById = async (req: Request, res: Response) => {
+  const { outletId, customerId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const customer = await getCustomerById(customerId, outlet?.id);
+
+  if (!customer?.id) {
+    throw new NotFoundException("Customer Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const formattedOrder = customer?.orderSession
+    .filter((s) => s.active === false)
+    .map((session) => ({
+      id: session?.id,
+      billId: session?.billId,
+      active: session?.active,
+      invoiceUrl: session?.invoiceUrl,
+      orderType: session?.orderType,
+      status: session?.sessionStatus,
+      isPaid: session?.isPaid,
+      subTotal: session?.subTotal,
+      paymentMethod: session?.paymentMethod,
+      orders: session?.orders?.map((order) => ({
+        id: order?.generatedOrderId,
+        status: order?.orderStatus,
+        s: order?.totalAmount,
+        orderItems: order?.orderItems.map((item) => ({
+          id: item?.id,
+          name: item?.name,
+          quantity: item.quantity,
+          originalRate: item.originalRate,
+          total: item?.totalPrice,
+        })),
+      })),
+    }));
+
+  return res.json({
+    success: true,
+    orders: formattedOrder,
+  });
+};
+
+export const getCurrentOrderForCustomer = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId, customerId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const customer = await getCustomerById(customerId, outlet?.id);
+
+  if (!customer?.id) {
+    throw new NotFoundException("Customer Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const formattedOrder = customer?.orderSession
+    .filter((s) => s.active === true)
+    .map((session) => ({
+      id: session?.id,
+      billId: session?.billId,
+      active: session?.active,
+      invoiceUrl: session?.invoiceUrl,
+      orderType: session?.orderType,
+      status: session?.sessionStatus,
+      isPaid: session?.isPaid,
+      subTotal: session?.subTotal,
+      paymentMethod: session?.paymentMethod,
+      orders: session?.orders?.map((order) => ({
+        id: order?.generatedOrderId,
+        orderStatus: order?.orderStatus,
+        totalAmount: order?.totalAmount,
+        orderItems: order?.orderItems.map((item) => ({
+          id: item?.id,
+          name: item?.name,
+          quantity: item.quantity,
+          originalRate: item.originalRate,
+          total: item?.totalPrice,
+        })),
+      })),
+    }));
+
+  return res.json({
+    success: true,
+    orders: formattedOrder,
   });
 };

@@ -29,6 +29,7 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             },
             orderItems: {
                 include: {
+                    selectedVariant: true,
                     addOnSelected: {
                         include: {
                             selectedAddOnVariantsId: true,
@@ -61,7 +62,12 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             createdAt: "desc",
         },
     });
-    yield redis_1.redis.set(`liv-o-${outletId}`, JSON.stringify(liveOrders));
+    if ((liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.length) > 0) {
+        yield redis_1.redis.set(`liv-o-${outletId}`, JSON.stringify(liveOrders));
+    }
+    else {
+        yield redis_1.redis.del(`liv-o-${outletId}`);
+    }
     return liveOrders;
 });
 exports.getFetchLiveOrderToRedis = getFetchLiveOrderToRedis;
@@ -111,7 +117,12 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
             createdAt: "desc",
         },
     });
-    yield redis_1.redis.set(`active-os-${outletId}`, JSON.stringify(activeOrders));
+    if ((activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.length) > 0) {
+        yield redis_1.redis.set(`active-os-${outletId}`, JSON.stringify(activeOrders));
+    }
+    else {
+        yield redis_1.redis.del(`active-os-${outletId}`);
+    }
     return activeOrders;
 });
 exports.getFetchActiveOrderSessionToRedis = getFetchActiveOrderSessionToRedis;
@@ -126,6 +137,7 @@ const getFetchAllOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0, v
                 include: {
                     orderItems: {
                         include: {
+                            selectedVariant: true,
                             addOnSelected: {
                                 include: {
                                     selectedAddOnVariantsId: true,
@@ -160,7 +172,12 @@ const getFetchAllOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0, v
             createdAt: "desc",
         },
     });
-    yield redis_1.redis.set(`all-os-${outletId}`, JSON.stringify(activeOrders));
+    if ((activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.length) > 0) {
+        yield redis_1.redis.set(`all-os-${outletId}`, JSON.stringify(activeOrders));
+    }
+    else {
+        yield redis_1.redis.del(`all-os-${outletId}`);
+    }
     return activeOrders;
 });
 exports.getFetchAllOrderSessionToRedis = getFetchAllOrderSessionToRedis;
@@ -173,6 +190,7 @@ const getFetchAllOrdersToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             orderSession: true,
             orderItems: {
                 include: {
+                    selectedVariant: true,
                     addOnSelected: {
                         include: {
                             selectedAddOnVariantsId: true,
@@ -205,7 +223,12 @@ const getFetchAllOrdersToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             createdAt: "desc",
         },
     });
-    yield redis_1.redis.set(`all-orders-${outletId}`, JSON.stringify(getOrders));
+    if ((getOrders === null || getOrders === void 0 ? void 0 : getOrders.length) > 0) {
+        yield redis_1.redis.set(`all-orders-${outletId}`, JSON.stringify(getOrders));
+    }
+    else {
+        yield redis_1.redis.del(`all-orders-${outletId}`);
+    }
     return getOrders;
 });
 exports.getFetchAllOrdersToRedis = getFetchAllOrdersToRedis;
@@ -255,7 +278,12 @@ const getFetchAllStaffOrderSessionToRedis = (outletId, staffId) => __awaiter(voi
             createdAt: "desc",
         },
     });
-    yield redis_1.redis.set(`all-order-staff-${outletId}`, JSON.stringify(getAllOrders));
+    if ((getAllOrders === null || getAllOrders === void 0 ? void 0 : getAllOrders.length) > 0) {
+        yield redis_1.redis.set(`all-order-staff-${outletId}`, JSON.stringify(getAllOrders));
+    }
+    else {
+        yield redis_1.redis.del(`all-order-staff-${outletId}`);
+    }
     return getAllOrders;
 });
 exports.getFetchAllStaffOrderSessionToRedis = getFetchAllStaffOrderSessionToRedis;

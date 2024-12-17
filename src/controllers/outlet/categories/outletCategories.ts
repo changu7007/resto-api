@@ -72,6 +72,7 @@ export const createCategory = async (req: Request, res: Response) => {
       menuItems: true,
     },
   });
+
   await redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
 
   return res.json({

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.calculateTotals = exports.generatePdfInvoice = exports.billingOrderSession = void 0;
+exports.calculateTotalsForTakewayAndDelivery = exports.calculateTotals = exports.generatePdfInvoice = exports.generatePdfInvoiceInBackground = exports.billingOrderSession = void 0;
 const outlet_1 = require("../../../../lib/outlet");
 const not_found_1 = require("../../../../exceptions/not-found");
 const root_1 = require("../../../../exceptions/root");
@@ -31,6 +31,7 @@ const puppeteer_1 = __importDefault(require("puppeteer"));
 const client_s3_1 = require("@aws-sdk/client-s3");
 const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
 const axios_1 = __importDefault(require("axios"));
+const secrets_1 = require("../../../../secrets");
 const s3Client = new client_s3_1.S3Client({
     region: process.env.AWS_REGION,
     credentials: {
@@ -50,7 +51,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const orderSession = yield (0, outlet_1.getOrderSessionById)(outlet.id, orderSessionId);
+    const orderSession = yield (0, outlet_1.getOrderSessionById)(outlet === null || outlet === void 0 ? void 0 : outlet.id, orderSessionId);
     if (!(orderSession === null || orderSession === void 0 ? void 0 : orderSession.id)) {
         throw new not_found_1.NotFoundException("Order Session not Found", root_1.ErrorCode.NOT_FOUND);
     }
@@ -113,18 +114,13 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         orderSessionId: updatedOrderSession.id,
         orderItems: updatedOrderSession.orders
             .filter((order) => order.orderStatus === "COMPLETED")
-            .flatMap((orderItem) => orderItem.orderItems.map((item, idx) => {
-            var _a;
-            return ({
-                id: idx + 1,
-                name: item.menuItem.name,
-                quantity: item.quantity,
-                price: item.menuItem.isVariants
-                    ? (_a = item.menuItem.menuItemVariants.find((menu) => menu.id === item.sizeVariantsId)) === null || _a === void 0 ? void 0 : _a.price
-                    : item.menuItem.price,
-                totalPrice: item.price,
-            });
-        })),
+            .flatMap((orderItem) => orderItem.orderItems.map((item, idx) => ({
+            id: idx + 1,
+            name: item.menuItem.name,
+            quantity: item.quantity,
+            price: item.originalRate,
+            totalPrice: item.totalPrice,
+        }))),
         discount: 0,
         subtotal: subtotal,
         sgst: sgst,
@@ -133,17 +129,8 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         total: roundedTotal,
     };
     console.log("Invoice Data", invoiceData.orderItems);
-    const { invoiceUrl } = yield (0, exports.generatePdfInvoice)(invoiceData);
-    yield __1.prismaDB.orderSession.update({
-        where: {
-            restaurantId: outlet.id,
-            id: updatedOrderSession === null || updatedOrderSession === void 0 ? void 0 : updatedOrderSession.id,
-        },
-        data: {
-            invoiceUrl: invoiceUrl,
-        },
-    });
-    if (updatedOrderSession.orderType === "DINEIN") {
+    (0, exports.generatePdfInvoiceInBackground)(invoiceData, outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    if ((updatedOrderSession === null || updatedOrderSession === void 0 ? void 0 : updatedOrderSession.orderType) === "DINEIN") {
         const findTable = yield __1.prismaDB.table.findFirst({
             where: {
                 restaurantId: outlet.id,
@@ -181,18 +168,38 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         redis_1.redis.del(`all-order-staff-${outletId}`),
     ]);
     yield firebase_1.NotificationService.sendNotification(outlet === null || outlet === void 0 ? void 0 : outlet.fcmToken, "Bill Recieved", `${subTotal}`);
-    ws_1.websocketManager.notifyClients(JSON.stringify({
-        type: "BILL_UPDATED",
-    }));
+    ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "BILL_UPDATED");
     return res.json({
         success: true,
         message: "Bill Recieved & Saved Success ✅",
     });
 });
 exports.billingOrderSession = billingOrderSession;
+const generatePdfInvoiceInBackground = (invoiceData, outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { invoiceUrl } = yield (0, exports.generatePdfInvoice)(invoiceData);
+        // Update the database with the generated invoice URL
+        yield __1.prismaDB.orderSession.update({
+            where: {
+                id: invoiceData.orderSessionId,
+            },
+            data: {
+                invoiceUrl,
+            },
+        });
+        console.log("Invoice Generated");
+        yield (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId);
+        // Notify WebSocket clients about the updated invoice
+        // websocketManager.notifyClients(invoiceData.restaurantName, "INVOICE_GENERATED");
+    }
+    catch (error) {
+        console.error("Error generating PDF in background:", error);
+    }
+});
+exports.generatePdfInvoiceInBackground = generatePdfInvoiceInBackground;
 const generatePdfInvoice = (invoiceData) => __awaiter(void 0, void 0, void 0, function* () {
     // Read the EJS template
-    const templatePath = path_1.default.join(process.cwd(), "src/templates/invoice.ejs");
+    const templatePath = path_1.default.join(process.cwd(), "templates/invoice.ejs");
     const template = yield promises_1.default.readFile(templatePath, "utf-8");
     try {
         const renderedHtml = yield ejs_1.default.renderFile(templatePath, {
@@ -200,6 +207,7 @@ const generatePdfInvoice = (invoiceData) => __awaiter(void 0, void 0, void 0, fu
         });
         const browser = yield puppeteer_1.default.launch({
             headless: true,
+            executablePath: secrets_1.PUPPETEER_EXECUTABLE_PATH,
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
         const page = yield browser.newPage();
@@ -252,3 +260,14 @@ const calculateTotals = (orders) => {
     return { subtotal, sgst, cgst, total, roundedTotal, roundedDifference };
 };
 exports.calculateTotals = calculateTotals;
+const calculateTotalsForTakewayAndDelivery = (orders) => {
+    const subtotal = orders === null || orders === void 0 ? void 0 : orders.reduce((acc, order) => acc + (order === null || order === void 0 ? void 0 : order.price), 0);
+    const sgst = subtotal * 0.025;
+    const cgst = subtotal * 0.025;
+    const total = subtotal + sgst + cgst;
+    const tax = cgst + sgst;
+    const roundedTotal = Math.floor(total); // Rounded down total
+    const roundedDifference = parseFloat((total - roundedTotal).toFixed(2)); // Difference between total and roundedTotal
+    return { subtotal, sgst, cgst, total, tax, roundedTotal, roundedDifference };
+};
+exports.calculateTotalsForTakewayAndDelivery = calculateTotalsForTakewayAndDelivery;

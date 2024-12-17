@@ -31,7 +31,12 @@ const getFetchAllTablesToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             createdAt: "asc",
         },
     });
-    yield redis_1.redis.set(`tables-${outletId}`, JSON.stringify(tables));
+    if ((tables === null || tables === void 0 ? void 0 : tables.length) > 0) {
+        yield redis_1.redis.set(`tables-${outletId}`, JSON.stringify(tables));
+    }
+    else {
+        yield redis_1.redis.del(`tables-${outletId}`);
+    }
     return tables;
 });
 exports.getFetchAllTablesToRedis = getFetchAllTablesToRedis;
@@ -48,7 +53,11 @@ const getFetchAllAreastoRedis = (outletId) => __awaiter(void 0, void 0, void 0, 
                             orders: {
                                 include: {
                                     orderItems: {
-                                        include: { menuItem: true },
+                                        include: {
+                                            selectedVariant: true,
+                                            addOnSelected: true,
+                                            menuItem: true,
+                                        },
                                     },
                                 },
                             },
@@ -91,6 +100,7 @@ const getFetchAllAreastoRedis = (outletId) => __awaiter(void 0, void 0, void 0, 
                 orderMode: orderSess.orderType,
                 table: orderSess.tableId,
                 subTotal: orderSess.subTotal,
+                createdBy: orderSess.createdBy,
                 orders: orderSess.orders.map((order) => ({
                     id: order.id,
                     generatedOrderId: order.generatedOrderId,
@@ -98,15 +108,21 @@ const getFetchAllAreastoRedis = (outletId) => __awaiter(void 0, void 0, void 0, 
                     orderStatus: order.orderStatus,
                     paid: order.isPaid,
                     totalAmount: order.totalAmount,
+                    totalNetPrice: order === null || order === void 0 ? void 0 : order.totalNetPrice,
+                    gstPrice: order === null || order === void 0 ? void 0 : order.gstPrice,
+                    totalGrossProfit: order === null || order === void 0 ? void 0 : order.totalGrossProfit,
                     createdAt: order.createdAt,
                     date: order.createdAt,
                     orderItems: order.orderItems.map((item) => ({
                         id: item.id,
-                        menuItem: {
-                            name: item.menuItem.name,
-                        },
+                        name: item.name,
                         quantity: item.quantity,
-                        totalPrice: item.price,
+                        netPrice: item.netPrice,
+                        gst: item.gst,
+                        gstPrice: (item.originalRate - parseFloat(item.netPrice)) *
+                            Number(item.quantity),
+                        grossProfit: item.grossProfit,
+                        totalPrice: item.totalPrice,
                     })),
                     updatedAt: order.updatedAt,
                 })),
@@ -114,7 +130,12 @@ const getFetchAllAreastoRedis = (outletId) => __awaiter(void 0, void 0, void 0, 
             })),
         })),
     }));
-    yield redis_1.redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
+    if ((allAreas === null || allAreas === void 0 ? void 0 : allAreas.length) > 0) {
+        yield redis_1.redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
+    }
+    else {
+        yield redis_1.redis.del(`a-${outletId}`);
+    }
     return allAreas;
 });
 exports.getFetchAllAreastoRedis = getFetchAllAreastoRedis;

@@ -12,16 +12,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAllPlans = exports.buyPlan = exports.paymentRazorpayVerification = exports.CreateRazorPayOrder = void 0;
+exports.fetchBankAccountStatus = exports.createVendorAccount = exports.getAllPlans = exports.buyPlan = exports.paymentRazorpayVerification = exports.CreateRazorPayOrderForOutlet = exports.CreateRazorPayOrder = void 0;
 const razorpay_1 = __importDefault(require("razorpay"));
 const crypto_1 = __importDefault(require("crypto"));
 const bad_request_1 = require("../../../exceptions/bad-request");
 const root_1 = require("../../../exceptions/root");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
+const secrets_1 = require("../../../secrets");
+const outlet_1 = require("../../../lib/outlet");
+const unauthorized_1 = require("../../../exceptions/unauthorized");
 const razorpay = new razorpay_1.default({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
+    key_id: secrets_1.RAZORPAY_KEY_ID,
+    key_secret: secrets_1.RAZORPAY_KEY_SECRET,
 });
 function CreateRazorPayOrder(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -38,11 +41,42 @@ function CreateRazorPayOrder(req, res) {
     });
 }
 exports.CreateRazorPayOrder = CreateRazorPayOrder;
+function CreateRazorPayOrderForOutlet(req, res) {
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        const { outletId } = req.params;
+        const outlet = yield (0, outlet_1.getOutletById)(outletId);
+        if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+            throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+        }
+        const { amount } = req.body;
+        const toSend = amount - 6;
+        console.log("To Send", " Split:", toSend, "Original:", amount);
+        const order = yield razorpay.orders.create({
+            amount: amount * 100,
+            currency: "INR",
+            receipt: "receipt_" + Math.random().toString(36).substring(7),
+            transfers: [
+                {
+                    account: (_a = outlet === null || outlet === void 0 ? void 0 : outlet.razorpayInfo) === null || _a === void 0 ? void 0 : _a.acc_id,
+                    amount: toSend * 100,
+                    currency: "INR",
+                    on_hold: 0,
+                },
+            ],
+        });
+        return res.json({
+            success: true,
+            orderId: order.id,
+        });
+    });
+}
+exports.CreateRazorPayOrderForOutlet = CreateRazorPayOrderForOutlet;
 const paymentRazorpayVerification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
     const body = razorpayOrderId + "|" + razorpayPaymentId;
     const expectedSignature = crypto_1.default
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .createHmac("sha256", secrets_1.RAZORPAY_KEY_SECRET)
         .update(body.toString())
         .digest("hex");
     const isAuthentic = expectedSignature === razorpaySignature;
@@ -114,3 +148,264 @@ const getAllPlans = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     });
 });
 exports.getAllPlans = getAllPlans;
+const createVendorAccount = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _b;
+    const { outletId } = req.params;
+    const { account_number, ifsc_code } = req.body;
+    // @ts-ignore
+    const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if ((outlet === null || outlet === void 0 ? void 0 : outlet.adminId) !== userId) {
+        throw new unauthorized_1.UnauthorizedException("Your Not Authorized", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const getOwner = yield __1.prismaDB.user.findFirst({
+        where: {
+            id: userId,
+        },
+    });
+    const razorpayInfo = yield __1.prismaDB.razorpayIntegration.findFirst({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+    });
+    let vendor;
+    if (!(razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.acc_id)) {
+        // Create Razorpay account if it doesn't exist
+        const data = {
+            email: getOwner === null || getOwner === void 0 ? void 0 : getOwner.email,
+            phone: getOwner === null || getOwner === void 0 ? void 0 : getOwner.phoneNo,
+            type: "route",
+            reference_id: Math.random().toString(36).substring(7),
+            legal_business_name: outlet === null || outlet === void 0 ? void 0 : outlet.restaurantName,
+            business_type: outlet === null || outlet === void 0 ? void 0 : outlet.businessType,
+            contact_name: getOwner === null || getOwner === void 0 ? void 0 : getOwner.name,
+            profile: {
+                category: "food",
+                subcategory: "restaurant",
+                addresses: {
+                    registered: {
+                        street1: outlet === null || outlet === void 0 ? void 0 : outlet.address,
+                        street2: outlet === null || outlet === void 0 ? void 0 : outlet.address,
+                        city: outlet === null || outlet === void 0 ? void 0 : outlet.city,
+                        postal_code: outlet === null || outlet === void 0 ? void 0 : outlet.pincode,
+                        state: outlet === null || outlet === void 0 ? void 0 : outlet.state,
+                        country: outlet === null || outlet === void 0 ? void 0 : outlet.country,
+                    },
+                },
+            },
+            // legal_info: {
+            //   pan: getOwner?.pan!,
+            //   gst: outlet?.GSTIN!,
+            // },
+        };
+        const response = yield razorpay.accounts.create(data);
+        // const response = await axios.post(
+        //   "https://api.razorpay.com/v2/accounts",
+        //   data,
+        //   {
+        //     auth: {
+        //       username: RAZORPAY_KEY_ID, // Replace with your Razorpay Key ID
+        //       password: RAZORPAY_KEY_SECRET, // Replace with your Razorpay Secret
+        //     },
+        //     headers: {
+        //       "Content-Type": "application/json",
+        //     },
+        //   }
+        // );
+        console.log("Response Vendor", response);
+        vendor = { id: response === null || response === void 0 ? void 0 : response.id };
+        if (vendor === null || vendor === void 0 ? void 0 : vendor.id) {
+            // Store Razorpay account info
+            yield __1.prismaDB.razorpayIntegration.create({
+                data: {
+                    restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+                    acc_id: vendor === null || vendor === void 0 ? void 0 : vendor.id,
+                },
+            });
+        }
+    }
+    else {
+        const response = yield razorpay.accounts.fetch(razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.acc_id);
+        console.log("Account", response);
+        vendor = { id: razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.acc_id };
+    }
+    // Create or update stakeholder
+    if (vendor === null || vendor === void 0 ? void 0 : vendor.id) {
+        const stakeholder = yield razorpay.stakeholders.create(vendor === null || vendor === void 0 ? void 0 : vendor.id, {
+            name: getOwner === null || getOwner === void 0 ? void 0 : getOwner.name,
+            email: getOwner === null || getOwner === void 0 ? void 0 : getOwner.email,
+            phone: {
+                primary: getOwner === null || getOwner === void 0 ? void 0 : getOwner.phoneNo,
+            },
+            addresses: {
+                residential: {
+                    street: outlet === null || outlet === void 0 ? void 0 : outlet.address,
+                    city: outlet === null || outlet === void 0 ? void 0 : outlet.city,
+                    country: outlet === null || outlet === void 0 ? void 0 : outlet.country,
+                    postal_code: outlet === null || outlet === void 0 ? void 0 : outlet.pincode,
+                    state: outlet === null || outlet === void 0 ? void 0 : outlet.state,
+                },
+            },
+            kyc: {
+                pan: getOwner === null || getOwner === void 0 ? void 0 : getOwner.pan,
+            },
+        });
+        console.log("Stakeholder created");
+        // Update Razorpay integration with stakeholder ID
+        yield __1.prismaDB.razorpayIntegration.update({
+            where: {
+                acc_id: vendor === null || vendor === void 0 ? void 0 : vendor.id,
+                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            },
+            data: {
+                stakeholderId: stakeholder === null || stakeholder === void 0 ? void 0 : stakeholder.id,
+            },
+        });
+    }
+    // Configure product for vendor
+    if (vendor === null || vendor === void 0 ? void 0 : vendor.id) {
+        const product = yield razorpay.products.requestProductConfiguration(vendor.id, {
+            product_name: "route",
+            tnc_accepted: true,
+        });
+        if (product === null || product === void 0 ? void 0 : product.id) {
+            yield __1.prismaDB.razorpayIntegration.update({
+                where: { acc_id: vendor === null || vendor === void 0 ? void 0 : vendor.id, restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id },
+                data: { productId: product.id },
+            });
+            const beneficaryName = (outlet === null || outlet === void 0 ? void 0 : outlet.businessType) === "individual" ||
+                (outlet === null || outlet === void 0 ? void 0 : outlet.businessType) === "propreitorship"
+                ? getOwner === null || getOwner === void 0 ? void 0 : getOwner.name
+                : outlet === null || outlet === void 0 ? void 0 : outlet.restaurantName;
+            const up = yield razorpay.products.edit(vendor.id, product.id, {
+                settlements: {
+                    account_number: account_number,
+                    ifsc_code: ifsc_code,
+                    beneficiary_name: beneficaryName,
+                },
+                tnc_accepted: true,
+            });
+            if (up === null || up === void 0 ? void 0 : up.id) {
+                yield __1.prismaDB.razorpayIntegration.update({
+                    where: {
+                        acc_id: vendor === null || vendor === void 0 ? void 0 : vendor.id,
+                        restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+                    },
+                    data: {
+                        account_number: account_number,
+                        ifsc_code: ifsc_code,
+                        activation_status: up.activation_status,
+                    },
+                });
+                const update = yield __1.prismaDB.integration.findFirst({
+                    where: {
+                        name: "RAZORAPY",
+                        restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+                    },
+                });
+                yield __1.prismaDB.integration.update({
+                    where: {
+                        id: update === null || update === void 0 ? void 0 : update.id,
+                    },
+                    data: {
+                        connected: true,
+                    },
+                });
+            }
+        }
+    }
+    return res.json({ success: true });
+});
+exports.createVendorAccount = createVendorAccount;
+const fetchBankAccountStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const razorpayInfo = yield __1.prismaDB.razorpayIntegration.findFirst({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+    });
+    if (!(razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.id) || !(razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.acc_id) || !(razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.productId)) {
+        throw new not_found_1.NotFoundException("You have not Added your Bank Account", root_1.ErrorCode.INTERNAL_EXCEPTION);
+    }
+    const razorpayAccount = yield razorpay.accounts.fetch(razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.acc_id);
+    console.log("Linked ACcount", razorpayAccount);
+    const razorpayProduct = yield razorpay.products.fetch(razorpayInfo.acc_id, razorpayInfo.productId);
+    console.log("PRoduct ACcount", razorpayProduct);
+    yield __1.prismaDB.razorpayIntegration.update({
+        where: {
+            id: razorpayInfo === null || razorpayInfo === void 0 ? void 0 : razorpayInfo.id,
+        },
+        data: {
+            activation_status: razorpayProduct === null || razorpayProduct === void 0 ? void 0 : razorpayProduct.activation_status,
+        },
+    });
+    // if (razorpayProduct.activation_status === "under_review") {
+    //   if (razorpayAccount.business_type === "partnership") {
+    //     await razorpay.products.edit(
+    //       razorpayInfo.acc_id,
+    //       razorpayInfo?.productId,
+    //       {
+    //         settlements: {
+    //           account_number:
+    //             razorpayProduct?.active_configuration?.settlements
+    //               ?.account_number,
+    //           ifsc_code:
+    //             razorpayProduct?.active_configuration?.settlements?.ifsc_code,
+    //           beneficiary_name: razorpayAccount?.legal_business_name,
+    //         },
+    //         tnc_accepted: true,
+    //       }
+    //     );
+    //     console.log("Done updating based on businesstype");
+    //   }
+    // }
+    // if (razorpayProduct.activation_status === "needs_clarification") {
+    //   if (razorpayAccount.business_type === "partnership") {
+    //     await razorpay.accounts.edit(razorpayInfo?.acc_id, {
+    //       type: "individual",
+    //     });
+    //     await razorpay.products.edit(
+    //       razorpayInfo.acc_id,
+    //       razorpayInfo?.productId,
+    //       {
+    //         settlements: {
+    //           account_number:
+    //             razorpayProduct?.active_configuration?.settlements
+    //               ?.account_number,
+    //           ifsc_code:
+    //             razorpayProduct?.active_configuration?.settlements?.ifsc_code,
+    //           beneficiary_name: razorpayAccount?.contact_name,
+    //         },
+    //         tnc_accepted: true,
+    //       }
+    //     );
+    //     console.log("Done updating based on businesstype");
+    //   }
+    // }
+    return res.json({
+        success: true,
+        message: razorpayProduct.activation_status === "under_review"
+            ? "UNDER REVIEW"
+            : "ACCOUNT ACTIVATED",
+    });
+});
+exports.fetchBankAccountStatus = fetchBankAccountStatus;
+// async function createVendorAccount(data) ===???? acc_PQ10D2tzRS6kmh
+//   const options = {
+//     method: 'POST',
+//     url: 'https://api.razorpay.com/v1/partners/contacts',
+//     headers: {
+//       Authorization: `Basic ${Buffer.from('YOUR_KEY_ID:YOUR_KEY_SECRET').toString('base64')}`,
+//       'Content-Type': 'application/json'
+//     },
+//     data
+//   };
+//   return axios.request(options);
+// }

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getVerificationTokenByToken = exports.getVerificationTokenByEmail = exports.generateVerificationToken = exports.getPeriodDates = void 0;
+exports.getDaysRemaining = exports.getVerificationTokenByToken = exports.getVerificationTokenByEmail = exports.generateVerificationToken = exports.getPeriodDates = void 0;
 const __1 = require("..");
 const uuid_1 = require("uuid");
 function getPeriodDates(period) {
@@ -98,3 +98,15 @@ const getVerificationTokenByToken = (token) => __awaiter(void 0, void 0, void 0,
     }
 });
 exports.getVerificationTokenByToken = getVerificationTokenByToken;
+function getDaysRemaining(subscribedDate) {
+    // Parse the subscribed date
+    const subscribed = new Date(subscribedDate);
+    // Get today's date
+    const today = new Date();
+    // Calculate the difference in time (in milliseconds)
+    const timeDiff = subscribed.getTime() - today.getTime();
+    // Calculate the difference in days
+    const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+    return daysRemaining;
+}
+exports.getDaysRemaining = getDaysRemaining;

@@ -32,6 +32,7 @@ import {
   socialAuthLogin,
   twoFactorTokenDelete,
   updatePassword,
+  updateUserProfileDetails,
 } from "../controllers/auth/owner/appAuthController";
 import {
   deleteVerificationToken,
@@ -132,4 +133,9 @@ authRoute.post(
   errorHandler(generatePasswordResetToken)
 );
 authRoute.post("/generate-pdf", errorHandler(generatePdfInvoice));
+authRoute.patch(
+  "/update-proile/:userId",
+  isAuthMiddelware,
+  errorHandler(updateUserProfileDetails)
+);
 export default authRoute;

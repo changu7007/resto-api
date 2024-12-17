@@ -25,6 +25,7 @@ import puppeteer from "puppeteer";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import axios from "axios";
+import { PUPPETEER_EXECUTABLE_PATH } from "../../../../secrets";
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION!,
@@ -55,7 +56,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const orderSession = await getOrderSessionById(outlet.id, orderSessionId);
+  const orderSession = await getOrderSessionById(outlet?.id, orderSessionId);
 
   if (!orderSession?.id) {
     throw new NotFoundException("Order Session not Found", ErrorCode.NOT_FOUND);
@@ -132,12 +133,8 @@ export const billingOrderSession = async (req: Request, res: Response) => {
           id: idx + 1,
           name: item.menuItem.name,
           quantity: item.quantity,
-          price: item.menuItem.isVariants
-            ? item.menuItem.menuItemVariants.find(
-                (menu) => menu.id === item.sizeVariantsId
-              )?.price
-            : item.menuItem.price,
-          totalPrice: item.price,
+          price: item.originalRate,
+          totalPrice: item.totalPrice,
         }))
       ),
     discount: 0,
@@ -150,19 +147,9 @@ export const billingOrderSession = async (req: Request, res: Response) => {
 
   console.log("Invoice Data", invoiceData.orderItems);
 
-  const { invoiceUrl } = await generatePdfInvoice(invoiceData);
+  generatePdfInvoiceInBackground(invoiceData, outlet?.id);
 
-  await prismaDB.orderSession.update({
-    where: {
-      restaurantId: outlet.id,
-      id: updatedOrderSession?.id,
-    },
-    data: {
-      invoiceUrl: invoiceUrl,
-    },
-  });
-
-  if (updatedOrderSession.orderType === "DINEIN") {
+  if (updatedOrderSession?.orderType === "DINEIN") {
     const findTable = await prismaDB.table.findFirst({
       where: {
         restaurantId: outlet.id,
@@ -216,21 +203,42 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     `${subTotal}`
   );
 
-  websocketManager.notifyClients(
-    JSON.stringify({
-      type: "BILL_UPDATED",
-    })
-  );
+  websocketManager.notifyClients(outlet?.id, "BILL_UPDATED");
 
   return res.json({
     success: true,
     message: "Bill Recieved & Saved Success ✅",
   });
 };
+export const generatePdfInvoiceInBackground = async (
+  invoiceData: any,
+  outletId: string
+) => {
+  try {
+    const { invoiceUrl } = await generatePdfInvoice(invoiceData);
+
+    // Update the database with the generated invoice URL
+    await prismaDB.orderSession.update({
+      where: {
+        id: invoiceData.orderSessionId,
+      },
+      data: {
+        invoiceUrl,
+      },
+    });
+
+    console.log("Invoice Generated");
+    await getFetchAllOrderSessionToRedis(outletId);
+    // Notify WebSocket clients about the updated invoice
+    // websocketManager.notifyClients(invoiceData.restaurantName, "INVOICE_GENERATED");
+  } catch (error) {
+    console.error("Error generating PDF in background:", error);
+  }
+};
 
 export const generatePdfInvoice = async (invoiceData: any) => {
   // Read the EJS template
-  const templatePath = path.join(process.cwd(), "src/templates/invoice.ejs");
+  const templatePath = path.join(process.cwd(), "templates/invoice.ejs");
   const template = await fs.readFile(templatePath, "utf-8");
 
   try {
@@ -240,6 +248,7 @@ export const generatePdfInvoice = async (invoiceData: any) => {
 
     const browser = await puppeteer.launch({
       headless: true,
+      executablePath: PUPPETEER_EXECUTABLE_PATH,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
@@ -304,4 +313,30 @@ export const calculateTotals = (orders: Orders[]) => {
   const roundedDifference = parseFloat((total - roundedTotal).toFixed(2)); // Difference between total and roundedTotal
 
   return { subtotal, sgst, cgst, total, roundedTotal, roundedDifference };
+};
+
+export interface CartItems {
+  menuId: string;
+  quantity: number;
+  originalPrice: number;
+  price: number;
+  sizeVariantsId: string | null;
+  addOnSelected: {
+    id: string | undefined;
+    selectedVariantsId: {
+      id: string;
+    }[];
+  }[];
+}
+
+export const calculateTotalsForTakewayAndDelivery = (orders: CartItems[]) => {
+  const subtotal = orders?.reduce((acc, order) => acc + order?.price, 0);
+  const sgst = subtotal * 0.025;
+  const cgst = subtotal * 0.025;
+  const total = subtotal + sgst + cgst;
+  const tax = cgst + sgst;
+  const roundedTotal = Math.floor(total); // Rounded down total
+  const roundedDifference = parseFloat((total - roundedTotal).toFixed(2)); // Difference between total and roundedTotal
+
+  return { subtotal, sgst, cgst, total, tax, roundedTotal, roundedDifference };
 };

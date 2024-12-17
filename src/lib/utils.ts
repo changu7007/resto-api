@@ -93,3 +93,19 @@ export const getVerificationTokenByToken = async (token: string) => {
     return null;
   }
 };
+
+export function getDaysRemaining(subscribedDate: Date) {
+  // Parse the subscribed date
+  const subscribed = new Date(subscribedDate);
+
+  // Get today's date
+  const today = new Date();
+
+  // Calculate the difference in time (in milliseconds)
+  const timeDiff = subscribed.getTime() - today.getTime();
+
+  // Calculate the difference in days
+  const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+  return daysRemaining;
+}

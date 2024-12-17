@@ -1,5 +1,8 @@
 import { Request, Response } from "express";
-import { getOutletById } from "../../../lib/outlet";
+import {
+  getOutletById,
+  getOutletCustomerAndFetchToRedis,
+} from "../../../lib/outlet";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
@@ -24,20 +27,7 @@ export const getAllCustomer = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const customers = await prismaDB.customer.findMany({
-    where: {
-      restaurantId: getOutlet.id,
-    },
-    include: {
-      orderSession: {
-        include: {
-          orders: true,
-        },
-      },
-    },
-  });
-
-  await redis.set(`customers-${getOutlet.id}`, JSON.stringify(customers));
+  const customers = await getOutletCustomerAndFetchToRedis(getOutlet?.id);
 
   return res.json({
     success: true,

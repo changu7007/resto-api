@@ -18,6 +18,7 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
       },
       orderItems: {
         include: {
+          selectedVariant: true,
           addOnSelected: {
             include: {
               selectedAddOnVariantsId: true,
@@ -51,7 +52,11 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`liv-o-${outletId}`, JSON.stringify(liveOrders));
+  if (liveOrders?.length > 0) {
+    await redis.set(`liv-o-${outletId}`, JSON.stringify(liveOrders));
+  } else {
+    await redis.del(`liv-o-${outletId}`);
+  }
 
   return liveOrders;
 };
@@ -103,7 +108,11 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`active-os-${outletId}`, JSON.stringify(activeOrders));
+  if (activeOrders?.length > 0) {
+    await redis.set(`active-os-${outletId}`, JSON.stringify(activeOrders));
+  } else {
+    await redis.del(`active-os-${outletId}`);
+  }
   return activeOrders;
 };
 
@@ -118,6 +127,7 @@ export const getFetchAllOrderSessionToRedis = async (outletId: string) => {
         include: {
           orderItems: {
             include: {
+              selectedVariant: true,
               addOnSelected: {
                 include: {
                   selectedAddOnVariantsId: true,
@@ -153,7 +163,11 @@ export const getFetchAllOrderSessionToRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`all-os-${outletId}`, JSON.stringify(activeOrders));
+  if (activeOrders?.length > 0) {
+    await redis.set(`all-os-${outletId}`, JSON.stringify(activeOrders));
+  } else {
+    await redis.del(`all-os-${outletId}`);
+  }
   return activeOrders;
 };
 
@@ -166,6 +180,7 @@ export const getFetchAllOrdersToRedis = async (outletId: string) => {
       orderSession: true,
       orderItems: {
         include: {
+          selectedVariant: true,
           addOnSelected: {
             include: {
               selectedAddOnVariantsId: true,
@@ -199,7 +214,11 @@ export const getFetchAllOrdersToRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`all-orders-${outletId}`, JSON.stringify(getOrders));
+  if (getOrders?.length > 0) {
+    await redis.set(`all-orders-${outletId}`, JSON.stringify(getOrders));
+  } else {
+    await redis.del(`all-orders-${outletId}`);
+  }
 
   return getOrders;
 };
@@ -254,7 +273,14 @@ export const getFetchAllStaffOrderSessionToRedis = async (
     },
   });
 
-  await redis.set(`all-order-staff-${outletId}`, JSON.stringify(getAllOrders));
+  if (getAllOrders?.length > 0) {
+    await redis.set(
+      `all-order-staff-${outletId}`,
+      JSON.stringify(getAllOrders)
+    );
+  } else {
+    await redis.del(`all-order-staff-${outletId}`);
+  }
 
   return getAllOrders;
 };
