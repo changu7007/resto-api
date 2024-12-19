@@ -5,10 +5,10 @@ import { BadRequestsException } from "../../../exceptions/bad-request";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { NotFoundException } from "../../../exceptions/not-found";
-import axios from "axios";
 import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../../../secrets";
 import { getOutletById } from "../../../lib/outlet";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
+import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
 
 const razorpay = new Razorpay({
   key_id: RAZORPAY_KEY_ID,
@@ -91,7 +91,7 @@ export const buyPlan = async (req: Request, res: Response) => {
   const { paymentId, subscriptionId, paidAmount } = req.body;
   // @ts-ignore
   const userId = req.user?.id;
-
+  console.log("Plan", req.body);
   if (!paymentId || !subscriptionId) {
     throw new BadRequestsException(
       "Payment ID not Verfied",
@@ -124,7 +124,10 @@ export const buyPlan = async (req: Request, res: Response) => {
 
   let validDate = new Date();
 
-  if (findSubscription.planType === "MONTHLY") {
+  if (paymentId === "FREETRIAL" && paidAmount === 0) {
+    // Set validDate to 15 days from today for free trial
+    validDate.setDate(validDate.getDate() + 15);
+  } else if (findSubscription.planType === "MONTHLY") {
     validDate.setMonth(validDate.getMonth() + 1);
   } else if (findSubscription.planType === "ANNUALLY") {
     validDate.setFullYear(validDate.getFullYear() + 1);
@@ -142,6 +145,16 @@ export const buyPlan = async (req: Request, res: Response) => {
       validDate: validDate,
     },
   });
+
+  const user = await prismaDB.user.update({
+    where: {
+      id: findOwner?.id,
+    },
+    data: {
+      isFreeTrial: false,
+    },
+  });
+  await getFormatUserAndSendToRedis(user?.id);
 
   return res.json({
     success: true,

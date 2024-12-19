@@ -22,6 +22,7 @@ const not_found_1 = require("../../../exceptions/not-found");
 const secrets_1 = require("../../../secrets");
 const outlet_1 = require("../../../lib/outlet");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
+const get_users_1 = require("../../../lib/get-users");
 const razorpay = new razorpay_1.default({
     key_id: secrets_1.RAZORPAY_KEY_ID,
     key_secret: secrets_1.RAZORPAY_KEY_SECRET,
@@ -96,6 +97,7 @@ const buyPlan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { paymentId, subscriptionId, paidAmount } = req.body;
     // @ts-ignore
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+    console.log("Plan", req.body);
     if (!paymentId || !subscriptionId) {
         throw new bad_request_1.BadRequestsException("Payment ID not Verfied", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
@@ -116,7 +118,11 @@ const buyPlan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         throw new bad_request_1.BadRequestsException("No Subscription Found", root_1.ErrorCode.NOT_FOUND);
     }
     let validDate = new Date();
-    if (findSubscription.planType === "MONTHLY") {
+    if (paymentId === "FREETRIAL" && paidAmount === 0) {
+        // Set validDate to 15 days from today for free trial
+        validDate.setDate(validDate.getDate() + 15);
+    }
+    else if (findSubscription.planType === "MONTHLY") {
         validDate.setMonth(validDate.getMonth() + 1);
     }
     else if (findSubscription.planType === "ANNUALLY") {
@@ -134,6 +140,15 @@ const buyPlan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             validDate: validDate,
         },
     });
+    const user = yield __1.prismaDB.user.update({
+        where: {
+            id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
+        },
+        data: {
+            isFreeTrial: false,
+        },
+    });
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(user === null || user === void 0 ? void 0 : user.id);
     return res.json({
         success: true,
         message: "Your Subscription is now Active",
