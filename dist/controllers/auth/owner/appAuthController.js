@@ -433,7 +433,14 @@ exports.generateTwoFactorToken = generateTwoFactorToken;
 const getUserInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     // @ts-ignore
-    const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+    const userId = (_a = req === null || req === void 0 ? void 0 : req.user) === null || _a === void 0 ? void 0 : _a.id;
+    const redisUser = yield redis_1.redis.get(userId);
+    if (redisUser) {
+        return res.json({
+            success: true,
+            users: JSON.parse(redisUser),
+        });
+    }
     const findOwner = yield __1.prismaDB.user.findFirst({
         where: {
             id: userId,

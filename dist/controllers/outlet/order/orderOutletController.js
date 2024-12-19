@@ -175,7 +175,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
             ? "FOODREADY"
             : "SERVED";
     const result = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _b, _c, _d;
+        var _b, _c, _d, _e;
         const orderSession = yield prisma.orderSession.create({
             data: {
                 billId: ((_b = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _b === void 0 ? void 0 : _b.isGSTEnabled)
@@ -279,14 +279,16 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 orderType: tableId ? "DINEIN" : orderType,
             },
         });
-        yield prisma.invoice.update({
-            where: {
-                restaurantId: getOutlet.id,
-            },
-            data: {
-                invoiceNo: { increment: 1 },
-            },
-        });
+        if ((_e = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _e === void 0 ? void 0 : _e.id) {
+            yield prisma.invoice.update({
+                where: {
+                    restaurantId: getOutlet.id,
+                },
+                data: {
+                    invoiceNo: { increment: 1 },
+                },
+            });
+        }
         return orderSession;
     }));
     // Post-transaction tasks
@@ -308,12 +310,12 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.postOrderForOwner = postOrderForOwner;
 const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _e;
+    var _f;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
     const { billerId, username, isPaid, phoneNo, orderType, totalAmount, orderItems, tableId, orderMode, } = req.body;
     // @ts-ignore
-    if (billerId !== ((_e = req.user) === null || _e === void 0 ? void 0 : _e.id)) {
+    if (billerId !== ((_f = req.user) === null || _f === void 0 ? void 0 : _f.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const findBiller = yield __1.prismaDB.staff.findFirst({
@@ -490,12 +492,12 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.postOrderForStaf = postOrderForStaf;
 const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _f;
+    var _g;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
     const { customerId, isPaid, orderType, totalAmount, orderItems, tableId, paymentId, } = req.body;
     // @ts-ignore
-    if (customerId !== ((_f = req.user) === null || _f === void 0 ? void 0 : _f.id)) {
+    if (customerId !== ((_g = req.user) === null || _g === void 0 ? void 0 : _g.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const validCustomer = yield __1.prismaDB.customer.findFirst({
@@ -673,11 +675,11 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.postOrderForUser = postOrderForUser;
 const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _g, _h;
+    var _h, _j;
     const { outletId, orderId } = req.params;
     const { billerId, isPaid, totalAmount, orderItems, orderMode } = req.body;
     // @ts-ignore
-    if (billerId !== ((_g = req.user) === null || _g === void 0 ? void 0 : _g.id)) {
+    if (billerId !== ((_h = req.user) === null || _h === void 0 ? void 0 : _h.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const findBiller = yield __1.prismaDB.staff.findFirst({
@@ -781,7 +783,7 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
             orderId: generatedId,
             message: "You have a new Order",
             orderType: getOrder.orderType === "DINEIN"
-                ? (_h = getOrder.table) === null || _h === void 0 ? void 0 : _h.name
+                ? (_j = getOrder.table) === null || _j === void 0 ? void 0 : _j.name
                 : getOrder.orderType,
         },
     });
@@ -804,11 +806,11 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
 });
 exports.existingOrderPatch = existingOrderPatch;
 const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _j, _k;
+    var _k, _l;
     const { outletId, orderId } = req.params;
     const { billerId, isPaid, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, orderMode, } = req.body;
     // @ts-ignore
-    if (billerId !== ((_j = req.user) === null || _j === void 0 ? void 0 : _j.id)) {
+    if (billerId !== ((_k = req.user) === null || _k === void 0 ? void 0 : _k.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const [findBiller, getOutlet] = yield Promise.all([
@@ -911,7 +913,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
             orderId: generatedId,
             message: "You have a new Order",
             orderType: getOrder.orderType === "DINEIN"
-                ? (_k = getOrder.table) === null || _k === void 0 ? void 0 : _k.name
+                ? (_l = getOrder.table) === null || _l === void 0 ? void 0 : _l.name
                 : getOrder.orderType,
         },
     });
@@ -972,7 +974,7 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.orderStatusPatch = orderStatusPatch;
 const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _l;
+    var _m;
     const { outletId } = req.params;
     const redisOrderByStaff = yield redis_1.redis.get(`all-order-staff-${outletId}`);
     if (redisOrderByStaff) {
@@ -987,7 +989,7 @@ const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, funct
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     // @ts-ignore
-    const staff = yield (0, get_users_1.getStaffById)(outletId, (_l = req.user) === null || _l === void 0 ? void 0 : _l.id);
+    const staff = yield (0, get_users_1.getStaffById)(outletId, (_m = req.user) === null || _m === void 0 ? void 0 : _m.id);
     if (!(staff === null || staff === void 0 ? void 0 : staff.id)) {
         throw new not_found_1.NotFoundException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }

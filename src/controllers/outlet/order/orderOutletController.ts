@@ -371,14 +371,16 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
       },
     });
 
-    await prisma.invoice.update({
-      where: {
-        restaurantId: getOutlet.id,
-      },
-      data: {
-        invoiceNo: { increment: 1 },
-      },
-    });
+    if (getOutlet?.invoice?.id) {
+      await prisma.invoice.update({
+        where: {
+          restaurantId: getOutlet.id,
+        },
+        data: {
+          invoiceNo: { increment: 1 },
+        },
+      });
+    }
 
     return orderSession;
   });

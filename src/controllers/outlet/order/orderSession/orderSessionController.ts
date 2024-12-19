@@ -62,71 +62,103 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     throw new NotFoundException("Order Session not Found", ErrorCode.NOT_FOUND);
   }
 
-  const updatedOrderSession = await prismaDB.orderSession.update({
-    where: {
-      id: orderSession.id,
-      restaurantId: outlet.id,
-    },
-    data: {
-      active: false,
-      isPaid: true,
-      paymentMethod: paymentMethod,
-      subTotal: String(subTotal),
-      sessionStatus: "COMPLETED",
-      orders: {
-        updateMany: {
-          where: {
-            orderStatus: "SERVED",
-          },
-          data: {
-            active: false,
-            isPaid: true,
-            orderStatus: "COMPLETED",
+  const result = await prismaDB?.$transaction(async (prisma) => {
+    const updatedOrderSession = await prismaDB.orderSession.update({
+      where: {
+        id: orderSession.id,
+        restaurantId: outlet.id,
+      },
+      data: {
+        active: false,
+        isPaid: true,
+        paymentMethod: paymentMethod,
+        subTotal: String(subTotal),
+        sessionStatus: "COMPLETED",
+        orders: {
+          updateMany: {
+            where: {
+              orderStatus: "SERVED",
+            },
+            data: {
+              active: false,
+              isPaid: true,
+              orderStatus: "COMPLETED",
+            },
           },
         },
       },
-    },
-    include: {
-      orders: {
-        include: {
-          orderItems: {
-            include: {
-              menuItem: {
-                include: {
-                  menuItemVariants: true,
-                  menuGroupAddOns: true,
+      include: {
+        orders: {
+          include: {
+            orderItems: {
+              include: {
+                menuItem: {
+                  include: {
+                    menuItemVariants: true,
+                    menuGroupAddOns: true,
+                  },
                 },
               },
             },
           },
         },
       },
-    },
+    });
+
+    if (updatedOrderSession.orderType === "DINEIN") {
+      const table = await prisma.table.findFirst({
+        where: {
+          restaurantId: outlet.id,
+          currentOrderSessionId: orderSession.id,
+        },
+      });
+
+      if (!table) {
+        throw new BadRequestsException(
+          "Could not find the table bill you are looking for",
+          ErrorCode.INTERNAL_EXCEPTION
+        );
+      }
+
+      await prisma.table.update({
+        where: {
+          id: table.id,
+          restaurantId: outlet.id,
+        },
+        data: {
+          occupied: false,
+          currentOrderSessionId: null,
+          customerId: null,
+        },
+      });
+    }
+
+    return updatedOrderSession;
   });
 
-  if (!updatedOrderSession) {
-    throw new BadRequestsException(
-      "Something went wrong while recieveing the bill",
-      ErrorCode.INTERNAL_EXCEPTION
-    );
-  }
+  const formattedOrders = result?.orders?.map((order) => ({
+    totalAmount: order?.totalAmount,
+    gstPrice: order?.gstPrice!,
+    totalNetPrice: order?.totalNetPrice!,
+    orderStatus: order?.orderStatus,
+  }));
 
   const { cgst, roundedDifference, roundedTotal, sgst, subtotal } =
-    calculateTotals(updatedOrderSession.orders);
+    calculateTotals(formattedOrders);
 
   const invoiceData = {
     restaurantName: outlet.restaurantName,
     address: `${outlet.address},${outlet.city}-${outlet.pincode}`,
     gst: outlet.GSTIN,
-    invoiceNo: updatedOrderSession.billId,
+    invoiceNo: result?.billId,
     fssai: outlet.GSTIN,
     invoiceDate: new Date().toLocaleTimeString(),
-    customerName: updatedOrderSession.username,
-    customerNo: updatedOrderSession.phoneNo ?? "NA",
+    customerName: result?.username,
+    customerNo: result?.phoneNo ?? "NA",
     paymentMethod: paymentMethod,
     customerAddress: "NA",
-    orderSessionId: updatedOrderSession.id,
-    orderItems: updatedOrderSession.orders
+    orderSessionId: result?.id,
+    orderItems: result?.orders
       .filter((order) => order.orderStatus === "COMPLETED")
       .flatMap((orderItem) =>
         orderItem.orderItems.map((item, idx) => ({
@@ -145,47 +177,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     total: roundedTotal,
   };
 
-  console.log("Invoice Data", invoiceData.orderItems);
-
   generatePdfInvoiceInBackground(invoiceData, outlet?.id);
-
-  if (updatedOrderSession?.orderType === "DINEIN") {
-    const findTable = await prismaDB.table.findFirst({
-      where: {
-        restaurantId: outlet.id,
-        currentOrderSessionId: orderSession.id,
-      },
-    });
-
-    if (!findTable) {
-      throw new BadRequestsException(
-        "Could not find the table bill your looking for",
-        ErrorCode.INTERNAL_EXCEPTION
-      );
-    }
-
-    const updateTable = await prismaDB.table.update({
-      where: {
-        id: findTable?.id,
-        restaurantId: outlet.id,
-      },
-      data: {
-        occupied: false,
-        currentOrderSessionId: null,
-        customerId: null,
-      },
-    });
-
-    if (!updateTable) {
-      throw new BadRequestsException(
-        "Could not remove the table session",
-        ErrorCode.INTERNAL_EXCEPTION
-      );
-    }
-    await getFetchLiveOrderToRedis(outletId);
-    await getFetchAllTablesToRedis(outletId);
-    await getFetchAllAreastoRedis(outletId);
-  }
 
   await Promise.all([
     getFetchActiveOrderSessionToRedis(outletId),
@@ -197,11 +189,13 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     redis.del(`all-order-staff-${outletId}`),
   ]);
 
-  await NotificationService.sendNotification(
-    outlet?.fcmToken!,
-    "Bill Recieved",
-    `${subTotal}`
-  );
+  if (outlet?.fcmToken) {
+    await NotificationService.sendNotification(
+      outlet?.fcmToken!,
+      "Bill Recieved",
+      `${subTotal}`
+    );
+  }
 
   websocketManager.notifyClients(outlet?.id, "BILL_UPDATED");
 
@@ -210,6 +204,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     message: "Bill Recieved & Saved Success ✅",
   });
 };
+
 export const generatePdfInvoiceInBackground = async (
   invoiceData: any,
   outletId: string
@@ -298,22 +293,40 @@ export const generatePdfInvoice = async (invoiceData: any) => {
 
 type Orders = {
   totalAmount: string;
+  gstPrice: number;
+  totalNetPrice: number;
   orderStatus: OrderStatus;
 };
 
 export const calculateTotals = (orders: Orders[]) => {
   const subtotal = orders
     ?.filter((o) => o?.orderStatus !== "CANCELLED")
-    ?.reduce((acc, order) => acc + parseFloat(order?.totalAmount), 0);
-
-  const sgst = subtotal * 0.025;
-  const cgst = subtotal * 0.025;
-  const total = subtotal + sgst + cgst;
+    ?.reduce((acc, order) => acc + order?.totalNetPrice, 0);
+  const gstPrice = orders
+    ?.filter((o) => o?.orderStatus !== "CANCELLED")
+    ?.reduce((acc, order) => acc + order?.gstPrice, 0);
+  const sgst = gstPrice / 2;
+  const cgst = gstPrice / 2;
+  const total = parseFloat((subtotal + gstPrice).toFixed(2));
   const roundedTotal = Math.floor(total); // Rounded down total
   const roundedDifference = parseFloat((total - roundedTotal).toFixed(2)); // Difference between total and roundedTotal
 
   return { subtotal, sgst, cgst, total, roundedTotal, roundedDifference };
 };
+
+// export const calculateTotals = (orders: Orders[]) => {
+//   const subtotal = orders
+//     ?.filter((o) => o?.orderStatus !== "CANCELLED")
+//     ?.reduce((acc, order) => acc + parseFloat(order?.totalAmount), 0);
+
+//   const sgst = subtotal * 0.025;
+//   const cgst = subtotal * 0.025;
+//   const total = subtotal + sgst + cgst;
+//   const roundedTotal = Math.floor(total); // Rounded down total
+//   const roundedDifference = parseFloat((total - roundedTotal).toFixed(2)); // Difference between total and roundedTotal
+
+//   return { subtotal, sgst, cgst, total, roundedTotal, roundedDifference };
+// };
 
 export interface CartItems {
   menuId: string;

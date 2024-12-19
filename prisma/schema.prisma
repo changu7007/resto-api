@@ -215,6 +215,7 @@ model User {
   image              String?
   pan                String?
   fcmToken           String?
+  isFreeTrial        Boolean                @default(true)
   address            String?
   hashedPassword     String?
   isTwoFactorEnabled Boolean                @default(false)

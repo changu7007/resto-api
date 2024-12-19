@@ -500,7 +500,15 @@ export const generateTwoFactorToken = async (req: Request, res: Response) => {
 
 export const getUserInfo = async (req: Request, res: Response) => {
   // @ts-ignore
-  const userId = req.user?.id;
+  const userId = req?.user?.id;
+  const redisUser = await redis.get(userId);
+
+  if (redisUser) {
+    return res.json({
+      success: true,
+      users: JSON.parse(redisUser),
+    });
+  }
 
   const findOwner = await prismaDB.user.findFirst({
     where: {
