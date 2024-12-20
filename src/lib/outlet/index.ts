@@ -33,6 +33,7 @@ export const fetchOutletByIdToRedis = async (id: string) => {
     },
     include: {
       integrations: true,
+      invoice: true,
     },
   });
 

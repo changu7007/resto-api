@@ -23,6 +23,8 @@ const cors_1 = __importDefault(require("cors"));
 const morgan_1 = __importDefault(require("morgan"));
 const http_1 = __importDefault(require("http"));
 const ws_1 = require("./services/ws");
+const prom_client_1 = __importDefault(require("prom-client"));
+const monitoring_1 = require("./monitoring");
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
 ws_1.websocketManager.initialize(server);
@@ -33,10 +35,16 @@ app.use((0, morgan_1.default)("dev"));
 app.use("/api", routes_1.default);
 exports.prismaDB = new client_1.PrismaClient();
 app.use(errors_1.errorMiddelware);
+app.use(monitoring_1.cleanupMiddleware);
 app.get("/health", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.json({
         success: true,
         message: "I am Healhty",
     });
+}));
+app.get("/metrics", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const metrics = yield prom_client_1.default.register.metrics();
+    res.set("Content-Type", prom_client_1.default.register.contentType);
+    res.end(metrics);
 }));
 server.listen(secrets_1.PORT, () => console.log(`Main Server Working on PORT:${secrets_1.PORT}`));

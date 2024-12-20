@@ -39,6 +39,7 @@ const fetchOutletByIdToRedis = (id) => __awaiter(void 0, void 0, void 0, functio
         },
         include: {
             integrations: true,
+            invoice: true,
         },
     });
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {

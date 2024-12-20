@@ -144,11 +144,14 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     var _a;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { adminId, username, isPaid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, orderMode, } = req.body;
+    const { adminId, username, isPaid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, } = req.body;
     // Authorization and basic validation
     // @ts-ignore
     if (adminId !== ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    if (isPaid === true && !paymentMethod) {
+        throw new bad_request_1.BadRequestsException("Please Select Payment Mode", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const [findUser, getOutlet] = yield Promise.all([
         __1.prismaDB.user.findFirst({ where: { id: adminId } }),
@@ -172,12 +175,14 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     const orderStatus = orderMode === "KOT"
         ? "INCOMMING"
         : orderMode === "EXPRESS"
-            ? "FOODREADY"
-            : "SERVED";
+            ? "COMPLETED"
+            : "FOODREADY";
     const result = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
         var _b, _c, _d, _e;
         const orderSession = yield prisma.orderSession.create({
             data: {
+                active: orderStatus === "COMPLETED" ? true : false,
+                sessionStatus: orderStatus === "COMPLETED" ? "COMPLETED" : "ONPROGRESS",
                 billId: ((_b = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _b === void 0 ? void 0 : _b.isGSTEnabled)
                     ? `${(_c = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _c === void 0 ? void 0 : _c.prefix}${(_d = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _d === void 0 ? void 0 : _d.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
                     : billNo,
@@ -185,10 +190,12 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 username: username !== null && username !== void 0 ? username : findUser.name,
                 phoneNo: phoneNo !== null && phoneNo !== void 0 ? phoneNo : null,
                 adminId: findUser.id,
+                paymentMethod: isPaid ? paymentMethod : null,
                 tableId: tableId,
                 isPaid: isPaid,
                 restaurantId: getOutlet.id,
                 createdBy: findUser === null || findUser === void 0 ? void 0 : findUser.name,
+                subTotal: isPaid ? totalAmount.toString() : null,
                 orders: {
                     create: {
                         restaurantId: getOutlet.id,

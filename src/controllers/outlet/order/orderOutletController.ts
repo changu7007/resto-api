@@ -199,6 +199,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
     totalGrossProfit,
     orderItems,
     tableId,
+    paymentMethod,
     orderMode,
   } = req.body;
 
@@ -206,6 +207,13 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
   // @ts-ignore
   if (adminId !== req.user?.id) {
     throw new BadRequestsException("Invalid User", ErrorCode.UNAUTHORIZED);
+  }
+
+  if (isPaid === true && !paymentMethod) {
+    throw new BadRequestsException(
+      "Please Select Payment Mode",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
   }
 
   const [findUser, getOutlet] = await Promise.all([
@@ -245,12 +253,14 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
     orderMode === "KOT"
       ? "INCOMMING"
       : orderMode === "EXPRESS"
-      ? "FOODREADY"
-      : "SERVED";
+      ? "COMPLETED"
+      : "FOODREADY";
 
   const result = await prismaDB.$transaction(async (prisma) => {
     const orderSession = await prisma.orderSession.create({
       data: {
+        active: orderStatus === "COMPLETED" ? true : false,
+        sessionStatus: orderStatus === "COMPLETED" ? "COMPLETED" : "ONPROGRESS",
         billId: getOutlet?.invoice?.isGSTEnabled
           ? `${getOutlet?.invoice?.prefix}${
               getOutlet?.invoice?.invoiceNo
@@ -260,10 +270,12 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         username: username ?? findUser.name,
         phoneNo: phoneNo ?? null,
         adminId: findUser.id,
+        paymentMethod: isPaid ? paymentMethod : null,
         tableId: tableId,
         isPaid: isPaid,
         restaurantId: getOutlet.id,
         createdBy: findUser?.name,
+        subTotal: isPaid ? totalAmount.toString() : null,
         orders: {
           create: {
             restaurantId: getOutlet.id,
