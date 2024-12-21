@@ -224,6 +224,7 @@ model User {
   restaurant         Restaurant[]           @relation("RestaurantToUsers")
   onboarding         OnboardingStatus?
   createdAt          DateTime               @default(now())
+  favItems           String[]
   updatedAt          DateTime               @updatedAt
   billings           SubscriptionBilling[]  @relation("BillingToUsers")
   accounts           Account[]              @relation("AccountToUser")

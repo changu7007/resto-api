@@ -28,6 +28,8 @@ export const orderStatsForOutlet = async (req: Request, res: Response) => {
       },
     },
     select: {
+      isPaid: true,
+      orderStatus: true,
       totalAmount: true,
       orderType: true,
       orderItems: {
@@ -59,53 +61,55 @@ export const orderStatsForOutlet = async (req: Request, res: Response) => {
   };
 
   // Calculate revenue, orders, and gross profit
-  orders.forEach((order) => {
-    const amount = parseFloat(order.totalAmount);
+  orders
+    .filter((o) => o.isPaid === true)
+    ?.forEach((order) => {
+      const amount = parseFloat(order.totalAmount);
 
-    // Calculate gross profit for this order
-    let orderGrossProfit = 0;
-    order.orderItems.forEach((item) => {
-      if (item.menuItem.isVariants) {
-        // Use gross profit from menuItemVariants if available
-        orderGrossProfit += item.menuItem.menuItemVariants.reduce(
-          (acc, variant) => acc + (variant.grossProfit || 0),
-          0
-        );
-      } else {
-        // Use gross profit from menuItem directly
-        orderGrossProfit += item.menuItem.grossProfit || 0;
+      // Calculate gross profit for this order
+      let orderGrossProfit = 0;
+      order.orderItems.forEach((item) => {
+        if (item.menuItem.isVariants) {
+          // Use gross profit from menuItemVariants if available
+          orderGrossProfit += item.menuItem.menuItemVariants.reduce(
+            (acc, variant) => acc + (variant.grossProfit || 0),
+            0
+          );
+        } else {
+          // Use gross profit from menuItem directly
+          orderGrossProfit += item.menuItem.grossProfit || 0;
+        }
+      });
+
+      // Sum for all orders
+      totals.all.revenue += amount;
+      totals.all.orders++;
+      totals.all.grossProfit += orderGrossProfit;
+
+      // Sum for each orderType
+      switch (order.orderType) {
+        case "EXPRESS":
+          totals.express.revenue += amount;
+          totals.express.orders++;
+          totals.express.grossProfit += orderGrossProfit;
+          break;
+        case "DINEIN":
+          totals.dineIn.revenue += amount;
+          totals.dineIn.orders++;
+          totals.dineIn.grossProfit += orderGrossProfit;
+          break;
+        case "DELIVERY":
+          totals.delivery.revenue += amount;
+          totals.delivery.orders++;
+          totals.delivery.grossProfit += orderGrossProfit;
+          break;
+        case "TAKEAWAY":
+          totals.takeaway.revenue += amount;
+          totals.takeaway.orders++;
+          totals.takeaway.grossProfit += orderGrossProfit;
+          break;
       }
     });
-
-    // Sum for all orders
-    totals.all.revenue += amount;
-    totals.all.orders++;
-    totals.all.grossProfit += orderGrossProfit;
-
-    // Sum for each orderType
-    switch (order.orderType) {
-      case "EXPRESS":
-        totals.express.revenue += amount;
-        totals.express.orders++;
-        totals.express.grossProfit += orderGrossProfit;
-        break;
-      case "DINEIN":
-        totals.dineIn.revenue += amount;
-        totals.dineIn.orders++;
-        totals.dineIn.grossProfit += orderGrossProfit;
-        break;
-      case "DELIVERY":
-        totals.delivery.revenue += amount;
-        totals.delivery.orders++;
-        totals.delivery.grossProfit += orderGrossProfit;
-        break;
-      case "TAKEAWAY":
-        totals.takeaway.revenue += amount;
-        totals.takeaway.orders++;
-        totals.takeaway.grossProfit += orderGrossProfit;
-        break;
-    }
-  });
 
   // Format the stats (this is just an example, you can adjust the format)
   const expressFormattedStats = {
@@ -423,5 +427,113 @@ export const lastSixMonthsOrders = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     monthStats: chartData,
+  });
+};
+
+export const cashFlowStats = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { period } = req.query;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const { startDate, endDate } = getPeriodDates(period as string);
+
+  const cashFlowOrderSession = await prismaDB.orderSession.findMany({
+    where: {
+      restaurantId: outlet.id,
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+
+    select: {
+      isPaid: true,
+      sessionStatus: true,
+      paymentMethod: true,
+      subTotal: true,
+    },
+  });
+
+  const paymentTotals = {
+    UPI: { revenue: 0, transactions: 0 },
+    CASH: { revenue: 0, transactions: 0 },
+    DEBIT: { revenue: 0, transactions: 0 },
+    CREDIT: { revenue: 0, transactions: 0 },
+  };
+
+  cashFlowOrderSession
+    ?.filter((o) => o.isPaid === true)
+    ?.forEach((session) => {
+      const amount = parseFloat(session?.subTotal as string);
+
+      switch (session.paymentMethod) {
+        case "UPI":
+          paymentTotals.UPI.revenue += amount;
+          paymentTotals.UPI.transactions++;
+          break;
+        case "CASH":
+          paymentTotals.CASH.revenue += amount;
+          paymentTotals.CASH.transactions++;
+          break;
+        case "DEBIT":
+          paymentTotals.DEBIT.revenue += amount;
+          paymentTotals.DEBIT.transactions++;
+          break;
+        case "CREDIT":
+          paymentTotals.CREDIT.revenue += amount;
+          paymentTotals.CREDIT.transactions++;
+          break;
+      }
+    });
+  // Aggregate total revenue and transactions
+  const totalRevenue =
+    paymentTotals.UPI.revenue +
+    paymentTotals.CASH.revenue +
+    paymentTotals.DEBIT.revenue +
+    paymentTotals.CREDIT.revenue;
+
+  const totalTransactions =
+    paymentTotals.UPI.transactions +
+    paymentTotals.CASH.transactions +
+    paymentTotals.DEBIT.transactions +
+    paymentTotals.CREDIT.transactions;
+
+  // Format the response
+  const formattedStats = {
+    totalRevenue,
+    totalTransactions,
+    breakdown: [
+      {
+        method: "UPI",
+        revenue: paymentTotals.UPI.revenue,
+        transactions: paymentTotals.UPI.transactions,
+      },
+      {
+        method: "CASH",
+        revenue: paymentTotals.CASH.revenue,
+        transactions: paymentTotals.CASH.transactions,
+      },
+      {
+        method: "DEBIT",
+        revenue: paymentTotals.DEBIT.revenue,
+        transactions: paymentTotals.DEBIT.transactions,
+      },
+      {
+        method: "CREDIT",
+        revenue: paymentTotals.CREDIT.revenue,
+        transactions: paymentTotals.CREDIT.transactions,
+      },
+    ],
+  };
+
+  return res.json({
+    success: true,
+    stats: formattedStats,
+    message: "Cashflow statistics retrieved successfully",
   });
 };

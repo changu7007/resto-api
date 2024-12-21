@@ -181,8 +181,10 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
         var _b, _c, _d, _e;
         const orderSession = yield prisma.orderSession.create({
             data: {
-                active: orderStatus === "COMPLETED" ? true : false,
-                sessionStatus: orderStatus === "COMPLETED" ? "COMPLETED" : "ONPROGRESS",
+                active: isPaid === true && orderStatus === "COMPLETED" ? false : true,
+                sessionStatus: isPaid !== true && orderStatus !== "COMPLETED"
+                    ? "COMPLETED"
+                    : "ONPROGRESS",
                 billId: ((_b = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _b === void 0 ? void 0 : _b.isGSTEnabled)
                     ? `${(_c = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _c === void 0 ? void 0 : _c.prefix}${(_d = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _d === void 0 ? void 0 : _d.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
                     : billNo,
@@ -194,15 +196,17 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 tableId: tableId,
                 isPaid: isPaid,
                 restaurantId: getOutlet.id,
-                createdBy: findUser === null || findUser === void 0 ? void 0 : findUser.name,
+                createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
                 subTotal: isPaid ? totalAmount.toString() : null,
                 orders: {
                     create: {
                         restaurantId: getOutlet.id,
-                        createdBy: findUser === null || findUser === void 0 ? void 0 : findUser.name,
+                        createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
                         isPaid: isPaid,
                         active: true,
-                        orderStatus: orderStatus,
+                        orderStatus: isPaid === true && orderStatus === "COMPLETED"
+                            ? orderStatus
+                            : "FOODREADY",
                         totalNetPrice: totalNetPrice,
                         gstPrice: gstPrice,
                         totalAmount: totalAmount.toString(),

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = void 0;
+exports.cashFlowStats = exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -18,6 +18,7 @@ const utils_1 = require("../../../lib/utils");
 const get_users_1 = require("../../../lib/get-users");
 const date_fns_1 = require("date-fns");
 const orderStatsForOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const { outletId } = req.params;
     const { period } = req.query;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -34,6 +35,8 @@ const orderStatsForOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
             },
         },
         select: {
+            isPaid: true,
+            orderStatus: true,
             totalAmount: true,
             orderType: true,
             orderItems: {
@@ -63,7 +66,8 @@ const orderStatsForOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
         takeaway: { revenue: 0, orders: 0, grossProfit: 0 },
     };
     // Calculate revenue, orders, and gross profit
-    orders.forEach((order) => {
+    (_a = orders
+        .filter((o) => o.isPaid === true)) === null || _a === void 0 ? void 0 : _a.forEach((order) => {
         const amount = parseFloat(order.totalAmount);
         // Calculate gross profit for this order
         let orderGrossProfit = 0;
@@ -173,7 +177,7 @@ const orderStatsForOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.orderStatsForOutlet = orderStatsForOutlet;
 const orderStatsForOutletByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _b;
     const { outletId } = req.params;
     const { period } = req.query;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -181,7 +185,7 @@ const orderStatsForOutletByStaff = (req, res) => __awaiter(void 0, void 0, void 
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     //@ts-ignore
-    const staff = yield (0, get_users_1.getStaffById)(outlet.id, (_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
+    const staff = yield (0, get_users_1.getStaffById)(outlet.id, (_b = req.user) === null || _b === void 0 ? void 0 : _b.id);
     if (!(staff === null || staff === void 0 ? void 0 : staff.id)) {
         throw new not_found_1.NotFoundException("Unauthorized", root_1.ErrorCode.UNAUTHORIZED);
     }
@@ -379,3 +383,97 @@ const lastSixMonthsOrders = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 });
 exports.lastSixMonthsOrders = lastSixMonthsOrders;
+const cashFlowStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _c;
+    const { outletId } = req.params;
+    const { period } = req.query;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const { startDate, endDate } = (0, utils_1.getPeriodDates)(period);
+    const cashFlowOrderSession = yield __1.prismaDB.orderSession.findMany({
+        where: {
+            restaurantId: outlet.id,
+            createdAt: {
+                gte: startDate,
+                lte: endDate,
+            },
+        },
+        select: {
+            isPaid: true,
+            sessionStatus: true,
+            paymentMethod: true,
+            subTotal: true,
+        },
+    });
+    const paymentTotals = {
+        UPI: { revenue: 0, transactions: 0 },
+        CASH: { revenue: 0, transactions: 0 },
+        DEBIT: { revenue: 0, transactions: 0 },
+        CREDIT: { revenue: 0, transactions: 0 },
+    };
+    (_c = cashFlowOrderSession === null || cashFlowOrderSession === void 0 ? void 0 : cashFlowOrderSession.filter((o) => o.isPaid === true)) === null || _c === void 0 ? void 0 : _c.forEach((session) => {
+        const amount = parseFloat(session === null || session === void 0 ? void 0 : session.subTotal);
+        switch (session.paymentMethod) {
+            case "UPI":
+                paymentTotals.UPI.revenue += amount;
+                paymentTotals.UPI.transactions++;
+                break;
+            case "CASH":
+                paymentTotals.CASH.revenue += amount;
+                paymentTotals.CASH.transactions++;
+                break;
+            case "DEBIT":
+                paymentTotals.DEBIT.revenue += amount;
+                paymentTotals.DEBIT.transactions++;
+                break;
+            case "CREDIT":
+                paymentTotals.CREDIT.revenue += amount;
+                paymentTotals.CREDIT.transactions++;
+                break;
+        }
+    });
+    // Aggregate total revenue and transactions
+    const totalRevenue = paymentTotals.UPI.revenue +
+        paymentTotals.CASH.revenue +
+        paymentTotals.DEBIT.revenue +
+        paymentTotals.CREDIT.revenue;
+    const totalTransactions = paymentTotals.UPI.transactions +
+        paymentTotals.CASH.transactions +
+        paymentTotals.DEBIT.transactions +
+        paymentTotals.CREDIT.transactions;
+    // Format the response
+    const formattedStats = {
+        totalRevenue,
+        totalTransactions,
+        breakdown: [
+            {
+                method: "UPI",
+                revenue: paymentTotals.UPI.revenue,
+                transactions: paymentTotals.UPI.transactions,
+            },
+            {
+                method: "CASH",
+                revenue: paymentTotals.CASH.revenue,
+                transactions: paymentTotals.CASH.transactions,
+            },
+            {
+                method: "DEBIT",
+                revenue: paymentTotals.DEBIT.revenue,
+                transactions: paymentTotals.DEBIT.transactions,
+            },
+            {
+                method: "CREDIT",
+                revenue: paymentTotals.CREDIT.revenue,
+                transactions: paymentTotals.CREDIT.transactions,
+            },
+        ],
+    };
+    return res.json({
+        success: true,
+        stats: formattedStats,
+        message: "Cashflow statistics retrieved successfully",
+    });
+});
+exports.cashFlowStats = cashFlowStats;

@@ -259,8 +259,11 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
   const result = await prismaDB.$transaction(async (prisma) => {
     const orderSession = await prisma.orderSession.create({
       data: {
-        active: orderStatus === "COMPLETED" ? true : false,
-        sessionStatus: orderStatus === "COMPLETED" ? "COMPLETED" : "ONPROGRESS",
+        active: isPaid === true && orderStatus === "COMPLETED" ? false : true,
+        sessionStatus:
+          isPaid !== true && orderStatus !== "COMPLETED"
+            ? "COMPLETED"
+            : "ONPROGRESS",
         billId: getOutlet?.invoice?.isGSTEnabled
           ? `${getOutlet?.invoice?.prefix}${
               getOutlet?.invoice?.invoiceNo
@@ -274,15 +277,18 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         tableId: tableId,
         isPaid: isPaid,
         restaurantId: getOutlet.id,
-        createdBy: findUser?.name,
+        createdBy: `${findUser?.name} (${findUser?.role})`,
         subTotal: isPaid ? totalAmount.toString() : null,
         orders: {
           create: {
             restaurantId: getOutlet.id,
-            createdBy: findUser?.name,
+            createdBy: `${findUser?.name} (${findUser?.role})`,
             isPaid: isPaid,
             active: true,
-            orderStatus: orderStatus,
+            orderStatus:
+              isPaid === true && orderStatus === "COMPLETED"
+                ? orderStatus
+                : "FOODREADY",
             totalNetPrice: totalNetPrice,
             gstPrice: gstPrice,
             totalAmount: totalAmount.toString(),

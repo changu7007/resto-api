@@ -32,6 +32,7 @@ import {
   postOrderForUser,
 } from "../../controllers/outlet/order/orderOutletController";
 import {
+  addItemToUserFav,
   deleteItem,
   getAddONById,
   getAllItem,
@@ -78,6 +79,7 @@ import {
 } from "../../controllers/outlet/variants/variantsController";
 import { s3Upload } from "../../controllers/s3Upload";
 import {
+  cashFlowStats,
   lastSixMonthsOrders,
   orderStatsForOutlet,
   orderStatsForOutletByStaff,
@@ -284,6 +286,11 @@ outletRoute.post(
   errorHandler(postItem)
 );
 outletRoute.get("/:outletId/get-items", errorHandler(getAllItem));
+outletRoute.post(
+  "/:outletId/add-to-fav",
+  isAuthMiddelware,
+  errorHandler(addItemToUserFav)
+);
 outletRoute.get("/:outletId/get-categories", errorHandler(getAllCategories));
 outletRoute.get("/:outletId/get-menu-variants", errorHandler(getMenuVariants));
 outletRoute.get("/:outletId/get-addons-items", errorHandler(getSingleAddons));
@@ -423,6 +430,11 @@ outletRoute.get(
   "/:outletId/get-outlet-stats",
   isAuthMiddelware,
   errorHandler(orderStatsForOutlet)
+);
+outletRoute.get(
+  "/:outletId/get-cashflow-stats",
+  isAuthMiddelware,
+  errorHandler(cashFlowStats)
 );
 outletRoute.get(
   "/:outletId/get-staff-outlet-stats",

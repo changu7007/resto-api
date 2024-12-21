@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSingleAddons = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = void 0;
+exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -120,7 +120,7 @@ const menuSchema = zod_1.z.object({
         variantId: zod_1.z.string(),
         price: zod_1.z.string(),
         netPrice: zod_1.z.string(),
-        gst: zod_1.z.coerce.number().min(1, { message: "Gst Required" }),
+        gst: zod_1.z.coerce.number().min(0, { message: "Gst Required" }),
         chooseProfit: zod_1.z.enum(["manualProfit", "itemRecipe"], {
             required_error: "You need to select a gross profit type.",
         }),
@@ -397,7 +397,6 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const validPrice = (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? "0" : validateFields === null || validateFields === void 0 ? void 0 : validateFields.price;
     const validVariants = (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) && (validateFields === null || validateFields === void 0 ? void 0 : validateFields.menuItemVariants.length) > 0
         ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.menuItemVariants
         : [];
@@ -416,7 +415,23 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             isPickUp: validateFields === null || validateFields === void 0 ? void 0 : validateFields.isPickUp,
             isDineIn: validateFields === null || validateFields === void 0 ? void 0 : validateFields.isDineIn,
             isOnline: validateFields === null || validateFields === void 0 ? void 0 : validateFields.isOnline,
-            price: validPrice,
+            price: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? "0" : validateFields === null || validateFields === void 0 ? void 0 : validateFields.price,
+            gst: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? null : validateFields === null || validateFields === void 0 ? void 0 : validateFields.gst,
+            netPrice: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? null : validateFields === null || validateFields === void 0 ? void 0 : validateFields.netPrice,
+            chooseProfit: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
+                ? null
+                : validateFields === null || validateFields === void 0 ? void 0 : validateFields.chooseProfit,
+            grossProfitType: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
+                ? null
+                : validateFields === null || validateFields === void 0 ? void 0 : validateFields.grossProfitType,
+            grossProfitPer: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
+                ? null
+                : (validateFields === null || validateFields === void 0 ? void 0 : validateFields.grossProfitType) === "PER"
+                    ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.grossProfitPer
+                    : null,
+            grossProfit: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
+                ? null
+                : validateFields === null || validateFields === void 0 ? void 0 : validateFields.grossProfit,
             type: validateFields === null || validateFields === void 0 ? void 0 : validateFields.type,
             menuItemVariants: {
                 create: validVariants.map((variant) => ({
@@ -529,6 +544,23 @@ const getMenuVariants = (req, res) => __awaiter(void 0, void 0, void 0, function
     });
 });
 exports.getMenuVariants = getMenuVariants;
+const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _b;
+    const { id } = req.body;
+    const { outletId } = req.params;
+    // @ts-ignore
+    const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
+    const findUser = yield __1.prismaDB.user.findFirst({
+        where: {
+            id: userId,
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Added to favourites",
+    });
+});
+exports.addItemToUserFav = addItemToUserFav;
 const getSingleAddons = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);

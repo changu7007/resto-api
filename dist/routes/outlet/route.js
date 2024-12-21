@@ -56,6 +56,7 @@ outletRoute.get("/:outletId/table/:tableId/customer/:customerId", auth_1.isAuthM
 //Items Route
 outletRoute.post("/:outletId/create-item", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.postItem));
 outletRoute.get("/:outletId/get-items", (0, error_handler_1.errorHandler)(itemsController_1.getAllItem));
+outletRoute.post("/:outletId/add-to-fav", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.addItemToUserFav));
 outletRoute.get("/:outletId/get-categories", (0, error_handler_1.errorHandler)(outletCategories_1.getAllCategories));
 outletRoute.get("/:outletId/get-menu-variants", (0, error_handler_1.errorHandler)(itemsController_1.getMenuVariants));
 outletRoute.get("/:outletId/get-addons-items", (0, error_handler_1.errorHandler)(itemsController_1.getSingleAddons));
@@ -94,6 +95,7 @@ outletRoute.patch("/:outletId/update-area/:areaId", auth_1.isAuthMiddelware, (0,
 outletRoute.delete("/:outletId/delete-area/:areaId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.deleteArea));
 //stats
 outletRoute.get("/:outletId/get-outlet-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.orderStatsForOutlet));
+outletRoute.get("/:outletId/get-cashflow-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.cashFlowStats));
 outletRoute.get("/:outletId/get-staff-outlet-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.orderStatsForOutletByStaff));
 outletRoute.get("/:outletId/get-outlet-top-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.outletTopSellingItems));
 outletRoute.get("/:outletId/get-last-six-orderstats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.lastSixMonthsOrders));

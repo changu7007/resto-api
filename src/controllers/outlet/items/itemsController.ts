@@ -140,7 +140,7 @@ const menuSchema = z.object({
       variantId: z.string(),
       price: z.string(),
       netPrice: z.string(),
-      gst: z.coerce.number().min(1, { message: "Gst Required" }),
+      gst: z.coerce.number().min(0, { message: "Gst Required" }),
       chooseProfit: z.enum(["manualProfit", "itemRecipe"], {
         required_error: "You need to select a gross profit type.",
       }),
@@ -517,7 +517,6 @@ export const postItem = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const validPrice = validateFields?.isVariants ? "0" : validateFields?.price;
   const validVariants =
     validateFields?.isVariants && validateFields?.menuItemVariants.length > 0
       ? validateFields?.menuItemVariants
@@ -539,7 +538,23 @@ export const postItem = async (req: Request, res: Response) => {
       isPickUp: validateFields?.isPickUp,
       isDineIn: validateFields?.isDineIn,
       isOnline: validateFields?.isOnline,
-      price: validPrice,
+      price: validateFields?.isVariants ? "0" : validateFields?.price,
+      gst: validateFields?.isVariants ? null : validateFields?.gst,
+      netPrice: validateFields?.isVariants ? null : validateFields?.netPrice,
+      chooseProfit: validateFields?.isVariants
+        ? null
+        : validateFields?.chooseProfit,
+      grossProfitType: validateFields?.isVariants
+        ? null
+        : validateFields?.grossProfitType,
+      grossProfitPer: validateFields?.isVariants
+        ? null
+        : validateFields?.grossProfitType === "PER"
+        ? validateFields?.grossProfitPer
+        : null,
+      grossProfit: validateFields?.isVariants
+        ? null
+        : validateFields?.grossProfit,
       type: validateFields?.type,
       menuItemVariants: {
         create: validVariants.map((variant) => ({
@@ -663,6 +678,24 @@ export const getMenuVariants = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     menuVariants: formattedVariants,
+  });
+};
+
+export const addItemToUserFav = async (req: Request, res: Response) => {
+  const { id } = req.body;
+  const { outletId } = req.params;
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  const findUser = await prismaDB.user.findFirst({
+    where: {
+      id: userId,
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Added to favourites",
   });
 };
 
