@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -182,7 +182,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
         const orderSession = yield prisma.orderSession.create({
             data: {
                 active: isPaid === true && orderStatus === "COMPLETED" ? false : true,
-                sessionStatus: isPaid !== true && orderStatus !== "COMPLETED"
+                sessionStatus: isPaid === true && orderStatus === "COMPLETED"
                     ? "COMPLETED"
                     : "ONPROGRESS",
                 billId: ((_b = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _b === void 0 ? void 0 : _b.isGSTEnabled)
@@ -945,6 +945,45 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
     });
 });
 exports.existingOrderPatchApp = existingOrderPatchApp;
+const orderessionPaymentModePatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id, outletId } = req.params;
+    const validTypes = Object.values(client_1.PaymentMethod);
+    const { paymentMethod } = req.body;
+    if (!validTypes.includes(paymentMethod)) {
+        throw new bad_request_1.BadRequestsException("Payment Mode is Invalid", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getOrderById = yield (0, outlet_1.getOrderSessionById)(outlet.id, id);
+    if (!(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.id)) {
+        throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.orderSession.update({
+        where: {
+            id: getOrderById.id,
+            restaurantId: outlet.id,
+        },
+        data: {
+            paymentMethod: paymentMethod,
+        },
+    });
+    yield Promise.all([
+        (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
+        (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
+        (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
+        (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+    ]);
+    ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "ORDER_UPDATED");
+    return res.json({
+        success: true,
+        message: "Payment Mode Updated ✅",
+    });
+});
+exports.orderessionPaymentModePatch = orderessionPaymentModePatch;
 const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { orderId, outletId } = req.params;
     const validTypes = Object.values(client_1.OrderStatus);

@@ -26,6 +26,7 @@ import {
   getAllSessionOrders,
   getLiveOrders,
   getTodayOrdersCount,
+  orderessionPaymentModePatch,
   orderStatusPatch,
   postOrderForOwner,
   postOrderForStaf,
@@ -239,6 +240,11 @@ outletRoute.patch(
   "/:outletId/app-add-orders/:orderId",
   isAuthMiddelware,
   errorHandler(existingOrderPatchApp)
+);
+outletRoute.patch(
+  "/:outletId/order-session-update-payment/:id",
+  isAuthMiddelware,
+  errorHandler(orderessionPaymentModePatch)
 );
 outletRoute.patch(
   "/:outletId/orders/:orderId",

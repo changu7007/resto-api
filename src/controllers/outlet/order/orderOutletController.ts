@@ -1,4 +1,4 @@
-import { OrderStatus, OrderType } from "@prisma/client";
+import { OrderStatus, OrderType, PaymentMethod } from "@prisma/client";
 import { prismaDB } from "../../..";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
@@ -261,7 +261,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
       data: {
         active: isPaid === true && orderStatus === "COMPLETED" ? false : true,
         sessionStatus:
-          isPaid !== true && orderStatus !== "COMPLETED"
+          isPaid === true && orderStatus === "COMPLETED"
             ? "COMPLETED"
             : "ONPROGRESS",
         billId: getOutlet?.invoice?.isGSTEnabled
@@ -1264,6 +1264,61 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
     success: true,
     orderSessionId: orderSession.id,
     message: "Order Added from Admin App ✅",
+  });
+};
+
+export const orderessionPaymentModePatch = async (
+  req: Request,
+  res: Response
+) => {
+  const { id, outletId } = req.params;
+  const validTypes = Object.values(PaymentMethod);
+  const { paymentMethod } = req.body;
+
+  if (!validTypes.includes(paymentMethod)) {
+    throw new BadRequestsException(
+      "Payment Mode is Invalid",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getOrderById = await getOrderSessionById(outlet.id, id);
+
+  if (!getOrderById?.id) {
+    throw new NotFoundException(
+      "No Order Found to Update",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  await prismaDB.orderSession.update({
+    where: {
+      id: getOrderById.id,
+      restaurantId: outlet.id,
+    },
+    data: {
+      paymentMethod: paymentMethod,
+    },
+  });
+  await Promise.all([
+    getFetchActiveOrderSessionToRedis(outletId),
+    getFetchAllOrderSessionToRedis(outletId),
+    getFetchAllOrdersToRedis(outletId),
+    getFetchLiveOrderToRedis(outletId),
+    getFetchAllTablesToRedis(outletId),
+    getFetchAllAreastoRedis(outletId),
+  ]);
+
+  websocketManager.notifyClients(outlet?.id, "ORDER_UPDATED");
+
+  return res.json({
+    success: true,
+    message: "Payment Mode Updated ✅",
   });
 };
 
