@@ -35,7 +35,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateUserProfileDetails = exports.generatePasswordResetToken = exports.deletePasswordResetToken = exports.updatePassword = exports.getPasswordResetTokenByEmail = exports.getPasswordResetTokenByToken = exports.getUserInfo = exports.generateTwoFactorToken = exports.createTwoFactorConfirmation = exports.twoFactorTokenDelete = exports.getTwoFactorTokenByToken = exports.get2FATokenByEmail = exports.delete2FAConfirmation = exports.get2FAConfirmationUser = exports.getUserByIdAndVerifyEmail = exports.getVerificationToken = exports.getUserByEmail = exports.getUserById = exports.registerOwner = exports.AppUpdateAccessToken = exports.AppLogout = exports.OwnerUser = exports.OwnerLogin = exports.socialAuthLogin = void 0;
+exports.resendInvite = exports.verifyInvite = exports.getDashboardInvite = exports.InviteUserToDashboard = exports.updateUserProfileDetails = exports.generatePasswordResetToken = exports.deletePasswordResetToken = exports.updatePassword = exports.getPasswordResetTokenByEmail = exports.getPasswordResetTokenByToken = exports.getUserInfo = exports.generateTwoFactorToken = exports.createTwoFactorConfirmation = exports.twoFactorTokenDelete = exports.getTwoFactorTokenByToken = exports.get2FATokenByEmail = exports.delete2FAConfirmation = exports.get2FAConfirmationUser = exports.getUserByIdAndVerifyEmail = exports.getVerificationToken = exports.getUserByEmail = exports.getUserById = exports.registerOwner = exports.AppUpdateAccessToken = exports.AppLogout = exports.OwnerUser = exports.OwnerLogin = exports.socialAuthLogin = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const jwt = __importStar(require("jsonwebtoken"));
 const secrets_1 = require("../../../secrets");
@@ -53,6 +53,7 @@ const utils_1 = require("../../../lib/utils");
 const uuid_1 = require("uuid");
 const date_fns_1 = require("date-fns");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
+const outlet_1 = require("../../../lib/outlet");
 const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { providerAccountId, name, email, image } = req.body;
     const findOwner = yield __1.prismaDB.user.findFirst({
@@ -82,6 +83,7 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
         image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
         role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
         isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
+        favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
         onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
         isSubscribed: renewalDay > 0 ? true : false,
         subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
@@ -131,6 +133,7 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
             role: user === null || user === void 0 ? void 0 : user.role,
             onboardingStatus: user === null || user === void 0 ? void 0 : user.onboardingStatus,
             isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
+            favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
             isSubscribed: renewalDay > 0 ? true : false,
             subscriptions: user === null || user === void 0 ? void 0 : user.billings.map((billing) => ({
                 id: billing.id,
@@ -182,6 +185,7 @@ const OwnerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
         onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
         isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
+        favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
         isSubscribed: renewalDay > 0 ? true : false,
         subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
             id: billing.id,
@@ -568,3 +572,155 @@ const updateUserProfileDetails = (req, res) => __awaiter(void 0, void 0, void 0,
     });
 });
 exports.updateUserProfileDetails = updateUserProfileDetails;
+const InviteUserToDashboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _c;
+    const { outletId } = req.params;
+    const { email, role } = req.body;
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    // @ts-ignore
+    if ((getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.adminId) !== ((_c = req.user) === null || _c === void 0 ? void 0 : _c.id)) {
+        throw new unauthorized_1.UnauthorizedException("Your not Authorized for this access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const token = (0, uuid_1.v4)();
+    const expires = new Date(new Date().getTime() + 3600 * 24 * 1000);
+    const findInvite = yield __1.prismaDB.invite.findFirst({
+        where: {
+            email: email,
+        },
+    });
+    if (findInvite) {
+        throw new bad_request_1.BadRequestsException("User has been Invited", root_1.ErrorCode.INTERNAL_EXCEPTION);
+    }
+    yield __1.prismaDB.invite.create({
+        data: {
+            email: email,
+            expires: expires,
+            role: role,
+            restaurantId: getOutlet.id,
+            invitedBy: getOutlet.adminId,
+            token: token,
+        },
+    });
+    return res.json({
+        success: true,
+        token: token,
+    });
+});
+exports.InviteUserToDashboard = InviteUserToDashboard;
+const getDashboardInvite = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const invites = yield __1.prismaDB.invite.findMany({
+        where: {
+            restaurantId: getOutlet.id,
+        },
+        select: {
+            id: true,
+            email: true,
+            status: true,
+            expires: true,
+            token: true,
+            createdAt: true,
+            updatedAt: true,
+        },
+    });
+    return res.json({
+        success: true,
+        invites: invites,
+    });
+});
+exports.getDashboardInvite = getDashboardInvite;
+const verifyInvite = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, token } = req.params;
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("No Outlet found for this Invite", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getToken = yield __1.prismaDB.invite.findFirst({
+        where: {
+            token: token,
+            restaurantId: outletId,
+        },
+    });
+    if (!getToken) {
+        throw new not_found_1.NotFoundException("No Invitation found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    console.log("Now Date", new Date());
+    console.log("Expiry Date", new Date(getToken.expires));
+    const hasExpired = new Date() > new Date(getToken.expires);
+    if (hasExpired) {
+        throw new bad_request_1.BadRequestsException("Token Expired", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const findUser = yield __1.prismaDB.user.findFirst({
+        where: {
+            email: getToken === null || getToken === void 0 ? void 0 : getToken.email,
+            restaurant: {
+                some: {
+                    id: outletId,
+                },
+            },
+        },
+    });
+    if (findUser) {
+        throw new bad_request_1.BadRequestsException("This user already has the access", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    yield __1.prismaDB.user.update({
+        where: {
+            email: getToken === null || getToken === void 0 ? void 0 : getToken.email,
+        },
+        data: {
+            restaurant: {
+                connect: { id: outletId },
+            },
+        },
+    });
+    yield __1.prismaDB.invite.update({
+        where: {
+            id: getToken === null || getToken === void 0 ? void 0 : getToken.id,
+        },
+        data: {
+            status: "ACCEPTED",
+        },
+    });
+    return res.json({
+        success: true,
+        message: "User Joining Success",
+    });
+});
+exports.verifyInvite = verifyInvite;
+const resendInvite = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const { email } = req.body;
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const invite = yield __1.prismaDB.invite.findFirst({
+        where: {
+            email: email,
+        },
+    });
+    if (!invite) {
+        throw new bad_request_1.BadRequestsException("No Invite found", root_1.ErrorCode.INTERNAL_EXCEPTION);
+    }
+    const expires = new Date(new Date().getTime() + 3600 * 24 * 1000);
+    yield __1.prismaDB.invite.update({
+        where: {
+            id: invite === null || invite === void 0 ? void 0 : invite.id,
+        },
+        data: {
+            expires: expires,
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Invitation Resent",
+    });
+});
+exports.resendInvite = resendInvite;

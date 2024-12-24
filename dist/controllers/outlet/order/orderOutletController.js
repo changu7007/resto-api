@@ -158,7 +158,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
         (0, outlet_1.getOutletById)(outletId),
     ]);
     if (!(findUser === null || findUser === void 0 ? void 0 : findUser.id) || !(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
-        throw new not_found_1.NotFoundException("User or Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+        throw new not_found_1.NotFoundException("Unauthorized Access for this operation", root_1.ErrorCode.NOT_FOUND);
     }
     if (!validTypes.includes(orderType)) {
         throw new bad_request_1.BadRequestsException("Invalid Order Type", root_1.ErrorCode.UNPROCESSABLE_ENTITY);

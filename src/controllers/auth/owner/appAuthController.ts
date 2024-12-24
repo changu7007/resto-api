@@ -22,6 +22,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { differenceInDays } from "date-fns";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
+import { getOutletById } from "../../../lib/outlet";
 
 export type FUser = {
   id: string;
@@ -31,6 +32,7 @@ export type FUser = {
   phoneNo: string | null;
   image: string | null;
   role: "ADMIN";
+  favItems: string[];
   onboardingStatus: boolean;
   isSubscribed: boolean;
   isTwoFA: boolean;
@@ -79,6 +81,7 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
     image: findOwner?.image,
     role: findOwner?.role,
     isTwoFA: findOwner?.isTwoFactorEnabled,
+    favItems: findOwner?.favItems,
     onboardingStatus: findOwner?.onboardingStatus,
     isSubscribed: renewalDay > 0 ? true : false,
     subscriptions: findOwner?.billings.map((billing) => ({
@@ -138,6 +141,7 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
       role: user?.role,
       onboardingStatus: user?.onboardingStatus,
       isTwoFA: findOwner?.isTwoFactorEnabled,
+      favItems: findOwner?.favItems,
       isSubscribed: renewalDay > 0 ? true : false,
       subscriptions: user?.billings.map((billing) => ({
         id: billing.id,
@@ -207,7 +211,7 @@ export const OwnerLogin = async (req: Request, res: Response) => {
     role: findOwner?.role,
     onboardingStatus: findOwner?.onboardingStatus,
     isTwoFA: findOwner?.isTwoFactorEnabled,
-
+    favItems: findOwner?.favItems,
     isSubscribed: renewalDay > 0 ? true : false,
     subscriptions: findOwner?.billings.map((billing) => ({
       id: billing.id,
@@ -665,5 +669,199 @@ export const updateUserProfileDetails = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "Update Profile Success ✅",
+  });
+};
+
+export const InviteUserToDashboard = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { email, role } = req.body;
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // @ts-ignore
+  if (getOutlet?.adminId !== req.user?.id) {
+    throw new UnauthorizedException(
+      "Your not Authorized for this access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+  const token = uuidv4();
+  const expires = new Date(new Date().getTime() + 3600 * 24 * 1000);
+  const findInvite = await prismaDB.invite.findFirst({
+    where: {
+      email: email,
+    },
+  });
+
+  if (findInvite) {
+    throw new BadRequestsException(
+      "User has been Invited",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+
+  await prismaDB.invite.create({
+    data: {
+      email: email,
+      expires: expires,
+      role: role,
+      restaurantId: getOutlet.id,
+      invitedBy: getOutlet.adminId,
+      token: token,
+    },
+  });
+  return res.json({
+    success: true,
+    token: token,
+  });
+};
+
+export const getDashboardInvite = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const invites = await prismaDB.invite.findMany({
+    where: {
+      restaurantId: getOutlet.id,
+    },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      expires: true,
+      token: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  return res.json({
+    success: true,
+    invites: invites,
+  });
+};
+
+export const verifyInvite = async (req: Request, res: Response) => {
+  const { outletId, token } = req.params;
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException(
+      "No Outlet found for this Invite",
+      ErrorCode.OUTLET_NOT_FOUND
+    );
+  }
+
+  const getToken = await prismaDB.invite.findFirst({
+    where: {
+      token: token,
+      restaurantId: outletId,
+    },
+  });
+
+  if (!getToken) {
+    throw new NotFoundException(
+      "No Invitation found",
+      ErrorCode.OUTLET_NOT_FOUND
+    );
+  }
+
+  console.log("Now Date", new Date());
+  console.log("Expiry Date", new Date(getToken.expires));
+
+  const hasExpired = new Date() > new Date(getToken.expires);
+
+  if (hasExpired) {
+    throw new BadRequestsException(
+      "Token Expired",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const findUser = await prismaDB.user.findFirst({
+    where: {
+      email: getToken?.email,
+      restaurant: {
+        some: {
+          id: outletId,
+        },
+      },
+    },
+  });
+
+  if (findUser) {
+    throw new BadRequestsException(
+      "This user already has the access",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  await prismaDB.user.update({
+    where: {
+      email: getToken?.email,
+    },
+    data: {
+      restaurant: {
+        connect: { id: outletId },
+      },
+    },
+  });
+
+  await prismaDB.invite.update({
+    where: {
+      id: getToken?.id,
+    },
+    data: {
+      status: "ACCEPTED",
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "User Joining Success",
+  });
+};
+
+export const resendInvite = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { email } = req.body;
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const invite = await prismaDB.invite.findFirst({
+    where: {
+      email: email,
+    },
+  });
+
+  if (!invite) {
+    throw new BadRequestsException(
+      "No Invite found",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+  const expires = new Date(new Date().getTime() + 3600 * 24 * 1000);
+  await prismaDB.invite.update({
+    where: {
+      id: invite?.id,
+    },
+    data: {
+      expires: expires,
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Invitation Resent",
   });
 };

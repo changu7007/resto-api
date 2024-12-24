@@ -19,6 +19,7 @@ const bad_request_1 = require("../../../exceptions/bad-request");
 const redis_1 = require("../../../services/redis");
 const get_items_1 = require("../../../lib/outlet/get-items");
 const zod_1 = require("zod");
+const get_users_1 = require("../../../lib/get-users");
 const getAllItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const allItems = yield redis_1.redis.get(`${outletId}-all-items`);
@@ -550,11 +551,32 @@ const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, functio
     const { outletId } = req.params;
     // @ts-ignore
     const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
-    const findUser = yield __1.prismaDB.user.findFirst({
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const user = yield __1.prismaDB.user.findFirst({
         where: {
             id: userId,
         },
     });
+    if (!user) {
+        throw new bad_request_1.BadRequestsException("Admin Not found", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    // Check if the menu ID exists in favItems
+    const updatedFavItems = (user === null || user === void 0 ? void 0 : user.favItems.includes(id))
+        ? user.favItems.filter((favId) => favId !== id) // Remove the ID if present
+        : [...user.favItems, id]; // Add the ID if not present
+    // Update the favItems field
+    yield __1.prismaDB.user.update({
+        where: {
+            id: user.id,
+        },
+        data: {
+            favItems: updatedFavItems, // Directly set the updated array
+        },
+    });
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(user === null || user === void 0 ? void 0 : user.id);
     return res.json({
         success: true,
         message: "Added to favourites",

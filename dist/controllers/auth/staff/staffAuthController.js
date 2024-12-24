@@ -42,6 +42,7 @@ const staff_1 = require("../../../schema/staff");
 const not_found_1 = require("../../../exceptions/not-found");
 const jwt_1 = require("../../../services/jwt");
 const redis_1 = require("../../../services/redis");
+const get_users_1 = require("../../../lib/get-users");
 const StaffLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     staff_1.staffSchema.parse(req.body);
     const { email, password } = req.body;
@@ -56,7 +57,8 @@ const StaffLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     if (checkStaff.password !== password) {
         throw new bad_request_1.BadRequestsException("Incorrect Password", root_1.ErrorCode.INCORRECT_PASSWORD);
     }
-    (0, jwt_1.sendToken)(checkStaff, 200, res);
+    const formattedStaff = yield (0, get_users_1.getFormatStaffAndSendToRedis)(checkStaff.id);
+    (0, jwt_1.sendToken)(formattedStaff, 200, res);
 });
 exports.StaffLogin = StaffLogin;
 const GetStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {

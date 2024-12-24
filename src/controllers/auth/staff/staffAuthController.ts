@@ -9,6 +9,7 @@ import { NotFoundException } from "../../../exceptions/not-found";
 import { sendToken } from "../../../services/jwt";
 import { redis } from "../../../services/redis";
 import { Staff } from "@prisma/client";
+import { FStaff, getFormatStaffAndSendToRedis } from "../../../lib/get-users";
 
 export const StaffLogin = async (req: Request, res: Response) => {
   staffSchema.parse(req.body);
@@ -31,7 +32,9 @@ export const StaffLogin = async (req: Request, res: Response) => {
     );
   }
 
-  sendToken(checkStaff as Staff, 200, res);
+  const formattedStaff = await getFormatStaffAndSendToRedis(checkStaff.id);
+
+  sendToken(formattedStaff as FStaff, 200, res);
 };
 
 export const GetStaff = async (req: Request, res: Response) => {

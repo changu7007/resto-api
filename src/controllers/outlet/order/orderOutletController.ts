@@ -223,7 +223,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
 
   if (!findUser?.id || !getOutlet?.id) {
     throw new NotFoundException(
-      "User or Outlet Not Found",
+      "Unauthorized Access for this operation",
       ErrorCode.NOT_FOUND
     );
   }

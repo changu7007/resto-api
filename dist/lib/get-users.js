@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCustomerById = exports.getFormatUserAndSendToRedis = exports.getOwnerById = exports.getStaffById = exports.getOwnerUserByEmail = void 0;
+exports.getCustomerById = exports.getFormatStaffAndSendToRedis = exports.getFormatUserAndSendToRedis = exports.getOwnerById = exports.getStaffById = exports.getOwnerUserByEmail = void 0;
 const date_fns_1 = require("date-fns");
 const __1 = require("..");
 const utils_1 = require("./utils");
@@ -76,6 +76,7 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
         role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
         onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
         isSubscribed: renewalDay > 0 ? true : false,
+        favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
         isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
         subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
             id: billing.id,
@@ -100,6 +101,61 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
     return formatToSend;
 });
 exports.getFormatUserAndSendToRedis = getFormatUserAndSendToRedis;
+const getFormatStaffAndSendToRedis = (staffId) => __awaiter(void 0, void 0, void 0, function* () {
+    const findStaff = yield __1.prismaDB.staff.findFirst({
+        where: {
+            id: staffId,
+        },
+        include: {
+            restaurant: true,
+        },
+    });
+    if (!(findStaff === null || findStaff === void 0 ? void 0 : findStaff.id)) {
+        throw new not_found_1.NotFoundException("Staff not found", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const getOutlet = yield __1.prismaDB.restaurant.findFirst({
+        where: {
+            id: findStaff === null || findStaff === void 0 ? void 0 : findStaff.restaurantId,
+        },
+    });
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const findOwner = yield __1.prismaDB.user.findFirst({
+        where: {
+            id: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.adminId,
+        },
+        include: {
+            restaurant: true,
+            billings: true,
+        },
+    });
+    if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
+        throw new not_found_1.NotFoundException("Restaurant Owner not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
+    const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === findOwner.id
+        ? (0, utils_1.getDaysRemaining)(findSubscription.validDate)
+        : 0;
+    const formatToSend = {
+        id: findStaff === null || findStaff === void 0 ? void 0 : findStaff.id,
+        name: findStaff === null || findStaff === void 0 ? void 0 : findStaff.name,
+        email: findStaff === null || findStaff === void 0 ? void 0 : findStaff.email,
+        emailVerified: findStaff === null || findStaff === void 0 ? void 0 : findStaff.emailVerified,
+        phoneNo: findStaff === null || findStaff === void 0 ? void 0 : findStaff.phoneNo,
+        // image: findStaff?.image,
+        role: findStaff === null || findStaff === void 0 ? void 0 : findStaff.role,
+        // onboardingStatus: findStaff?.onboardingStatus,
+        isSubscribed: renewalDay > 0 ? true : false,
+        // isTwoFA: findStaff?.isTwoFactorEnabled,
+        toRenewal: renewalDay,
+        plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
+        restaurantId: findStaff === null || findStaff === void 0 ? void 0 : findStaff.restaurantId,
+    };
+    yield redis_1.redis.set(findStaff === null || findStaff === void 0 ? void 0 : findStaff.id, JSON.stringify(formatToSend));
+    return formatToSend;
+});
+exports.getFormatStaffAndSendToRedis = getFormatStaffAndSendToRedis;
 const getCustomerById = (id, outletId) => __awaiter(void 0, void 0, void 0, function* () {
     const customer = yield __1.prismaDB.customer.findFirst({
         where: {

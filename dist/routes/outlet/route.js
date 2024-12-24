@@ -19,6 +19,7 @@ const payrollController_1 = require("../../controllers/outlet/payroll/payrollCon
 const customerController_1 = require("../../controllers/outlet/customers/customerController");
 const planController_1 = require("../../controllers/outlet/plans/planController");
 const inventory_controller_1 = require("../../controllers/outlet/inventory/inventory-controller");
+const appAuthController_1 = require("../../controllers/auth/owner/appAuthController");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getStaffOutlet));
 outletRoute.get("/:outletId/get-razorpay-config", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getrazorpayConfig));
@@ -107,6 +108,7 @@ outletRoute.delete("/:outletId/delete-domain-settings/:siteId", auth_1.isAuthMid
 //payroll
 outletRoute.get("/:outletId/get-monthly-payroll", (0, error_handler_1.errorHandler)(payrollController_1.getThisMonthPayroll));
 outletRoute.patch("/:outletId/staff-payroll-status/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(payrollController_1.updatePayrollStatus));
+outletRoute.patch("/:outletId/bulk-payroll-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(payrollController_1.bulkUpdatePayrollStatus));
 //customers
 outletRoute.get("/:outletId/get-customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(customerController_1.getAllCustomer));
 //invoice
@@ -157,4 +159,8 @@ outletRoute.post("/:outletId/inventory/create-item-recipe", auth_1.isAuthMiddelw
 outletRoute.get("/:outletId/inventory/all-recipes", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllItemRecipe));
 outletRoute.get("/:outletId/inventory/get-recipe/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getRecipeById));
 outletRoute.patch("/:outletId/inventory/update-recipe/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateItemRecipe));
+outletRoute.post("/:outletId/post-invite-email", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.InviteUserToDashboard));
+outletRoute.get("/:outletId/get-invites", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.getDashboardInvite));
+outletRoute.get("/:outletId/verify-invite/:token", (0, error_handler_1.errorHandler)(appAuthController_1.verifyInvite));
+outletRoute.patch("/:outletId/update-expiry", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.resendInvite));
 exports.default = outletRoute;

@@ -328,6 +328,8 @@ export const getIntegration = async (req: Request, res: Response) => {
     },
   });
 
+  await fetchOutletByIdToRedis(outlet?.id);
+
   return res.json({
     success: true,
     integrations: getINtegrations,
@@ -354,6 +356,7 @@ export const createInvoiceDetails = async (req: Request, res: Response) => {
       prefix: isPrefix ? prefix : "",
     },
   });
+  await fetchOutletByIdToRedis(outlet?.id);
 
   return res.json({
     success: true,
@@ -383,6 +386,7 @@ export const updateInvoiceDetails = async (req: Request, res: Response) => {
       prefix: isPrefix ? prefix : "",
     },
   });
+  await fetchOutletByIdToRedis(outlet?.id);
 
   return res.json({
     success: true,

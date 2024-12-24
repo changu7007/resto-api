@@ -67,6 +67,23 @@ model Restaurant {
   notifications         Notification[]        @relation("RestaurantToNotification")
   orderSession          OrderSession[]        @relation("RestaurantToOrderSession")
   ItemRecipes           ItemRecipe[]          @relation("RestaurantToRecepies")
+  Invite                Invite[]
+}
+
+model Invite {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String   @db.ObjectId
+  email        String   @unique
+  status       String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  role         UserRole
+  token        String
+  expires      DateTime
+  invitedBy    String   @db.ObjectId // adminId of the inviter
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  admin      User       @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
 }
 
 model RazorpayIntegration {
@@ -143,6 +160,8 @@ enum OutletType {
 enum UserRole {
   ADMIN
   ACCOUNTANT
+  MANAGER
+  PARTNER
   WAITER
   CHEF
   CUSTOMER
@@ -160,6 +179,7 @@ model Staff {
   email         String         @unique
   emailVerified Boolean?
   password      String?
+  image         String?
   phoneNo       String         @unique
   role          UserRole
   restaurantId  String         @db.ObjectId
@@ -230,6 +250,7 @@ model User {
   accounts           Account[]              @relation("AccountToUser")
   sites              Site[]
   orderSession       OrderSession[]
+  Invite             Invite[]
 }
 
 model SubscriptionBilling {

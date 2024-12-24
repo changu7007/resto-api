@@ -14,6 +14,7 @@ import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import { getOAllItems } from "../../../lib/outlet/get-items";
 import { z } from "zod";
+import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
 
 export const getAllItem = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -687,11 +688,38 @@ export const addItemToUserFav = async (req: Request, res: Response) => {
   // @ts-ignore
   const userId = req?.user?.id;
 
-  const findUser = await prismaDB.user.findFirst({
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const user = await prismaDB.user.findFirst({
     where: {
       id: userId,
     },
   });
+
+  if (!user) {
+    throw new BadRequestsException("Admin Not found", ErrorCode.UNAUTHORIZED);
+  }
+
+  // Check if the menu ID exists in favItems
+  const updatedFavItems = user?.favItems.includes(id)
+    ? user.favItems.filter((favId) => favId !== id) // Remove the ID if present
+    : [...user.favItems, id]; // Add the ID if not present
+
+  // Update the favItems field
+  await prismaDB.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      favItems: updatedFavItems, // Directly set the updated array
+    },
+  });
+
+  await getFormatUserAndSendToRedis(user?.id);
 
   return res.json({
     success: true,

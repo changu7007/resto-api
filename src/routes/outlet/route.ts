@@ -99,6 +99,7 @@ import {
   updateStaff,
 } from "../../controllers/outlet/staffs/staffController";
 import {
+  bulkUpdatePayrollStatus,
   getThisMonthPayroll,
   updatePayrollStatus,
 } from "../../controllers/outlet/payroll/payrollController";
@@ -139,6 +140,12 @@ import {
   updateVendor,
   validatePurchasenRestock,
 } from "../../controllers/outlet/inventory/inventory-controller";
+import {
+  getDashboardInvite,
+  InviteUserToDashboard,
+  resendInvite,
+  verifyInvite,
+} from "../../controllers/auth/owner/appAuthController";
 
 const outletRoute: Router = Router();
 
@@ -486,7 +493,11 @@ outletRoute.patch(
   isAuthMiddelware,
   errorHandler(updatePayrollStatus)
 );
-
+outletRoute.patch(
+  "/:outletId/bulk-payroll-status",
+  isAuthMiddelware,
+  errorHandler(bulkUpdatePayrollStatus)
+);
 //customers
 outletRoute.get(
   "/:outletId/get-customers",
@@ -700,4 +711,20 @@ outletRoute.patch(
   errorHandler(updateItemRecipe)
 );
 
+outletRoute.post(
+  "/:outletId/post-invite-email",
+  isAuthMiddelware,
+  errorHandler(InviteUserToDashboard)
+);
+outletRoute.get(
+  "/:outletId/get-invites",
+  isAuthMiddelware,
+  errorHandler(getDashboardInvite)
+);
+outletRoute.get("/:outletId/verify-invite/:token", errorHandler(verifyInvite));
+outletRoute.patch(
+  "/:outletId/update-expiry",
+  isAuthMiddelware,
+  errorHandler(resendInvite)
+);
 export default outletRoute;

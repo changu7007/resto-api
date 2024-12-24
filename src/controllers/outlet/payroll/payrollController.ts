@@ -156,3 +156,38 @@ export const updatePayrollStatus = async (req: Request, res: Response) => {
     message: "Updated Payroll Status",
   });
 };
+
+export const bulkUpdatePayrollStatus = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const { selectedId } = req.body;
+  const outlet = await getOutletById(outletId);
+  console.log("Selected Ids", selectedId);
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Validate input
+  if (!Array.isArray(selectedId) || selectedId?.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "No payroll IDs provided for update.",
+    });
+  }
+
+  await prismaDB.payroll.updateMany({
+    where: {
+      id: {
+        in: selectedId,
+      },
+    },
+    data: {
+      status: "COMPLETED",
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Updated Payroll Status",
+  });
+};

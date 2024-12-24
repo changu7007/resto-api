@@ -10,6 +10,7 @@ import { Response } from "express";
 import { redis } from "./redis";
 import { FUser } from "../controllers/auth/owner/appAuthController";
 import { Customer } from "../controllers/auth/prime/authControl";
+import { FStaff } from "../lib/get-users";
 
 interface ITokenOptions {
   expires: Date;
@@ -37,7 +38,7 @@ export const refreshTokenOptions: ITokenOptions = {
 };
 
 export const sendToken = async (
-  user: Staff | FUser | Customer,
+  user: FStaff | FUser | Customer,
   statusCode: number,
   res: Response
 ) => {

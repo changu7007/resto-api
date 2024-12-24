@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updatePayrollStatus = exports.getThisMonthPayroll = void 0;
+exports.bulkUpdatePayrollStatus = exports.updatePayrollStatus = exports.getThisMonthPayroll = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -141,3 +141,34 @@ const updatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 });
 exports.updatePayrollStatus = updatePayrollStatus;
+const bulkUpdatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const { selectedId } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    console.log("Selected Ids", selectedId);
+    if (outlet === undefined || !outlet.id) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    // Validate input
+    if (!Array.isArray(selectedId) || (selectedId === null || selectedId === void 0 ? void 0 : selectedId.length) === 0) {
+        return res.status(400).json({
+            success: false,
+            message: "No payroll IDs provided for update.",
+        });
+    }
+    yield __1.prismaDB.payroll.updateMany({
+        where: {
+            id: {
+                in: selectedId,
+            },
+        },
+        data: {
+            status: "COMPLETED",
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Updated Payroll Status",
+    });
+});
+exports.bulkUpdatePayrollStatus = bulkUpdatePayrollStatus;
