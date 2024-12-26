@@ -191,6 +191,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
     adminId,
     username,
     isPaid,
+    isValid,
     phoneNo,
     orderType,
     totalNetPrice,
@@ -202,6 +203,13 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
     paymentMethod,
     orderMode,
   } = req.body;
+
+  if (isValid === true && !phoneNo) {
+    throw new BadRequestsException(
+      "please provide Phone No",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
 
   // Authorization and basic validation
   // @ts-ignore
@@ -257,6 +265,34 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
       : "FOODREADY";
 
   const result = await prismaDB.$transaction(async (prisma) => {
+    let customer;
+    if (isValid) {
+      customer = await prisma.customer.findFirst({
+        where: {
+          phoneNo: phoneNo,
+          restaurantId: getOutlet.id,
+        },
+      });
+      if (customer) {
+        customer = await prisma.customer.update({
+          where: {
+            id: customer.id,
+          },
+          data: {
+            restaurantId: getOutlet?.id,
+            name: username,
+          },
+        });
+      } else {
+        customer = await prisma.customer.create({
+          data: {
+            name: username,
+            phoneNo: phoneNo,
+            restaurantId: getOutlet.id,
+          },
+        });
+      }
+    }
     const orderSession = await prisma.orderSession.create({
       data: {
         active: isPaid === true && orderStatus === "COMPLETED" ? false : true,
@@ -273,6 +309,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         username: username ?? findUser.name,
         phoneNo: phoneNo ?? null,
         adminId: findUser.id,
+        customerId: isValid === true ? customer?.id : null,
         paymentMethod: isPaid ? paymentMethod : null,
         tableId: tableId,
         isPaid: isPaid,

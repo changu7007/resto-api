@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import {
   activeRequestsGauge,
+  histogram,
   httpRequestDurationMicroseconds,
   requestCounter,
 } from "./requestCount";
@@ -16,6 +17,8 @@ export const cleanupMiddleware = (
   res.on("finish", function () {
     const endTime = Date.now();
     const duration = endTime - startTime;
+
+    histogram.observe({}, duration);
 
     // Increment request counter
     requestCounter.inc({

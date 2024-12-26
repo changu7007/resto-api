@@ -2,6 +2,6 @@ global:
   scrape_interval: 15s # How frequently to scrape targets
 
 scrape_configs:
-  - job_name: "APi-SERVERS-NODEJS"
+  - job_name: "API-PROM"
     static_configs:
-      - targets: ["localhost:8080"]
+      - targets: ["192.168.1.5:8080"]
