@@ -8,6 +8,7 @@ const cleanupMiddleware = (req, res, next) => {
     res.on("finish", function () {
         const endTime = Date.now();
         const duration = endTime - startTime;
+        requestCount_1.histogram.observe({}, duration);
         // Increment request counter
         requestCount_1.requestCounter.inc({
             method: req.method,

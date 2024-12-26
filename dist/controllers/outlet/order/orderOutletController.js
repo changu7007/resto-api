@@ -144,7 +144,10 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     var _a;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { adminId, username, isPaid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, } = req.body;
+    const { adminId, username, isPaid, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, } = req.body;
+    if (isValid === true && !phoneNo) {
+        throw new bad_request_1.BadRequestsException("please provide Phone No", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     // Authorization and basic validation
     // @ts-ignore
     if (adminId !== ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
@@ -179,6 +182,35 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
             : "FOODREADY";
     const result = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
         var _b, _c, _d, _e;
+        let customer;
+        if (isValid) {
+            customer = yield prisma.customer.findFirst({
+                where: {
+                    phoneNo: phoneNo,
+                    restaurantId: getOutlet.id,
+                },
+            });
+            if (customer) {
+                customer = yield prisma.customer.update({
+                    where: {
+                        id: customer.id,
+                    },
+                    data: {
+                        restaurantId: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id,
+                        name: username,
+                    },
+                });
+            }
+            else {
+                customer = yield prisma.customer.create({
+                    data: {
+                        name: username,
+                        phoneNo: phoneNo,
+                        restaurantId: getOutlet.id,
+                    },
+                });
+            }
+        }
         const orderSession = yield prisma.orderSession.create({
             data: {
                 active: isPaid === true && orderStatus === "COMPLETED" ? false : true,
@@ -192,6 +224,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 username: username !== null && username !== void 0 ? username : findUser.name,
                 phoneNo: phoneNo !== null && phoneNo !== void 0 ? phoneNo : null,
                 adminId: findUser.id,
+                customerId: isValid === true ? customer === null || customer === void 0 ? void 0 : customer.id : null,
                 paymentMethod: isPaid ? paymentMethod : null,
                 tableId: tableId,
                 isPaid: isPaid,

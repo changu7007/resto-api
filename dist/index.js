@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.prismaDB = void 0;
+exports.prismaDB = exports.logger = void 0;
 const express_1 = __importDefault(require("express"));
 const secrets_1 = require("./secrets");
 const routes_1 = __importDefault(require("./routes"));
@@ -24,18 +24,29 @@ const morgan_1 = __importDefault(require("morgan"));
 const http_1 = __importDefault(require("http"));
 const ws_1 = require("./services/ws");
 const prom_client_1 = __importDefault(require("prom-client"));
+const winston_loki_1 = __importDefault(require("winston-loki"));
+const winston_1 = require("winston");
 const monitoring_1 = require("./monitoring");
+const options = {
+    transports: [
+        new winston_loki_1.default({
+            labels: { appName: "RB-API" },
+            host: "http://127.0.0.1:3100",
+        }),
+    ],
+};
+exports.logger = (0, winston_1.createLogger)(options);
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
 ws_1.websocketManager.initialize(server);
+app.use(monitoring_1.cleanupMiddleware);
 app.use((0, cors_1.default)({ origin: true, credentials: true }));
 app.use(express_1.default.json());
 app.use((0, cookie_parser_1.default)());
 app.use((0, morgan_1.default)("dev"));
 app.use("/api", routes_1.default);
-exports.prismaDB = new client_1.PrismaClient();
 app.use(errors_1.errorMiddelware);
-app.use(monitoring_1.cleanupMiddleware);
+exports.prismaDB = new client_1.PrismaClient();
 app.get("/health", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.json({
         success: true,
@@ -43,8 +54,8 @@ app.get("/health", (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     });
 }));
 app.get("/metrics", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    res.setHeader("Content-Type", prom_client_1.default.register.contentType);
     const metrics = yield prom_client_1.default.register.metrics();
-    res.set("Content-Type", prom_client_1.default.register.contentType);
-    res.end(metrics);
+    res.send(metrics);
 }));
 server.listen(secrets_1.PORT, () => console.log(`Main Server Working on PORT:${secrets_1.PORT}`));
