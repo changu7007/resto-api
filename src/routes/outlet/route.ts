@@ -26,6 +26,8 @@ import {
   getAllSessionOrders,
   getLiveOrders,
   getTodayOrdersCount,
+  orderessionBatchDelete,
+  orderessionDeleteById,
   orderessionPaymentModePatch,
   orderStatusPatch,
   postOrderForOwner,
@@ -262,6 +264,16 @@ outletRoute.patch(
   "/:outletId/orderSession/:orderSessionId",
   isAuthMiddelware,
   errorHandler(billingOrderSession)
+);
+outletRoute.delete(
+  "/:outletId/order-session-delete/:id",
+  isAuthMiddelware,
+  errorHandler(orderessionDeleteById)
+);
+outletRoute.patch(
+  "/:outletId/order-session-bulk-delete",
+  isAuthMiddelware,
+  errorHandler(orderessionBatchDelete)
 );
 outletRoute.get(
   "/:outletId/today-order-count",

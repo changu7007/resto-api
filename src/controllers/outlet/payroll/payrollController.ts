@@ -162,7 +162,7 @@ export const bulkUpdatePayrollStatus = async (req: Request, res: Response) => {
 
   const { selectedId } = req.body;
   const outlet = await getOutletById(outletId);
-  console.log("Selected Ids", selectedId);
+
   if (outlet === undefined || !outlet.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }

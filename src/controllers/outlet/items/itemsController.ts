@@ -704,10 +704,13 @@ export const addItemToUserFav = async (req: Request, res: Response) => {
     throw new BadRequestsException("Admin Not found", ErrorCode.UNAUTHORIZED);
   }
 
+  // Ensure favItems is an array
+  const favItems = Array.isArray(user.favItems) ? user.favItems : [];
+
   // Check if the menu ID exists in favItems
-  const updatedFavItems = user?.favItems?.includes(id)
-    ? user?.favItems?.filter((favId) => favId !== id) // Remove the ID if present
-    : [...user.favItems, id]; // Add the ID if not present
+  const updatedFavItems = favItems.includes(id)
+    ? favItems.filter((favId) => favId !== id) // Remove the ID if present
+    : [...favItems, id]; // Add the ID if not present
 
   // Update the favItems field
   await prismaDB.user.update({

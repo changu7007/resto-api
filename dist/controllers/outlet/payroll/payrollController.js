@@ -145,7 +145,6 @@ const bulkUpdatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, 
     const { outletId } = req.params;
     const { selectedId } = req.body;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
-    console.log("Selected Ids", selectedId);
     if (outlet === undefined || !outlet.id) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -25,6 +25,7 @@ const firebase_1 = require("../../../services/firebase");
 const get_items_1 = require("../../../lib/outlet/get-items");
 const orderSessionController_1 = require("./orderSession/orderSessionController");
 const date_fns_1 = require("date-fns");
+const unauthorized_1 = require("../../../exceptions/unauthorized");
 const getLiveOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisLiveOrder = yield redis_1.redis.get(`liv-o-${outletId}`);
@@ -1017,6 +1018,84 @@ const orderessionPaymentModePatch = (req, res) => __awaiter(void 0, void 0, void
     });
 });
 exports.orderessionPaymentModePatch = orderessionPaymentModePatch;
+const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _m;
+    const { id, outletId } = req.params;
+    // @ts-ignore
+    const userId = (_m = req === null || req === void 0 ? void 0 : req.user) === null || _m === void 0 ? void 0 : _m.id;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const getOrderById = yield (0, outlet_1.getOrderSessionById)(outlet === null || outlet === void 0 ? void 0 : outlet.id, id);
+    if (!(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.id)) {
+        throw new not_found_1.NotFoundException("No Order Session Found to Delete", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.orderSession.delete({
+        where: {
+            id: getOrderById.id,
+            restaurantId: outlet.id,
+        },
+    });
+    yield Promise.all([
+        (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
+        (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
+        (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
+        (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+    ]);
+    return res.json({
+        success: true,
+        message: "Order Transactiion Deleted ✅",
+    });
+});
+exports.orderessionDeleteById = orderessionDeleteById;
+const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _o;
+    const { outletId } = req.params;
+    const { selectedId } = req.body;
+    // @ts-ignore
+    const userId = (_o = req === null || req === void 0 ? void 0 : req.user) === null || _o === void 0 ? void 0 : _o.id;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    // Validate input
+    if (!Array.isArray(selectedId) || (selectedId === null || selectedId === void 0 ? void 0 : selectedId.length) === 0) {
+        return res.status(400).json({
+            success: false,
+            message: "Please select neccessarry Order Transaction",
+        });
+    }
+    yield __1.prismaDB.orderSession.deleteMany({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            id: {
+                in: selectedId,
+            },
+        },
+    });
+    yield Promise.all([
+        (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
+        (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
+        (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
+        (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+    ]);
+    return res.json({
+        success: true,
+        message: "Select Order Transaction Deleted ✅",
+    });
+});
+exports.orderessionBatchDelete = orderessionBatchDelete;
 const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { orderId, outletId } = req.params;
     const validTypes = Object.values(client_1.OrderStatus);
@@ -1057,7 +1136,7 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.orderStatusPatch = orderStatusPatch;
 const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _m;
+    var _p;
     const { outletId } = req.params;
     const redisOrderByStaff = yield redis_1.redis.get(`all-order-staff-${outletId}`);
     if (redisOrderByStaff) {
@@ -1072,7 +1151,7 @@ const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, funct
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     // @ts-ignore
-    const staff = yield (0, get_users_1.getStaffById)(outletId, (_m = req.user) === null || _m === void 0 ? void 0 : _m.id);
+    const staff = yield (0, get_users_1.getStaffById)(outletId, (_p = req.user) === null || _p === void 0 ? void 0 : _p.id);
     if (!(staff === null || staff === void 0 ? void 0 : staff.id)) {
         throw new not_found_1.NotFoundException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }

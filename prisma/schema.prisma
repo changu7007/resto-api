@@ -818,7 +818,7 @@ model selectedSizeVariant {
   netPrice      String?
   grossProfit   Float?
   orderItemId   String?    @unique @db.ObjectId
-  orderItem     OrderItem? @relation(fields: [orderItemId], references: [id])
+  orderItem     OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model AddOnSelected {

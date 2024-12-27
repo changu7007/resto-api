@@ -48,6 +48,8 @@ outletRoute.patch("/:outletId/app-add-orders/:orderId", auth_1.isAuthMiddelware,
 outletRoute.patch("/:outletId/order-session-update-payment/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderessionPaymentModePatch));
 outletRoute.patch("/:outletId/orders/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderStatusPatch));
 outletRoute.patch("/:outletId/orderSession/:orderSessionId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderSessionController_1.billingOrderSession));
+outletRoute.delete("/:outletId/order-session-delete/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderessionDeleteById));
+outletRoute.patch("/:outletId/order-session-bulk-delete", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderessionBatchDelete));
 outletRoute.get("/:outletId/today-order-count", (0, error_handler_1.errorHandler)(orderOutletController_1.getTodayOrdersCount));
 outletRoute.get("/:outletId/live-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getLiveOrders));
 outletRoute.get("/:outletId/all-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllOrders));

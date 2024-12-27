@@ -1,4 +1,9 @@
-import { OrderStatus, OrderType, PaymentMethod } from "@prisma/client";
+import {
+  OrderSessionStatus,
+  OrderStatus,
+  OrderType,
+  PaymentMethod,
+} from "@prisma/client";
 import { prismaDB } from "../../..";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
@@ -32,6 +37,7 @@ import {
   calculateTotalsForTakewayAndDelivery,
 } from "./orderSession/orderSessionController";
 import { getYear } from "date-fns";
+import { UnauthorizedException } from "../../../exceptions/unauthorized";
 
 export const getLiveOrders = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -1356,6 +1362,104 @@ export const orderessionPaymentModePatch = async (
   return res.json({
     success: true,
     message: "Payment Mode Updated ✅",
+  });
+};
+
+export const orderessionDeleteById = async (req: Request, res: Response) => {
+  const { id, outletId } = req.params;
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const getOrderById = await getOrderSessionById(outlet?.id, id);
+
+  if (!getOrderById?.id) {
+    throw new NotFoundException(
+      "No Order Session Found to Delete",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  await prismaDB.orderSession.delete({
+    where: {
+      id: getOrderById.id,
+      restaurantId: outlet.id,
+    },
+  });
+  await Promise.all([
+    getFetchActiveOrderSessionToRedis(outletId),
+    getFetchAllOrderSessionToRedis(outletId),
+    getFetchAllOrdersToRedis(outletId),
+    getFetchLiveOrderToRedis(outletId),
+    getFetchAllTablesToRedis(outletId),
+    getFetchAllAreastoRedis(outletId),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Order Transactiion Deleted ✅",
+  });
+};
+
+export const orderessionBatchDelete = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { selectedId } = req.body;
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  // Validate input
+  if (!Array.isArray(selectedId) || selectedId?.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Please select neccessarry Order Transaction",
+    });
+  }
+
+  await prismaDB.orderSession.deleteMany({
+    where: {
+      restaurantId: outlet?.id,
+      id: {
+        in: selectedId,
+      },
+    },
+  });
+
+  await Promise.all([
+    getFetchActiveOrderSessionToRedis(outletId),
+    getFetchAllOrderSessionToRedis(outletId),
+    getFetchAllOrdersToRedis(outletId),
+    getFetchLiveOrderToRedis(outletId),
+    getFetchAllTablesToRedis(outletId),
+    getFetchAllAreastoRedis(outletId),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Select Order Transaction Deleted ✅",
   });
 };
 
