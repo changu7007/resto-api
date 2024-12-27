@@ -546,7 +546,7 @@ const getMenuVariants = (req, res) => __awaiter(void 0, void 0, void 0, function
 });
 exports.getMenuVariants = getMenuVariants;
 const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b;
+    var _b, _c, _d;
     const { id } = req.body;
     const { outletId } = req.params;
     // @ts-ignore
@@ -564,8 +564,8 @@ const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, functio
         throw new bad_request_1.BadRequestsException("Admin Not found", root_1.ErrorCode.UNAUTHORIZED);
     }
     // Check if the menu ID exists in favItems
-    const updatedFavItems = (user === null || user === void 0 ? void 0 : user.favItems.includes(id))
-        ? user.favItems.filter((favId) => favId !== id) // Remove the ID if present
+    const updatedFavItems = ((_c = user === null || user === void 0 ? void 0 : user.favItems) === null || _c === void 0 ? void 0 : _c.includes(id))
+        ? (_d = user === null || user === void 0 ? void 0 : user.favItems) === null || _d === void 0 ? void 0 : _d.filter((favId) => favId !== id) // Remove the ID if present
         : [...user.favItems, id]; // Add the ID if not present
     // Update the favItems field
     yield __1.prismaDB.user.update({

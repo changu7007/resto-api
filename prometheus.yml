@@ -4,4 +4,4 @@ global:
 scrape_configs:
   - job_name: "API-PROM"
     static_configs:
-      - targets: ["192.168.1.5:8080"]
+      - targets: ["api.restobytes.in"]

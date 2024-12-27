@@ -118,6 +118,7 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
 
 export const getFetchAllOrderSessionToRedis = async (outletId: string) => {
   const activeOrders = await prismaDB.orderSession.findMany({
+    take: 150,
     where: {
       restaurantId: outletId,
     },
@@ -173,6 +174,7 @@ export const getFetchAllOrderSessionToRedis = async (outletId: string) => {
 
 export const getFetchAllOrdersToRedis = async (outletId: string) => {
   const getOrders = await prismaDB.order.findMany({
+    take: 150,
     where: {
       restaurantId: outletId,
     },

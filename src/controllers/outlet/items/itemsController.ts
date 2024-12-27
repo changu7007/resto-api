@@ -705,8 +705,8 @@ export const addItemToUserFav = async (req: Request, res: Response) => {
   }
 
   // Check if the menu ID exists in favItems
-  const updatedFavItems = user?.favItems.includes(id)
-    ? user.favItems.filter((favId) => favId !== id) // Remove the ID if present
+  const updatedFavItems = user?.favItems?.includes(id)
+    ? user?.favItems?.filter((favId) => favId !== id) // Remove the ID if present
     : [...user.favItems, id]; // Add the ID if not present
 
   // Update the favItems field

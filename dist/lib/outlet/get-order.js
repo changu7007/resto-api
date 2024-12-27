@@ -128,6 +128,7 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
 exports.getFetchActiveOrderSessionToRedis = getFetchActiveOrderSessionToRedis;
 const getFetchAllOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
     const activeOrders = yield __1.prismaDB.orderSession.findMany({
+        take: 150,
         where: {
             restaurantId: outletId,
         },
@@ -183,6 +184,7 @@ const getFetchAllOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0, v
 exports.getFetchAllOrderSessionToRedis = getFetchAllOrderSessionToRedis;
 const getFetchAllOrdersToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
     const getOrders = yield __1.prismaDB.order.findMany({
+        take: 150,
         where: {
             restaurantId: outletId,
         },
