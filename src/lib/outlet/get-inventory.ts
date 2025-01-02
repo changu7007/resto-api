@@ -48,3 +48,31 @@ export const fetchOutletRawMaterialUnitToRedis = async (outletId: string) => {
 
   return rawMaterialsUnit;
 };
+
+export const getfetchOutletStocksToRedis = async (outletId: string) => {
+  const rawMaterials = await prismaDB.rawMaterial.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    include: {
+      rawMaterialCategory: true,
+      consumptionUnit: true,
+      minimumStockUnit: true,
+    },
+  });
+
+  const formattedStocks = rawMaterials?.map((rawItem) => ({
+    id: rawItem?.id,
+    name: rawItem?.name,
+    consumptionUnit: rawItem.consumptionUnit.name,
+    stock: `${rawItem.currentStock?.toFixed(2)} - ${rawItem?.purchasedUnit}`,
+    purchasedPrice: rawItem?.purchasedPrice,
+    lastPurchasedPrice: rawItem?.lastPurchasedPrice,
+    purchasedPricePerItem: rawItem?.purchasedPricePerItem,
+    purchasedStock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
+    createdAt: rawItem.createdAt,
+  }));
+
+  await redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks));
+  return formattedStocks;
+};

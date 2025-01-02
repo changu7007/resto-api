@@ -38,7 +38,7 @@ const createPayrollForStaff = (staffId) => __awaiter(void 0, void 0, void 0, fun
         const staffPayrolll = yield __1.prismaDB.payroll.create({
             data: {
                 staffId: staff.id,
-                amountPaid: netPay.toString(),
+                amountPaid: netPay,
                 payFrequency: staff.payFrequency,
             },
         });

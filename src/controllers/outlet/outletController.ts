@@ -13,6 +13,7 @@ import { BadRequestsException } from "../../exceptions/bad-request";
 import { outletOnlinePortalSchema } from "../../schema/staff";
 import { getFetchAllNotificationToRedis } from "../../lib/outlet/get-items";
 import { UnauthorizedException } from "../../exceptions/unauthorized";
+import { getFormatUserAndSendToRedis } from "../../lib/get-users";
 
 export const getStaffOutlet = async (req: Request, res: Response) => {
   //@ts-ignore
@@ -448,6 +449,7 @@ export const deleteOutlet = async (req: Request, res: Response) => {
   });
 
   await redis.del(`O-${outletId}`);
+  await getFormatUserAndSendToRedis(userId);
 
   return res.json({ success: true, message: "Outlet Deleted" });
 };

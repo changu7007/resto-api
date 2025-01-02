@@ -95,7 +95,7 @@ export const getThisMonthPayroll = async (req: Request, res: Response) => {
     const newPayroll = await prismaDB.payroll.create({
       data: {
         staffId: staff.id,
-        amountPaid: "0",
+        amountPaid: netPay,
         payDate: new Date(startDate.getFullYear(), startDate.getMonth(), 27),
         payFrequency: staff.payFrequency,
       },
@@ -134,6 +134,9 @@ export const updatePayrollStatus = async (req: Request, res: Response) => {
     where: {
       id: id,
     },
+    include: {
+      staff: true,
+    },
   });
 
   if (findPayroll == null || !findPayroll.id) {
@@ -148,6 +151,7 @@ export const updatePayrollStatus = async (req: Request, res: Response) => {
       id: findPayroll.id,
     },
     data: {
+      amountPaid: parseFloat(findPayroll?.staff?.salary),
       status: status,
     },
   });

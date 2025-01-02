@@ -51,7 +51,6 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const __1 = require("../../..");
 const utils_1 = require("../../../lib/utils");
 const uuid_1 = require("uuid");
-const date_fns_1 = require("date-fns");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
 const outlet_1 = require("../../../lib/outlet");
 const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -61,50 +60,7 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
             providerAccountId: providerAccountId,
             email: email,
         },
-        include: {
-            restaurant: true,
-            billings: {
-                orderBy: {
-                    createdAt: "desc",
-                },
-            },
-        },
     });
-    const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
-    const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === (findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)
-        ? (0, utils_1.getDaysRemaining)(findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.validDate)
-        : 0;
-    const formatToSend = {
-        id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
-        name: findOwner === null || findOwner === void 0 ? void 0 : findOwner.name,
-        email: findOwner === null || findOwner === void 0 ? void 0 : findOwner.email,
-        emailVerified: findOwner === null || findOwner === void 0 ? void 0 : findOwner.emailVerified,
-        phoneNo: findOwner === null || findOwner === void 0 ? void 0 : findOwner.phoneNo,
-        image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
-        role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
-        isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
-        favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
-        onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
-        isSubscribed: renewalDay > 0 ? true : false,
-        subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
-            id: billing.id,
-            planName: billing.subscriptionPlan,
-            paymentId: billing.paymentId,
-            startDate: billing.subscribedDate,
-            validDate: billing.validDate,
-            amount: billing.paidAmount,
-            validityDays: (0, date_fns_1.differenceInDays)(new Date(billing.validDate), new Date(billing.subscribedDate)),
-            purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-            status: renewalDay === 0 ? "EXPIRED" : "VALID",
-        })),
-        toRenewal: renewalDay,
-        plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
-        outlets: findOwner === null || findOwner === void 0 ? void 0 : findOwner.restaurant.map((outlet) => ({
-            id: outlet.id,
-            name: outlet.name,
-            image: outlet.imageUrl,
-        })),
-    };
     if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
         const user = yield __1.prismaDB.user.create({
             data: {
@@ -119,45 +75,13 @@ const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function
                 billings: true,
             },
         });
-        const findSubscription = user === null || user === void 0 ? void 0 : user.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === user.id);
-        const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === user.id
-            ? (0, utils_1.getDaysRemaining)(findSubscription.validDate)
-            : 0;
-        const formatToSend = {
-            id: user === null || user === void 0 ? void 0 : user.id,
-            name: user === null || user === void 0 ? void 0 : user.name,
-            email: user === null || user === void 0 ? void 0 : user.email,
-            emailVerified: user === null || user === void 0 ? void 0 : user.emailVerified,
-            phoneNo: user === null || user === void 0 ? void 0 : user.phoneNo,
-            image: user === null || user === void 0 ? void 0 : user.image,
-            role: user === null || user === void 0 ? void 0 : user.role,
-            onboardingStatus: user === null || user === void 0 ? void 0 : user.onboardingStatus,
-            isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
-            favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
-            isSubscribed: renewalDay > 0 ? true : false,
-            subscriptions: user === null || user === void 0 ? void 0 : user.billings.map((billing) => ({
-                id: billing.id,
-                planName: billing.subscriptionPlan,
-                paymentId: billing.paymentId,
-                startDate: billing.subscribedDate,
-                validDate: billing.validDate,
-                amount: billing.paidAmount,
-                validityDays: (0, date_fns_1.differenceInDays)(new Date(billing.validDate), new Date(billing.subscribedDate)),
-                purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-                status: renewalDay === 0 ? "EXPIRED" : "VALID",
-            })),
-            toRenewal: renewalDay,
-            plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
-            outlets: user === null || user === void 0 ? void 0 : user.restaurant.map((outlet) => ({
-                id: outlet.id,
-                name: outlet.name,
-                image: outlet.imageUrl,
-            })),
-        };
+        const formatToSend = yield (0, get_users_1.getFormatUserAndSendToRedis)(user === null || user === void 0 ? void 0 : user.id);
         (0, jwt_1.sendToken)(formatToSend, 200, res);
     }
-    else
+    else {
+        const formatToSend = yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id);
         (0, jwt_1.sendToken)(formatToSend, 200, res);
+    }
 });
 exports.socialAuthLogin = socialAuthLogin;
 const OwnerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -171,47 +95,13 @@ const OwnerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     if (!isPassword) {
         throw new bad_request_1.BadRequestsException("Incorrect Password", root_1.ErrorCode.INCORRECT_PASSWORD);
     }
-    const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
-    const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === findOwner.id
-        ? (0, utils_1.getDaysRemaining)(findSubscription.validDate)
-        : 0;
-    const formatToSend = {
-        id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
-        name: findOwner === null || findOwner === void 0 ? void 0 : findOwner.name,
-        email: findOwner === null || findOwner === void 0 ? void 0 : findOwner.email,
-        emailVerified: findOwner === null || findOwner === void 0 ? void 0 : findOwner.emailVerified,
-        phoneNo: findOwner === null || findOwner === void 0 ? void 0 : findOwner.phoneNo,
-        image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
-        role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
-        onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
-        isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
-        favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
-        isSubscribed: renewalDay > 0 ? true : false,
-        subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
-            id: billing.id,
-            planName: billing.subscriptionPlan,
-            paymentId: billing.paymentId,
-            startDate: billing.subscribedDate,
-            validDate: billing.validDate,
-            amount: billing.paidAmount,
-            validityDays: (0, date_fns_1.differenceInDays)(new Date(billing.validDate), new Date(billing.subscribedDate)),
-            purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-            status: renewalDay === 0 ? "EXPIRED" : "VALID",
-        })),
-        toRenewal: renewalDay,
-        plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
-        outlets: findOwner === null || findOwner === void 0 ? void 0 : findOwner.restaurant.map((outlet) => ({
-            id: outlet.id,
-            name: outlet.name,
-            image: outlet.imageUrl,
-        })),
-    };
+    const formatToSend = yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id);
     (0, jwt_1.sendToken)(formatToSend, 200, res);
 });
 exports.OwnerLogin = OwnerLogin;
 const OwnerUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     // @ts-ignore
-    return res.json(req.user);
+    return res.json({ success: true, users: req === null || req === void 0 ? void 0 : req.user });
 });
 exports.OwnerUser = OwnerUser;
 const AppLogout = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -448,10 +338,6 @@ const getUserInfo = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     const findOwner = yield __1.prismaDB.user.findFirst({
         where: {
             id: userId,
-        },
-        include: {
-            restaurant: true,
-            billings: true,
         },
     });
     if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {

@@ -91,7 +91,7 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
         const newPayroll = yield __1.prismaDB.payroll.create({
             data: {
                 staffId: staff.id,
-                amountPaid: "0",
+                amountPaid: netPay,
                 payDate: new Date(startDate.getFullYear(), startDate.getMonth(), 27),
                 payFrequency: staff.payFrequency,
             },
@@ -113,6 +113,7 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.getThisMonthPayroll = getThisMonthPayroll;
 const updatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const { outletId, id } = req.params;
     const { status } = req.body;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -123,6 +124,9 @@ const updatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
         where: {
             id: id,
         },
+        include: {
+            staff: true,
+        },
     });
     if (findPayroll == null || !findPayroll.id) {
         throw new not_found_1.NotFoundException("Payroll Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -132,6 +136,7 @@ const updatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
             id: findPayroll.id,
         },
         data: {
+            amountPaid: parseFloat((_a = findPayroll === null || findPayroll === void 0 ? void 0 : findPayroll.staff) === null || _a === void 0 ? void 0 : _a.salary),
             status: status,
         },
     });

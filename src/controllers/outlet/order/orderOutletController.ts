@@ -38,6 +38,7 @@ import {
 } from "./orderSession/orderSessionController";
 import { getYear } from "date-fns";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
+import { getfetchOutletStocksToRedis } from "../../../lib/outlet/get-inventory";
 
 export const getLiveOrders = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -404,6 +405,47 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
       },
     });
 
+    // Update raw material stock if `chooseProfit` is "itemRecipe"
+    await Promise.all(
+      orderItems.map(async (item: any) => {
+        const menuItem = await prisma.menuItem.findUnique({
+          where: { id: item.menuId },
+          include: { itemRecipe: { include: { ingredients: true } } },
+        });
+
+        if (menuItem?.chooseProfit === "itemRecipe" && menuItem.itemRecipe) {
+          await Promise.all(
+            menuItem.itemRecipe.ingredients.map(async (ingredient) => {
+              const rawMaterial = await prisma.rawMaterial.findUnique({
+                where: { id: ingredient.rawMaterialId },
+              });
+
+              if (rawMaterial) {
+                const decrementStock =
+                  (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                  Number(rawMaterial.conversionFactor);
+
+                if (Number(rawMaterial.currentStock) < decrementStock) {
+                  throw new BadRequestsException(
+                    `Insufficient stock for raw material: ${rawMaterial.name}`,
+                    ErrorCode.UNPROCESSABLE_ENTITY
+                  );
+                }
+
+                await prisma.rawMaterial.update({
+                  where: { id: rawMaterial.id },
+                  data: {
+                    currentStock:
+                      Number(rawMaterial.currentStock) - Number(decrementStock),
+                  },
+                });
+              }
+            })
+          );
+        }
+      })
+    );
+
     if (tableId) {
       const table = await prisma.table.findFirst({
         where: { id: tableId, restaurantId: getOutlet.id },
@@ -454,6 +496,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
     getFetchAllTablesToRedis(outletId),
     getFetchAllAreastoRedis(outletId),
     getFetchAllNotificationToRedis(outletId),
+    getfetchOutletStocksToRedis(outletId),
   ]);
 
   websocketManager.notifyClients(getOutlet?.id, "NEW_ORDER_SESSION_CREATED");

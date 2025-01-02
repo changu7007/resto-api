@@ -45,6 +45,11 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
     },
     include: {
       restaurant: true,
+      restaurants: {
+        include: {
+          restaurant: true, // Fetch the restaurant details from the access relation
+        },
+      },
       billings: {
         orderBy: {
           createdAt: "desc",
@@ -56,6 +61,28 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
   if (!findOwner?.id) {
     throw new NotFoundException("User not found", ErrorCode.UNAUTHORIZED);
   }
+
+  // Combine owned and accessible restaurants
+  const ownedRestaurants = findOwner.restaurant.map((outlet) => ({
+    id: outlet.id,
+    name: outlet.name,
+    image: outlet.imageUrl,
+  }));
+
+  const accessibleRestaurants = findOwner.restaurants.map((access) => ({
+    id: access.restaurant.id,
+    name: access.restaurant.name,
+    image: access.restaurant.imageUrl,
+  }));
+
+  // Merge owned and accessible restaurants, removing duplicates
+  const allRestaurants = [
+    ...ownedRestaurants,
+    ...accessibleRestaurants.filter(
+      (accessible) =>
+        !ownedRestaurants.some((owned) => owned.id === accessible.id)
+    ),
+  ];
 
   const findSubscription = findOwner?.billings.find(
     (billing) => billing?.userId === findOwner.id
@@ -94,11 +121,7 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
     })),
     toRenewal: renewalDay,
     plan: findSubscription?.subscriptionPlan,
-    outlets: findOwner?.restaurant.map((outlet) => ({
-      id: outlet.id,
-      name: outlet.name,
-      image: outlet.imageUrl,
-    })),
+    outlets: allRestaurants,
   };
 
   await redis.set(userId, JSON.stringify(formatToSend));

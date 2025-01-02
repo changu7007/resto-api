@@ -52,6 +52,11 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
         },
         include: {
             restaurant: true,
+            restaurants: {
+                include: {
+                    restaurant: true, // Fetch the restaurant details from the access relation
+                },
+            },
             billings: {
                 orderBy: {
                     createdAt: "desc",
@@ -62,6 +67,22 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
     if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
         throw new not_found_1.NotFoundException("User not found", root_1.ErrorCode.UNAUTHORIZED);
     }
+    // Combine owned and accessible restaurants
+    const ownedRestaurants = findOwner.restaurant.map((outlet) => ({
+        id: outlet.id,
+        name: outlet.name,
+        image: outlet.imageUrl,
+    }));
+    const accessibleRestaurants = findOwner.restaurants.map((access) => ({
+        id: access.restaurant.id,
+        name: access.restaurant.name,
+        image: access.restaurant.imageUrl,
+    }));
+    // Merge owned and accessible restaurants, removing duplicates
+    const allRestaurants = [
+        ...ownedRestaurants,
+        ...accessibleRestaurants.filter((accessible) => !ownedRestaurants.some((owned) => owned.id === accessible.id)),
+    ];
     const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
     const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === findOwner.id
         ? (0, utils_1.getDaysRemaining)(findSubscription.validDate)
@@ -91,11 +112,7 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
         })),
         toRenewal: renewalDay,
         plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
-        outlets: findOwner === null || findOwner === void 0 ? void 0 : findOwner.restaurant.map((outlet) => ({
-            id: outlet.id,
-            name: outlet.name,
-            image: outlet.imageUrl,
-        })),
+        outlets: allRestaurants,
     };
     yield redis_1.redis.set(userId, JSON.stringify(formatToSend));
     return formatToSend;

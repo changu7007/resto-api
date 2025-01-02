@@ -19,6 +19,7 @@ const bad_request_1 = require("../../exceptions/bad-request");
 const staff_1 = require("../../schema/staff");
 const get_items_1 = require("../../lib/outlet/get-items");
 const unauthorized_1 = require("../../exceptions/unauthorized");
+const get_users_1 = require("../../lib/get-users");
 const getStaffOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     //@ts-ignore
@@ -370,6 +371,7 @@ const deleteOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         },
     });
     yield redis_1.redis.del(`O-${outletId}`);
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(userId);
     return res.json({ success: true, message: "Outlet Deleted" });
 });
 exports.deleteOutlet = deleteOutlet;

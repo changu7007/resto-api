@@ -140,15 +140,7 @@ const buyPlan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             validDate: validDate,
         },
     });
-    const user = yield __1.prismaDB.user.update({
-        where: {
-            id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
-        },
-        data: {
-            isFreeTrial: false,
-        },
-    });
-    yield (0, get_users_1.getFormatUserAndSendToRedis)(user === null || user === void 0 ? void 0 : user.id);
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id);
     return res.json({
         success: true,
         message: "Your Subscription is now Active",

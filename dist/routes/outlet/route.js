@@ -165,4 +165,8 @@ outletRoute.post("/:outletId/post-invite-email", auth_1.isAuthMiddelware, (0, er
 outletRoute.get("/:outletId/get-invites", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.getDashboardInvite));
 outletRoute.get("/:outletId/verify-invite/:token", (0, error_handler_1.errorHandler)(appAuthController_1.verifyInvite));
 outletRoute.patch("/:outletId/update-expiry", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.resendInvite));
+outletRoute.get("/:outletId/get-inventory-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.totalInventory));
+outletRoute.get("/:outletId/get-dashboard-metrics", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getDashboardMetrics));
+outletRoute.get("/:outletId/get-revenue-and-expenses", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getRevenueAndExpenses));
+outletRoute.get("/:outletId/get-financial", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getFinancialMetrics));
 exports.default = outletRoute;

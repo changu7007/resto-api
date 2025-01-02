@@ -562,6 +562,9 @@ export const getAllPurcahses = async (req: Request, res: Response) => {
         },
       },
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
   await redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases));
@@ -581,12 +584,12 @@ const purchaseRequestFormSchema = z.object({
       rawMaterialName: z.string().min(1, { message: "Raw Material Name" }),
       unitName: z.string().min(1, { message: "Unit Name is required" }),
       requestUnitId: z.string().min(1, { message: "Request Unit is Required" }),
-      requestQuantity: z
-        .string()
+      requestQuantity: z.coerce
+        .number()
         .min(1, { message: "Request Quantity is Required" }),
-      sgst: z.string().optional(),
-      cgst: z.string().optional(),
-      total: z.string().optional(),
+      sgst: z.coerce.number().optional(),
+      cgst: z.coerce.number().optional(),
+      total: z.coerce.number().optional(),
     })
   ),
 });
@@ -609,6 +612,8 @@ export const createRequestPurchase = async (req: Request, res: Response) => {
   const outlet = await getOutletById(outletId);
   // @ts-ignore
   let userId = req.user.id;
+  // @ts-ignore
+  const username = `${req?.user?.name}-(${req?.user?.role})`;
 
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
@@ -634,42 +639,50 @@ export const createRequestPurchase = async (req: Request, res: Response) => {
 
   const invoiceNo = await generatePurchaseNo(outlet.id);
 
-  await prismaDB.purchase.create({
-    data: {
-      invoiceNo: invoiceNo,
-      restaurantId: outlet.id,
-      vendorId: findVendor.id,
-      isPaid: false,
-      purchaseItems: {
-        create: validateFields.rawMaterials.map((item) => ({
-          rawMaterialId: item?.rawMaterialId,
-          rawMaterialName: item.rawMaterialName,
-          purchaseQuantity: item.requestQuantity,
-          purchaseUnitId: item.requestUnitId,
-          purchaseUnitName: item.unitName,
-          sgst: item.sgst,
-          cgst: item.cgst,
-          purchasePrice: item.total,
-        })),
-      },
-    },
-  });
-
-  const allPurchases = await prismaDB.purchase.findMany({
-    where: {
-      restaurantId: outlet?.id,
-    },
-    include: {
-      purchaseItems: {
-        include: {
-          purchaseUnit: true,
-          rawMaterial: true,
+  await prismaDB.$transaction(async (prisma) => {
+    const purchase = await prismaDB.purchase.create({
+      data: {
+        invoiceNo: invoiceNo,
+        restaurantId: outlet.id,
+        vendorId: findVendor.id,
+        createdBy: username,
+        isPaid: false,
+        purchaseItems: {
+          create: validateFields.rawMaterials.map((item) => ({
+            rawMaterialId: item?.rawMaterialId,
+            rawMaterialName: item?.rawMaterialName,
+            purchaseQuantity: item?.requestQuantity,
+            purchaseUnitId: item?.requestUnitId,
+            purchaseUnitName: item?.unitName,
+            sgst: item?.sgst,
+            cgst: item?.cgst,
+            purchasePrice: item?.total,
+          })),
         },
       },
-    },
-  });
+    });
 
-  await redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases));
+    if (purchase?.id) {
+      const allPurchases = await prismaDB.purchase.findMany({
+        where: {
+          restaurantId: outlet?.id,
+        },
+        include: {
+          purchaseItems: {
+            include: {
+              purchaseUnit: true,
+              rawMaterial: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      await redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases));
+    }
+  });
   return res.json({
     success: true,
     message: "Request Purchase Created",
@@ -823,6 +836,7 @@ export const updateRequestPurchase = async (req: Request, res: Response) => {
     message: "Request Purchase Created",
   });
 };
+
 export const deleteRequestPurchase = async (req: Request, res: Response) => {
   const { outletId, id } = req.params;
 
@@ -899,11 +913,13 @@ const validatePurchaseSchema = z.object({
           .string()
           .min(1, { message: "Request Unit is Required" }),
 
-        requestQuantity: z
-          .string()
-          .min(1, { message: "Request Quantity is Required" }),
-        gst: z.string(),
-        total: z.string().min(1, { message: "Purchase price is required" }),
+        requestQuantity: z.coerce
+          .number()
+          .min(0, { message: "Request Quantity is Required" }),
+        gst: z.coerce.number(),
+        total: z.coerce
+          .number()
+          .min(0, { message: "Purchase price is required" }),
       })
     )
     .min(1, { message: "Atleast 1 Raw Material you need to request" }),
@@ -912,9 +928,9 @@ const validatePurchaseSchema = z.object({
   chooseInvoice: z.enum(["generateInvoice", "uploadInvoice"], {
     required_error: "You need to select a invoice type.",
   }),
-  totalTaxes: z.string().min(1, { message: "taxes invalid" }),
-  subTotal: z.string().min(1, { message: "taxes invalid" }),
-  total: z.string().min(1, { message: "total required" }),
+  totalTaxes: z.coerce.number().min(0, { message: "taxes invalid" }),
+  subTotal: z.coerce.number().min(0, { message: "taxes invalid" }),
+  total: z.coerce.number().min(0, { message: "total required" }),
   paymentMethod: z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
     required_error: "Settlement Payment Method Required.",
   }),
@@ -923,7 +939,6 @@ const validatePurchaseSchema = z.object({
 export const validatePurchasenRestock = async (req: Request, res: Response) => {
   const { outletId, id } = req.params;
 
-  // const validateFields
   const { data: validateFields, error } = validatePurchaseSchema.safeParse(
     req.body
   );
@@ -937,7 +952,7 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
 
   const outlet = await getOutletById(outletId);
   // @ts-ignore
-  let userId = req.user.id;
+  let userId = req.user?.id;
 
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
@@ -952,14 +967,14 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
 
   const findPurchase = await prismaDB.purchase.findFirst({
     where: {
-      id: id,
+      id,
       restaurantId: outlet?.id,
     },
   });
 
   if (!findPurchase?.id) {
     throw new NotFoundException(
-      "Purchase Not found to Validate",
+      "Purchase Not Found to Validate",
       ErrorCode.NOT_FOUND
     );
   }
@@ -972,51 +987,180 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
   });
 
   if (!findVendor?.id) {
-    throw new NotFoundException("Vendor Not found", ErrorCode.NOT_FOUND);
+    throw new NotFoundException("Vendor Not Found", ErrorCode.NOT_FOUND);
   }
 
-  const updatePurchase = await prismaDB.purchase.update({
-    where: {
-      id: findPurchase?.id,
-      restaurantId: outlet?.id,
-    },
-    data: {
-      isPaid: validateFields?.paymentMethod === undefined ? false : true,
-      paymentMethod: validateFields?.paymentMethod,
-      billImageUrl: validateFields?.billImage,
-      invoiceType: validateFields?.chooseInvoice,
-      subTotal: validateFields?.subTotal,
-      taxes: validateFields?.totalTaxes,
-      totalAmount: validateFields?.total,
-      purchaseStatus: "COMPLETED",
-      purchaseItems: {
-        update: validateFields?.rawMaterials?.map((item) => ({
+  const transaction = await prismaDB.$transaction(async (prisma) => {
+    // Step 1: Restock raw materials and update `RecipeIngredient` costs
+    await Promise.all(
+      validateFields?.rawMaterials?.map(async (item) => {
+        const rawMaterial = await prisma.rawMaterial.findFirst({
           where: {
-            id: item?.id,
-            purchaseId: validateFields?.id,
+            id: item.rawMaterialId,
+            restaurantId: outlet?.id,
+          },
+          include: {
+            RecipeIngredient: true,
+          },
+        });
+
+        if (rawMaterial) {
+          const newStock =
+            Number(rawMaterial?.currentStock ?? 0) + item?.requestQuantity;
+          const newPricePerItem =
+            Number(item.total) / Number(item.requestQuantity);
+
+          await prisma.rawMaterial.update({
+            where: {
+              id: rawMaterial.id,
+            },
+            data: {
+              currentStock: newStock,
+              purchasedPrice: item.total,
+              purchasedPricePerItem: newPricePerItem,
+              purchasedUnit: item.unitName,
+              lastPurchasedPrice: rawMaterial?.purchasedPrice ?? 0,
+              purchasedStock: newStock,
+            },
+          });
+
+          const findRecipeIngredients = await prisma.recipeIngredient.findFirst(
+            {
+              where: {
+                rawMaterialId: rawMaterial?.id,
+              },
+            }
+          );
+          if (findRecipeIngredients) {
+            const recipeCostWithQuantity =
+              Number(findRecipeIngredients?.quantity) /
+              Number(rawMaterial?.conversionFactor);
+            const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+            // Update linked `RecipeIngredient` cost
+            await prisma.recipeIngredient.updateMany({
+              where: {
+                rawMaterialId: rawMaterial.id,
+              },
+              data: {
+                cost: ingredientCost,
+              },
+            });
+          }
+        }
+      })
+    );
+
+    // Step 2: Recalculate `ItemRecipe` gross margin and related fields
+    const recipesToUpdate = await prisma.itemRecipe.findMany({
+      where: {
+        restaurantId: outlet.id,
+      },
+      include: {
+        ingredients: {
+          include: {
+            rawMaterial: true,
+          },
+        },
+      },
+    });
+
+    await Promise.all(
+      recipesToUpdate.map(async (recipe) => {
+        const totalCost = recipe.ingredients.reduce(
+          (sum, ingredient) =>
+            sum +
+            (Number(ingredient.quantity) /
+              Number(ingredient?.rawMaterial?.conversionFactor)) *
+              Number(ingredient?.rawMaterial?.purchasedPricePerItem),
+          0
+        );
+        const grossMargin = Number(recipe.itemPrice as number) - totalCost;
+
+        await prisma.itemRecipe.update({
+          where: {
+            id: recipe.id,
           },
           data: {
-            cgst: (parseFloat(item.gst) / 2).toString(),
-            sgst: (parseFloat(item.gst) / 2).toString(),
-            purchasePrice: item?.total,
-            rawMaterial: {
-              update: {
-                purchasedPrice: item?.total,
-                purchasedUnit: item?.unitName,
-                purchasedStock: item?.requestQuantity,
-                purchasedPricePerItem: (
-                  parseFloat(item?.total) / parseFloat(item?.requestQuantity)
-                ).toString(),
-                currentStock: item?.requestQuantity,
-              },
-            },
+            itemCost: totalCost,
+            grossMargin,
           },
-        })),
+        });
+
+        // Update linked entities
+        if (recipe.menuId) {
+          await prisma.menuItem.update({
+            where: {
+              id: recipe.menuId,
+              restaurantId: outlet.id,
+            },
+            data: {
+              grossProfit: grossMargin,
+            },
+          });
+        }
+
+        if (recipe.menuVariantId) {
+          await prisma.menuItemVariant.update({
+            where: {
+              id: recipe.menuVariantId,
+              restaurantId: outlet.id,
+            },
+            data: {
+              grossProfit: grossMargin,
+            },
+          });
+        }
+
+        if (recipe.addonItemVariantId) {
+          await prisma.addOnVariants.update({
+            where: {
+              id: recipe.addonItemVariantId,
+              restaurantId: outlet.id,
+            },
+            data: {
+              grossProfit: grossMargin,
+            },
+          });
+        }
+      })
+    );
+
+    // Step 3: Update purchase details
+    const updatePurchase = await prisma.purchase.update({
+      where: {
+        id: findPurchase?.id,
+        restaurantId: outlet?.id,
       },
-    },
+      data: {
+        isPaid: validateFields?.paymentMethod !== undefined,
+        paymentMethod: validateFields?.paymentMethod,
+        billImageUrl: validateFields?.billImage,
+        invoiceType: validateFields?.chooseInvoice,
+        subTotal: validateFields?.subTotal,
+        taxes: validateFields?.totalTaxes,
+        totalAmount: validateFields?.total,
+        purchaseStatus: "COMPLETED",
+        purchaseItems: {
+          update: validateFields?.rawMaterials?.map((item) => ({
+            where: {
+              id: item?.id,
+              purchaseId: validateFields?.id,
+            },
+            data: {
+              cgst: item.gst / 2,
+              sgst: item.gst / 2,
+              purchasePrice: item?.total,
+            },
+          })),
+        },
+      },
+    });
+
+    return updatePurchase;
   });
 
-  if (updatePurchase?.id) {
+  if (transaction?.id) {
+    // Step 4: Refresh Redis cache
     const allPurchases = await prismaDB.purchase.findMany({
       where: {
         restaurantId: outlet?.id,
@@ -1029,7 +1173,11 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
           },
         },
       },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
+
     const rawMaterials = await prismaDB.rawMaterial.findMany({
       where: {
         restaurantId: outlet?.id,
@@ -1047,6 +1195,8 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
       consumptionUnit: rawItem.consumptionUnit.name,
       stock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
       purchasedPrice: rawItem?.purchasedPrice,
+      lastPurchasedPrice: rawItem?.lastPurchasedPrice,
+      purchasedPricePerItem: rawItem?.purchasedPricePerItem,
       purchasedStock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
       createdAt: rawItem.createdAt,
     }));
@@ -1059,7 +1209,7 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      message: "Purchase Validated & Restocked",
+      message: "Purchase Validated, Restocked, and Recipes Updated",
     });
   }
 };
@@ -1329,6 +1479,8 @@ export const allStocks = async (req: Request, res: Response) => {
     consumptionUnit: rawItem.consumptionUnit.name,
     stock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
     purchasedPrice: rawItem?.purchasedPrice,
+    lastPurchasedPrice: rawItem?.lastPurchasedPrice,
+    purchasedPricePerItem: rawItem?.purchasedPricePerItem,
     purchasedStock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
     createdAt: rawItem.createdAt,
   }));
@@ -1396,27 +1548,44 @@ export const createItemRecipe = async (req: Request, res: Response) => {
   const { outletId } = req.params;
   const outlet = await getOutletById(outletId);
 
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException("Unauthorized", ErrorCode.UNAUTHORIZED);
+  }
+
+  const findUser = await prismaDB.user.findFirst({
+    where: {
+      id: userId,
+    },
+  });
+
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
   const validateFields = recipeSchema.parse(req.body);
 
-  await prismaDB.itemRecipe.create({
+  const itemRecipe = await prismaDB.itemRecipe.create({
     data: {
       restaurantId: outlet?.id,
       recipeFor: validateFields?.recipeFor,
       recipeType: validateFields?.recipeType,
+      createdBy: `${findUser?.name} (${findUser?.role})`,
+      lastModifiedBy: `${findUser?.name} (${findUser?.role})`,
       menuId:
         validateFields?.recipeFor === "MENU_ITEMS"
           ? validateFields?.itemId
-          : null,
+          : undefined,
       menuVariantId:
         validateFields?.recipeFor === "MENU_VARIANTS"
           ? validateFields?.itemId
-          : null,
+          : undefined,
       addonItemVariantId:
-        validateFields?.recipeFor === "ADD_ONS" ? validateFields?.itemId : null,
+        validateFields?.recipeFor === "ADD_ONS"
+          ? validateFields?.itemId
+          : undefined,
       ingredients: {
         create: validateFields?.ingredients?.map((ingredient) => ({
           rawMaterialId: ingredient?.rawMaterialId,
@@ -1439,6 +1608,9 @@ export const createItemRecipe = async (req: Request, res: Response) => {
       },
       data: {
         chooseProfit: "itemRecipe",
+        grossProfitPer: null,
+        grossProfitType: null,
+        itemRecipeId: itemRecipe?.id,
         grossProfit: validateFields?.grossProfit,
       },
     });
@@ -1452,6 +1624,25 @@ export const createItemRecipe = async (req: Request, res: Response) => {
       },
       data: {
         chooseProfit: "itemRecipe",
+        grossProfitPer: null,
+        grossProfitType: null,
+        itemRecipeId: itemRecipe?.id,
+        grossProfit: validateFields?.grossProfit,
+      },
+    });
+  }
+
+  if (validateFields.recipeFor === "ADD_ONS" && validateFields.itemId) {
+    await prismaDB.addOnVariants.update({
+      where: {
+        id: validateFields?.itemId,
+        restaurantId: outlet?.id,
+      },
+      data: {
+        chooseProfit: "itemRecipe",
+        grossProfitPer: null,
+        grossProfitType: null,
+        itemRecipeId: itemRecipe?.id,
         grossProfit: validateFields?.grossProfit,
       },
     });
@@ -1468,6 +1659,19 @@ export const createItemRecipe = async (req: Request, res: Response) => {
 export const updateItemRecipe = async (req: Request, res: Response) => {
   const { outletId, id } = req.params;
   const outlet = await getOutletById(outletId);
+
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException("Unauthorized", ErrorCode.UNAUTHORIZED);
+  }
+
+  const findUser = await prismaDB.user.findFirst({
+    where: {
+      id: userId,
+    },
+  });
 
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
@@ -1512,6 +1716,7 @@ export const updateItemRecipe = async (req: Request, res: Response) => {
         restaurantId: outlet?.id,
         recipeFor: validateFields?.recipeFor,
         recipeType: validateFields?.recipeType,
+        lastModifiedBy: `${findUser?.name} (${findUser?.role})`,
         menuId:
           validateFields?.recipeFor === "MENU_ITEMS"
             ? validateFields?.itemId
@@ -1538,6 +1743,9 @@ export const updateItemRecipe = async (req: Request, res: Response) => {
         },
         data: {
           chooseProfit: "itemRecipe",
+          grossProfitPer: null,
+          grossProfitType: null,
+          itemRecipeId: findRecipe?.id,
           grossProfit: validateFields?.grossProfit,
         },
       });
@@ -1551,6 +1759,9 @@ export const updateItemRecipe = async (req: Request, res: Response) => {
         },
         data: {
           chooseProfit: "itemRecipe",
+          grossProfitPer: null,
+          grossProfitType: null,
+          itemRecipeId: findRecipe?.id,
           grossProfit: validateFields?.grossProfit,
         },
       });
@@ -1632,6 +1843,7 @@ export const getAllItemRecipe = async (req: Request, res: Response) => {
       menuItemVariant: {
         include: {
           menuItem: true,
+          variant: true,
         },
       },
     },
@@ -1649,10 +1861,17 @@ export const getAllItemRecipe = async (req: Request, res: Response) => {
         : item?.addonItemVariantId,
     name:
       item?.recipeFor === "MENU_ITEMS"
-        ? item?.menuItem?.name
+        ? item?.menuItem?.find((me) => me?.id === item?.menuId)?.name
         : item?.recipeFor === "MENU_VARIANTS"
-        ? `${item?.menuItemVariant?.menuItem?.name} - ${item?.addOnItemVariant?.name}`
-        : item?.addOnItemVariant?.name,
+        ? `${
+            item?.menuItemVariant?.find((v) => v.id === item?.menuVariantId)
+              ?.menuItem?.name
+          } - ${
+            item?.menuItemVariant?.find((v) => v.id === item?.menuVariantId)
+              ?.variant?.name
+          }`
+        : item?.addOnItemVariant?.find((a) => a.id === item?.addonItemVariantId)
+            ?.name,
     grossMargin: item?.grossMargin,
     itemPrice: item?.itemPrice,
     itemCost: item?.itemCost,
@@ -1665,7 +1884,7 @@ export const getAllItemRecipe = async (req: Request, res: Response) => {
       cost: ing?.cost,
       quanity: ing?.quantity,
     })),
-    createdBy: "admin",
+    createdBy: item.createdBy,
     createdAt: item?.createdAt,
   }));
   return res.json({

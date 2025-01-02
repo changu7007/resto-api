@@ -26,6 +26,7 @@ const get_items_1 = require("../../../lib/outlet/get-items");
 const orderSessionController_1 = require("./orderSession/orderSessionController");
 const date_fns_1 = require("date-fns");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
+const get_inventory_1 = require("../../../lib/outlet/get-inventory");
 const getLiveOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisLiveOrder = yield redis_1.redis.get(`liv-o-${outletId}`);
@@ -300,6 +301,33 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 },
             },
         });
+        // Update raw material stock if `chooseProfit` is "itemRecipe"
+        yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            const menuItem = yield prisma.menuItem.findUnique({
+                where: { id: item.menuId },
+                include: { itemRecipe: { include: { ingredients: true } } },
+            });
+            if ((menuItem === null || menuItem === void 0 ? void 0 : menuItem.chooseProfit) === "itemRecipe" && menuItem.itemRecipe) {
+                yield Promise.all(menuItem.itemRecipe.ingredients.map((ingredient) => __awaiter(void 0, void 0, void 0, function* () {
+                    const rawMaterial = yield prisma.rawMaterial.findUnique({
+                        where: { id: ingredient.rawMaterialId },
+                    });
+                    if (rawMaterial) {
+                        const decrementStock = (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                            Number(rawMaterial.conversionFactor);
+                        if (Number(rawMaterial.currentStock) < decrementStock) {
+                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                        }
+                        yield prisma.rawMaterial.update({
+                            where: { id: rawMaterial.id },
+                            data: {
+                                currentStock: Number(rawMaterial.currentStock) - Number(decrementStock),
+                            },
+                        });
+                    }
+                })));
+            }
+        })));
         if (tableId) {
             const table = yield prisma.table.findFirst({
                 where: { id: tableId, restaurantId: getOutlet.id },
@@ -345,6 +373,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
         (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
         (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
         (0, get_items_1.getFetchAllNotificationToRedis)(outletId),
+        (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId),
     ]);
     ws_1.websocketManager.notifyClients(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id, "NEW_ORDER_SESSION_CREATED");
     return res.json({

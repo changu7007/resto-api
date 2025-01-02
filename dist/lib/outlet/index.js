@@ -204,6 +204,7 @@ const getItemByOutletId = (outletId, itemId) => __awaiter(void 0, void 0, void 0
             images: true,
             menuItemVariants: true,
             menuGroupAddOns: true,
+            itemRecipe: true,
         },
     });
     return getItem;

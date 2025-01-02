@@ -83,10 +83,14 @@ import {
 import { s3Upload } from "../../controllers/s3Upload";
 import {
   cashFlowStats,
+  getDashboardMetrics,
+  getFinancialMetrics,
+  getRevenueAndExpenses,
   lastSixMonthsOrders,
   orderStatsForOutlet,
   orderStatsForOutletByStaff,
   outletTopSellingItems,
+  totalInventory,
 } from "../../controllers/outlet/stats/statsController";
 import {
   createSubDomain,
@@ -738,5 +742,26 @@ outletRoute.patch(
   "/:outletId/update-expiry",
   isAuthMiddelware,
   errorHandler(resendInvite)
+);
+
+outletRoute.get(
+  "/:outletId/get-inventory-stats",
+  isAuthMiddelware,
+  errorHandler(totalInventory)
+);
+outletRoute.get(
+  "/:outletId/get-dashboard-metrics",
+  isAuthMiddelware,
+  errorHandler(getDashboardMetrics)
+);
+outletRoute.get(
+  "/:outletId/get-revenue-and-expenses",
+  isAuthMiddelware,
+  errorHandler(getRevenueAndExpenses)
+);
+outletRoute.get(
+  "/:outletId/get-financial",
+  isAuthMiddelware,
+  errorHandler(getFinancialMetrics)
 );
 export default outletRoute;

@@ -26,10 +26,12 @@ export const rawMaterialSchema = z.object({
   name: z.string().min(1, "Name is required"),
   barcode: z.string().min(1, "ShortCode / Barcode is required"),
   categoryId: z.string().min(1, "Category is required"),
-  conversionFactor: z.string().min(1, "Conversion Factor is required"),
+  conversionFactor: z.coerce.number().min(0, "Conversion Factor is required"),
   consumptionUnitId: z.string().min(1, "Consumption unit is required"),
   minimumStockLevelUnitId: z
     .string()
     .min(1, "Minimum stock level unit is required"),
-  minimumStockLevel: z.string().min(1, "Minimum stock level is required"),
+  minimumStockLevel: z.coerce
+    .number()
+    .min(0, "Minimum stock level is required"),
 });

@@ -146,15 +146,7 @@ export const buyPlan = async (req: Request, res: Response) => {
     },
   });
 
-  const user = await prismaDB.user.update({
-    where: {
-      id: findOwner?.id,
-    },
-    data: {
-      isFreeTrial: false,
-    },
-  });
-  await getFormatUserAndSendToRedis(user?.id);
+  await getFormatUserAndSendToRedis(findOwner?.id);
 
   return res.json({
     success: true,

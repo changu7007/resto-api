@@ -225,6 +225,7 @@ export const getItemByOutletId = async (outletId: string, itemId: string) => {
       images: true,
       menuItemVariants: true,
       menuGroupAddOns: true,
+      itemRecipe: true,
     },
   });
 

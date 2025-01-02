@@ -34,7 +34,7 @@ export const createPayrollForStaff = async (staffId: string) => {
     const staffPayrolll = await prismaDB.payroll.create({
       data: {
         staffId: staff.id,
-        amountPaid: netPay.toString(),
+        amountPaid: netPay,
         payFrequency: staff.payFrequency,
       },
     });

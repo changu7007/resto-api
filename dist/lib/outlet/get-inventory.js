@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchOutletRawMaterialUnitToRedis = exports.fetchOutletRawMaterialCAtegoryToRedis = exports.fetchOutletRawMaterialsToRedis = void 0;
+exports.getfetchOutletStocksToRedis = exports.fetchOutletRawMaterialUnitToRedis = exports.fetchOutletRawMaterialCAtegoryToRedis = exports.fetchOutletRawMaterialsToRedis = void 0;
 const __1 = require("../..");
 const redis_1 = require("../../services/redis");
 const fetchOutletRawMaterialsToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -47,3 +47,32 @@ const fetchOutletRawMaterialUnitToRedis = (outletId) => __awaiter(void 0, void 0
     return rawMaterialsUnit;
 });
 exports.fetchOutletRawMaterialUnitToRedis = fetchOutletRawMaterialUnitToRedis;
+const getfetchOutletStocksToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const rawMaterials = yield __1.prismaDB.rawMaterial.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        include: {
+            rawMaterialCategory: true,
+            consumptionUnit: true,
+            minimumStockUnit: true,
+        },
+    });
+    const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
+        var _a;
+        return ({
+            id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
+            name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
+            consumptionUnit: rawItem.consumptionUnit.name,
+            stock: `${(_a = rawItem.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
+            lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
+            purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
+            purchasedStock: `${rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            createdAt: rawItem.createdAt,
+        });
+    });
+    yield redis_1.redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks));
+    return formattedStocks;
+});
+exports.getfetchOutletStocksToRedis = getfetchOutletStocksToRedis;

@@ -14,7 +14,6 @@ const get_users_1 = require("../../../lib/get-users");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const root_1 = require("../../../exceptions/root");
 const __1 = require("../../..");
-const redis_1 = require("../../../services/redis");
 const getOnBoarding = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     // @ts-ignore
@@ -65,103 +64,103 @@ const createOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     if (!body.type) {
         throw new bad_request_1.BadRequestsException("Please Select neccessary Outlet Type", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    yield __1.prismaDB.user.update({
-        where: {
-            id: userId,
-        },
-        data: {
-            pan: body.pan,
-            address: (body === null || body === void 0 ? void 0 : body.isAddress) ? body === null || body === void 0 ? void 0 : body.legalAddress : body.address,
-        },
-    });
-    const findRestaurant = yield __1.prismaDB.restaurant.findFirst({
-        where: {
-            adminId: userId,
-        },
-    });
-    if (findRestaurant === null || findRestaurant === void 0 ? void 0 : findRestaurant.id) {
-        const outlet = yield __1.prismaDB.restaurant.update({
+    yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        yield prisma.user.update({
             where: {
-                id: findRestaurant.id,
+                id: userId,
+            },
+            data: {
+                pan: body.pan,
+                address: (body === null || body === void 0 ? void 0 : body.isAddress) ? body === null || body === void 0 ? void 0 : body.legalAddress : body.address,
+            },
+        });
+        const findRestaurant = yield prisma.restaurant.findFirst({
+            where: {
                 adminId: userId,
             },
-            data: {
-                name: body.appName,
-                address: body.address,
-                restaurantName: body.name,
-                pincode: body.pincode,
-                GSTIN: body.gstin,
-                city: body.city,
-                fssai: body.fssai,
-                businessType: body === null || body === void 0 ? void 0 : body.businessType,
-                state: body.state,
-                country: body.country,
-                // isSubscription: true,
-                outletType: body.type,
-                // subscriptionPlan: body.planType,
-            },
         });
-        return res.json({
-            success: true,
-            outletId: outlet.id,
-            message: "Outlet Created",
-        });
-    }
-    else {
-        const outlet = yield __1.prismaDB.restaurant.create({
-            data: {
-                name: body.appName,
-                restaurantName: body.name,
-                adminId: userId,
-                address: body.address,
-                pincode: body.pincode,
-                GSTIN: body.gstin,
-                city: body.city,
-                fssai: body.fssai,
-                state: body.state,
-                businessType: body === null || body === void 0 ? void 0 : body.businessType,
-                country: body.country,
-                // isSubscription: true,
-                outletType: body.type,
-                // subscriptionPlan: body.planType,
-            },
-        });
-        yield __1.prismaDB.integration.create({
-            data: {
-                name: "RAZORAPY",
-                description: "Integrate your own payment for receiveing the Order",
-                logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/95513bb1836068b2b6776b6678b37991135335e4830540728f69b12f11df3c78",
-                connected: false,
-                status: true,
-                restaurantId: outlet.id,
-            },
-        });
-        yield __1.prismaDB.integration.create({
-            data: {
-                name: "ZOMATO",
-                connected: false,
-                description: "Manage your Zomato Orders through our portal",
-                logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/96cbea8b97fe457801b3519df3d1fca2691aa8e59c962535920476f04781068f",
-                status: false,
-                restaurantId: outlet.id,
-            },
-        });
-        yield __1.prismaDB.integration.create({
-            data: {
-                name: "SWIGGY",
-                connected: false,
-                description: "Manage your Swiggy Orders through our portal",
-                logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/fea654c0a9447f453c5142377b23e594b73c29dc435822363627e3743e7f0dc3",
-                status: false,
-                restaurantId: outlet.id,
-            },
-        });
-        return res.json({
-            success: true,
-            outletId: outlet.id,
-            message: "Outlet Created",
-        });
-    }
+        if (findRestaurant === null || findRestaurant === void 0 ? void 0 : findRestaurant.id) {
+            const outlet = yield prisma.restaurant.update({
+                where: {
+                    id: findRestaurant.id,
+                    adminId: userId,
+                },
+                data: {
+                    name: body.appName,
+                    address: body.address,
+                    restaurantName: body.name,
+                    pincode: body.pincode,
+                    GSTIN: body.gstin,
+                    city: body.city,
+                    fssai: body.fssai,
+                    businessType: body === null || body === void 0 ? void 0 : body.businessType,
+                    state: body.state,
+                    country: body.country,
+                    outletType: body.type,
+                },
+            });
+            yield (0, get_users_1.getFormatUserAndSendToRedis)(userId);
+            return res.json({
+                success: true,
+                outletId: outlet.id,
+                message: "Outlet Created",
+            });
+        }
+        else {
+            const outlet = yield prisma.restaurant.create({
+                data: {
+                    name: body.appName,
+                    restaurantName: body.name,
+                    adminId: userId,
+                    address: body.address,
+                    pincode: body.pincode,
+                    GSTIN: body.gstin,
+                    city: body.city,
+                    fssai: body.fssai,
+                    state: body.state,
+                    businessType: body === null || body === void 0 ? void 0 : body.businessType,
+                    country: body.country,
+                    outletType: body.type,
+                },
+            });
+            yield prisma.integration.create({
+                data: {
+                    name: "RAZORAPY",
+                    description: "Integrate your own payment for receiveing the Order",
+                    logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/95513bb1836068b2b6776b6678b37991135335e4830540728f69b12f11df3c78",
+                    connected: false,
+                    status: true,
+                    restaurantId: outlet.id,
+                },
+            });
+            yield prisma.integration.create({
+                data: {
+                    name: "ZOMATO",
+                    connected: false,
+                    description: "Manage your Zomato Orders through our portal",
+                    logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/96cbea8b97fe457801b3519df3d1fca2691aa8e59c962535920476f04781068f",
+                    status: false,
+                    restaurantId: outlet.id,
+                },
+            });
+            yield prisma.integration.create({
+                data: {
+                    name: "SWIGGY",
+                    connected: false,
+                    description: "Manage your Swiggy Orders through our portal",
+                    logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/fea654c0a9447f453c5142377b23e594b73c29dc435822363627e3743e7f0dc3",
+                    status: false,
+                    restaurantId: outlet.id,
+                },
+            });
+            yield (0, get_users_1.getFormatUserAndSendToRedis)(userId);
+            return res.json({
+                success: true,
+                outletId: outlet.id,
+                message: "Outlet Created",
+            });
+        }
+    }));
 });
 exports.createOutlet = createOutlet;
 const updateOnboardingStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -180,7 +179,7 @@ const updateOnboardingStatus = (req, res) => __awaiter(void 0, void 0, void 0, f
             onboardingStatus: true,
         },
     });
-    yield redis_1.redis.set(updatedUser.id, JSON.stringify(updatedUser));
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(updatedUser === null || updatedUser === void 0 ? void 0 : updatedUser.id);
     return res.json({
         success: true,
         message: "Update Success",

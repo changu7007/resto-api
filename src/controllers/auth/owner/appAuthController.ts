@@ -53,59 +53,7 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
       providerAccountId: providerAccountId,
       email: email,
     },
-    include: {
-      restaurant: true,
-      billings: {
-        orderBy: {
-          createdAt: "desc",
-        },
-      },
-    },
   });
-
-  const findSubscription = findOwner?.billings.find(
-    (billing) => billing?.userId === findOwner.id
-  );
-
-  const renewalDay =
-    findSubscription?.userId === findOwner?.id
-      ? getDaysRemaining(findSubscription?.validDate as Date)
-      : 0;
-
-  const formatToSend = {
-    id: findOwner?.id,
-    name: findOwner?.name,
-    email: findOwner?.email,
-    emailVerified: findOwner?.emailVerified,
-    phoneNo: findOwner?.phoneNo,
-    image: findOwner?.image,
-    role: findOwner?.role,
-    isTwoFA: findOwner?.isTwoFactorEnabled,
-    favItems: findOwner?.favItems,
-    onboardingStatus: findOwner?.onboardingStatus,
-    isSubscribed: renewalDay > 0 ? true : false,
-    subscriptions: findOwner?.billings.map((billing) => ({
-      id: billing.id,
-      planName: billing.subscriptionPlan,
-      paymentId: billing.paymentId,
-      startDate: billing.subscribedDate,
-      validDate: billing.validDate,
-      amount: billing.paidAmount,
-      validityDays: differenceInDays(
-        new Date(billing.validDate),
-        new Date(billing.subscribedDate)
-      ),
-      purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-      status: renewalDay === 0 ? "EXPIRED" : "VALID",
-    })),
-    toRenewal: renewalDay,
-    plan: findSubscription?.subscriptionPlan,
-    outlets: findOwner?.restaurant.map((outlet) => ({
-      id: outlet.id,
-      name: outlet.name,
-      image: outlet.imageUrl,
-    })),
-  };
 
   if (!findOwner?.id) {
     const user = await prismaDB.user.create({
@@ -122,51 +70,12 @@ export const socialAuthLogin = async (req: Request, res: Response) => {
       },
     });
 
-    const findSubscription = user?.billings.find(
-      (billing) => billing?.userId === user.id
-    );
-
-    const renewalDay =
-      findSubscription?.userId === user.id
-        ? getDaysRemaining(findSubscription.validDate as Date)
-        : 0;
-
-    const formatToSend = {
-      id: user?.id,
-      name: user?.name,
-      email: user?.email,
-      emailVerified: user?.emailVerified,
-      phoneNo: user?.phoneNo,
-      image: user?.image,
-      role: user?.role,
-      onboardingStatus: user?.onboardingStatus,
-      isTwoFA: findOwner?.isTwoFactorEnabled,
-      favItems: findOwner?.favItems,
-      isSubscribed: renewalDay > 0 ? true : false,
-      subscriptions: user?.billings.map((billing) => ({
-        id: billing.id,
-        planName: billing.subscriptionPlan,
-        paymentId: billing.paymentId,
-        startDate: billing.subscribedDate,
-        validDate: billing.validDate,
-        amount: billing.paidAmount,
-        validityDays: differenceInDays(
-          new Date(billing.validDate),
-          new Date(billing.subscribedDate)
-        ),
-        purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-        status: renewalDay === 0 ? "EXPIRED" : "VALID",
-      })),
-      toRenewal: renewalDay,
-      plan: findSubscription?.subscriptionPlan,
-      outlets: user?.restaurant.map((outlet) => ({
-        id: outlet.id,
-        name: outlet.name,
-        image: outlet.imageUrl,
-      })),
-    };
+    const formatToSend = await getFormatUserAndSendToRedis(user?.id);
     sendToken(formatToSend as FUser, 200, res);
-  } else sendToken(formatToSend as FUser, 200, res);
+  } else {
+    const formatToSend = await getFormatUserAndSendToRedis(findOwner?.id);
+    sendToken(formatToSend as FUser, 200, res);
+  }
 };
 
 export const OwnerLogin = async (req: Request, res: Response) => {
@@ -192,56 +101,14 @@ export const OwnerLogin = async (req: Request, res: Response) => {
     );
   }
 
-  const findSubscription = findOwner?.billings.find(
-    (billing) => billing?.userId === findOwner.id
-  );
-
-  const renewalDay =
-    findSubscription?.userId === findOwner.id
-      ? getDaysRemaining(findSubscription.validDate as Date)
-      : 0;
-
-  const formatToSend = {
-    id: findOwner?.id,
-    name: findOwner?.name,
-    email: findOwner?.email,
-    emailVerified: findOwner?.emailVerified,
-    phoneNo: findOwner?.phoneNo,
-    image: findOwner?.image,
-    role: findOwner?.role,
-    onboardingStatus: findOwner?.onboardingStatus,
-    isTwoFA: findOwner?.isTwoFactorEnabled,
-    favItems: findOwner?.favItems,
-    isSubscribed: renewalDay > 0 ? true : false,
-    subscriptions: findOwner?.billings.map((billing) => ({
-      id: billing.id,
-      planName: billing.subscriptionPlan,
-      paymentId: billing.paymentId,
-      startDate: billing.subscribedDate,
-      validDate: billing.validDate,
-      amount: billing.paidAmount,
-      validityDays: differenceInDays(
-        new Date(billing.validDate),
-        new Date(billing.subscribedDate)
-      ),
-      purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-      status: renewalDay === 0 ? "EXPIRED" : "VALID",
-    })),
-    toRenewal: renewalDay,
-    plan: findSubscription?.subscriptionPlan,
-    outlets: findOwner?.restaurant.map((outlet) => ({
-      id: outlet.id,
-      name: outlet.name,
-      image: outlet.imageUrl,
-    })),
-  };
+  const formatToSend = await getFormatUserAndSendToRedis(findOwner?.id);
 
   sendToken(formatToSend as FUser, 200, res);
 };
 
 export const OwnerUser = async (req: Request, res: Response) => {
   // @ts-ignore
-  return res.json(req.user);
+  return res.json({ success: true, users: req?.user });
 };
 
 export const AppLogout = async (req: Request, res: Response) => {
@@ -517,10 +384,6 @@ export const getUserInfo = async (req: Request, res: Response) => {
   const findOwner = await prismaDB.user.findFirst({
     where: {
       id: userId,
-    },
-    include: {
-      restaurant: true,
-      billings: true,
     },
   });
 
