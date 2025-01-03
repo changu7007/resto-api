@@ -138,10 +138,13 @@ import {
   getRawMaterialById,
   getRecipeById,
   getUnitById,
+  restockPurchase,
+  settlePayForRaisedPurchase,
   updateCategoryById,
   updateItemRecipe,
   updateRawMaterialById,
   updateRequestPurchase,
+  updateStockRawMaterial,
   updateUnitById,
   updateVendor,
   validatePurchasenRestock,
@@ -574,6 +577,11 @@ outletRoute.patch(
   isAuthMiddelware,
   errorHandler(updateRawMaterialById)
 );
+outletRoute.patch(
+  "/:outletId/inventory/current-stock-update/:id",
+  isAuthMiddelware,
+  errorHandler(updateStockRawMaterial)
+);
 
 outletRoute.delete(
   "/:outletId/inventory/delete-raw-material/:id",
@@ -674,6 +682,16 @@ outletRoute.post(
   "/:outletId/inventory/validate-purchase/:id",
   isAuthMiddelware,
   errorHandler(validatePurchasenRestock)
+);
+outletRoute.post(
+  "/:outletId/inventory/validate-purchase-for-settlement/:id",
+  isAuthMiddelware,
+  errorHandler(restockPurchase)
+);
+outletRoute.post(
+  "/:outletId/inventory/settle-validate-purchase/:id",
+  isAuthMiddelware,
+  errorHandler(settlePayForRaisedPurchase)
 );
 //PURCHASE GET,CREATE END
 

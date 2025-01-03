@@ -65,6 +65,9 @@ export const getfetchOutletStocksToRedis = async (outletId: string) => {
     id: rawItem?.id,
     name: rawItem?.name,
     consumptionUnit: rawItem.consumptionUnit.name,
+    lastPurchasedStock: `${rawItem.purchasedStock?.toFixed(2)} - ${
+      rawItem?.purchasedUnit
+    }`,
     stock: `${rawItem.currentStock?.toFixed(2)} - ${rawItem?.purchasedUnit}`,
     purchasedPrice: rawItem?.purchasedPrice,
     lastPurchasedPrice: rawItem?.lastPurchasedPrice,

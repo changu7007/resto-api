@@ -83,10 +83,10 @@ const paymentRazorpayVerification = (req, res) => __awaiter(void 0, void 0, void
     const isAuthentic = expectedSignature === razorpaySignature;
     if (isAuthentic) {
         console.log(razorpayPaymentId);
-        res.json({ success: true, message: "Payment Successfull" });
+        return res.json({ success: true, message: "Payment Successfull" });
     }
     else {
-        res.status(400).json({
+        return res.json({
             success: false,
         });
     }

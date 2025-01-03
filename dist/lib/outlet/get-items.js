@@ -34,6 +34,13 @@ const getOAllItems = (outletId) => __awaiter(void 0, void 0, void 0, function* (
                     },
                 },
             },
+            itemRecipe: {
+                include: {
+                    menuItem: true,
+                    menuItemVariant: true,
+                    addOnItemVariant: true,
+                },
+            },
         },
     });
     if ((getItems === null || getItems === void 0 ? void 0 : getItems.length) > 0) {

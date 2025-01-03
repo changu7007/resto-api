@@ -877,7 +877,7 @@ export const totalInventory = async (req: Request, res: Response) => {
     where: {
       restaurantId: outlet.id,
       purchaseStatus: {
-        in: ["PROCESSED", "REQUESTED"],
+        in: ["PROCESSED", "REQUESTED", "ACCEPTED", "SETTLEMENT"],
       },
     },
   });

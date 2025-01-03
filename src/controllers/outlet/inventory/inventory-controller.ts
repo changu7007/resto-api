@@ -10,6 +10,7 @@ import {
   fetchOutletRawMaterialCAtegoryToRedis,
   fetchOutletRawMaterialsToRedis,
   fetchOutletRawMaterialUnitToRedis,
+  getfetchOutletStocksToRedis,
 } from "../../../lib/outlet/get-inventory";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { BadRequestsException } from "../../../exceptions/bad-request";
@@ -915,7 +916,7 @@ const validatePurchaseSchema = z.object({
 
         requestQuantity: z.coerce
           .number()
-          .min(0, { message: "Request Quantity is Required" }),
+          .min(1, { message: "Request Quantity is Required" }),
         gst: z.coerce.number(),
         total: z.coerce
           .number()
@@ -925,15 +926,20 @@ const validatePurchaseSchema = z.object({
     .min(1, { message: "Atleast 1 Raw Material you need to request" }),
   isPaid: z.boolean({ required_error: "You need to choose" }),
   billImage: z.string().optional(),
-  chooseInvoice: z.enum(["generateInvoice", "uploadInvoice"], {
-    required_error: "You need to select a invoice type.",
-  }),
+  amountToBePaid: z.coerce.number().min(0, { message: "Amount Required" }),
+  chooseInvoice: z
+    .enum(["generateInvoice", "uploadInvoice"], {
+      required_error: "You need to select a invoice type.",
+    })
+    .optional(),
+  paymentMethod: z
+    .enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
+      required_error: "Settlement Payment Method Required.",
+    })
+    .optional(),
   totalTaxes: z.coerce.number().min(0, { message: "taxes invalid" }),
   subTotal: z.coerce.number().min(0, { message: "taxes invalid" }),
   total: z.coerce.number().min(0, { message: "total required" }),
-  paymentMethod: z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
-    required_error: "Settlement Payment Method Required.",
-  }),
 });
 
 export const validatePurchasenRestock = async (req: Request, res: Response) => {
@@ -946,6 +952,20 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
   if (error) {
     throw new BadRequestsException(
       error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (validateFields?.total === undefined || validateFields?.total < 1) {
+    throw new BadRequestsException(
+      "Please Provide Raw Material Purchase Prices",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (validateFields?.isPaid && validateFields?.paymentMethod === undefined) {
+    throw new BadRequestsException(
+      "Please select your payment settlement mode",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -1178,31 +1198,8 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
       },
     });
 
-    const rawMaterials = await prismaDB.rawMaterial.findMany({
-      where: {
-        restaurantId: outlet?.id,
-      },
-      include: {
-        rawMaterialCategory: true,
-        consumptionUnit: true,
-        minimumStockUnit: true,
-      },
-    });
-
-    const formattedStocks = rawMaterials?.map((rawItem) => ({
-      id: rawItem?.id,
-      name: rawItem?.name,
-      consumptionUnit: rawItem.consumptionUnit.name,
-      stock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
-      purchasedPrice: rawItem?.purchasedPrice,
-      lastPurchasedPrice: rawItem?.lastPurchasedPrice,
-      purchasedPricePerItem: rawItem?.purchasedPricePerItem,
-      purchasedStock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
-      createdAt: rawItem.createdAt,
-    }));
-
     await Promise.all([
-      redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks)),
+      getfetchOutletStocksToRedis(outletId),
       redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
       fetchOutletRawMaterialsToRedis(outlet?.id),
     ]);
@@ -1915,4 +1912,480 @@ export const getRecipeById = async (req: Request, res: Response) => {
     throw new NotFoundException("Recipe Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
   return res.json({ success: true, recipe: findRecipe });
+};
+
+export const restockPurchase = async (req: Request, res: Response) => {
+  const { outletId, id } = req.params;
+
+  const { data: validateFields, error } = validatePurchaseSchema.safeParse(
+    req.body
+  );
+
+  if (validateFields?.total === undefined || validateFields?.total < 1) {
+    throw new BadRequestsException(
+      "Please Provide Raw Material Purchase Prices",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (error) {
+    throw new BadRequestsException(
+      error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  let userId = req.user?.id;
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findPurchase = await prismaDB.purchase.findFirst({
+    where: {
+      id,
+      restaurantId: outlet?.id,
+    },
+  });
+
+  if (!findPurchase?.id) {
+    throw new NotFoundException(
+      "Purchase Not Found to Validate",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  const findVendor = await prismaDB.vendor.findFirst({
+    where: {
+      restaurantId: outlet.id,
+      id: validateFields.vendorId,
+    },
+  });
+
+  if (!findVendor?.id) {
+    throw new NotFoundException("Vendor Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const transaction = await prismaDB.$transaction(async (prisma) => {
+    // Step 1: Restock raw materials and update `RecipeIngredient` costs
+    await Promise.all(
+      validateFields?.rawMaterials?.map(async (item) => {
+        const rawMaterial = await prisma.rawMaterial.findFirst({
+          where: {
+            id: item.rawMaterialId,
+            restaurantId: outlet?.id,
+          },
+          include: {
+            RecipeIngredient: true,
+          },
+        });
+
+        if (rawMaterial) {
+          const newStock =
+            Number(rawMaterial?.currentStock ?? 0) + item?.requestQuantity;
+          const newPricePerItem =
+            Number(item.total) / Number(item.requestQuantity);
+
+          await prisma.rawMaterial.update({
+            where: {
+              id: rawMaterial.id,
+            },
+            data: {
+              currentStock: newStock,
+              purchasedPrice: item.total,
+              purchasedPricePerItem: newPricePerItem,
+              purchasedUnit: item.unitName,
+              lastPurchasedPrice: rawMaterial?.purchasedPrice ?? 0,
+              purchasedStock: newStock,
+            },
+          });
+
+          const findRecipeIngredients = await prisma.recipeIngredient.findFirst(
+            {
+              where: {
+                rawMaterialId: rawMaterial?.id,
+              },
+            }
+          );
+          if (findRecipeIngredients) {
+            const recipeCostWithQuantity =
+              Number(findRecipeIngredients?.quantity) /
+              Number(rawMaterial?.conversionFactor);
+            const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+            // Update linked `RecipeIngredient` cost
+            await prisma.recipeIngredient.updateMany({
+              where: {
+                rawMaterialId: rawMaterial.id,
+              },
+              data: {
+                cost: ingredientCost,
+              },
+            });
+          }
+        }
+      })
+    );
+
+    // Step 2: Recalculate `ItemRecipe` gross margin and related fields
+    const recipesToUpdate = await prisma.itemRecipe.findMany({
+      where: {
+        restaurantId: outlet.id,
+      },
+      include: {
+        ingredients: {
+          include: {
+            rawMaterial: true,
+          },
+        },
+      },
+    });
+
+    await Promise.all(
+      recipesToUpdate.map(async (recipe) => {
+        const totalCost = recipe.ingredients.reduce(
+          (sum, ingredient) =>
+            sum +
+            (Number(ingredient.quantity) /
+              Number(ingredient?.rawMaterial?.conversionFactor)) *
+              Number(ingredient?.rawMaterial?.purchasedPricePerItem),
+          0
+        );
+        const grossMargin = Number(recipe.itemPrice as number) - totalCost;
+
+        await prisma.itemRecipe.update({
+          where: {
+            id: recipe.id,
+          },
+          data: {
+            itemCost: totalCost,
+            grossMargin,
+          },
+        });
+
+        // Update linked entities
+        if (recipe.menuId) {
+          await prisma.menuItem.update({
+            where: {
+              id: recipe.menuId,
+              restaurantId: outlet.id,
+            },
+            data: {
+              grossProfit: grossMargin,
+            },
+          });
+        }
+
+        if (recipe.menuVariantId) {
+          await prisma.menuItemVariant.update({
+            where: {
+              id: recipe.menuVariantId,
+              restaurantId: outlet.id,
+            },
+            data: {
+              grossProfit: grossMargin,
+            },
+          });
+        }
+
+        if (recipe.addonItemVariantId) {
+          await prisma.addOnVariants.update({
+            where: {
+              id: recipe.addonItemVariantId,
+              restaurantId: outlet.id,
+            },
+            data: {
+              grossProfit: grossMargin,
+            },
+          });
+        }
+      })
+    );
+
+    // Step 3: Update purchase details
+    const updatePurchase = await prisma.purchase.update({
+      where: {
+        id: findPurchase?.id,
+        restaurantId: outlet?.id,
+      },
+      data: {
+        isPaid: validateFields?.paymentMethod !== undefined,
+        paymentMethod: validateFields?.paymentMethod,
+        billImageUrl: validateFields?.billImage,
+        invoiceType: validateFields?.chooseInvoice,
+        subTotal: validateFields?.subTotal,
+        taxes: validateFields?.totalTaxes,
+        generatedAmount: validateFields?.total,
+        totalAmount: validateFields?.amountToBePaid,
+        purchaseStatus: "SETTLEMENT",
+        purchaseItems: {
+          update: validateFields?.rawMaterials?.map((item) => ({
+            where: {
+              id: item?.id,
+              purchaseId: validateFields?.id,
+            },
+            data: {
+              cgst: item.gst / 2,
+              sgst: item.gst / 2,
+              purchasePrice: item?.total,
+            },
+          })),
+        },
+      },
+    });
+
+    return updatePurchase;
+  });
+
+  if (transaction?.id) {
+    // Step 4: Refresh Redis cache
+    const allPurchases = await prismaDB.purchase.findMany({
+      where: {
+        restaurantId: outlet?.id,
+      },
+      include: {
+        purchaseItems: {
+          include: {
+            purchaseUnit: true,
+            rawMaterial: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    await Promise.all([
+      getfetchOutletStocksToRedis(outletId),
+      redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
+      fetchOutletRawMaterialsToRedis(outlet?.id),
+    ]);
+
+    return res.json({
+      success: true,
+      message: "Purchase Settlement Pending & Stock Restocked,Recipes Updated",
+    });
+  }
+};
+
+const settleFormSchema = z.object({
+  id: z.string().min(1, { message: "Purchase Id Missing" }),
+  vendorId: z.string().min(1, { message: "Vendor is Missing" }),
+  rawMaterials: z
+    .array(
+      z.object({
+        id: z.string().min(1, { message: "Purchase Item Id is missing" }),
+        rawMaterialId: z
+          .string()
+          .min(1, { message: "Raw Material Is Required" }),
+        rawMaterialName: z.string().min(1, { message: "Raw Material Name" }),
+        unitName: z.string().min(1, { message: "Unit Name is required" }),
+        requestUnitId: z
+          .string()
+          .min(1, { message: "Request Unit is Required" }),
+
+        requestQuantity: z.coerce
+          .number()
+          .min(1, { message: "Request Quantity is Required" }),
+        gst: z.coerce.number(),
+        total: z.coerce
+          .number()
+          .min(0, { message: "Purchase price is required" }),
+      })
+    )
+    .min(1, { message: "Atleast 1 Raw Material you need to request" }),
+  isPaid: z.boolean({ required_error: "You need to choose" }),
+  billImage: z.string().optional(),
+  amountToBePaid: z.coerce.number().min(0, { message: "Amount Required" }),
+  chooseInvoice: z
+    .enum(["generateInvoice", "uploadInvoice"], {
+      required_error: "You need to select a invoice type.",
+    })
+    .optional(),
+  paymentMethod: z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
+    required_error: "Settlement Payment Method Required.",
+  }),
+});
+
+export const settlePayForRaisedPurchase = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId, id } = req.params;
+
+  const { data: validateFields, error } = settleFormSchema.safeParse(req.body);
+
+  console.log("Amount to be paid", validateFields);
+
+  if (
+    validateFields?.amountToBePaid === undefined ||
+    validateFields?.amountToBePaid < 1
+  ) {
+    throw new BadRequestsException(
+      "Please Provide the amount you paid in input field",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (validateFields?.isPaid && validateFields?.paymentMethod === undefined) {
+    throw new BadRequestsException(
+      "Please select your payment settlement mode",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (error) {
+    throw new BadRequestsException(
+      error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  let userId = req.user?.id;
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findPurchase = await prismaDB.purchase.findFirst({
+    where: {
+      id,
+      restaurantId: outlet?.id,
+    },
+  });
+
+  if (!findPurchase?.id) {
+    throw new NotFoundException(
+      "Purchase Not Found to Validate",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  const findVendor = await prismaDB.vendor.findFirst({
+    where: {
+      restaurantId: outlet.id,
+      id: validateFields.vendorId,
+    },
+  });
+
+  if (!findVendor?.id) {
+    throw new NotFoundException("Vendor Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const transaction = await prismaDB.$transaction(async (prisma) => {
+    // Step 3: Update purchase details
+    const updatePurchase = await prisma.purchase.update({
+      where: {
+        id: findPurchase?.id,
+        restaurantId: outlet?.id,
+      },
+      data: {
+        isPaid: validateFields?.isPaid,
+        paymentMethod: validateFields?.paymentMethod,
+        billImageUrl: validateFields?.billImage,
+        invoiceType: validateFields?.chooseInvoice,
+        totalAmount: validateFields?.amountToBePaid,
+        purchaseStatus: "COMPLETED",
+      },
+    });
+
+    return updatePurchase;
+  });
+
+  if (transaction?.id) {
+    // Step 4: Refresh Redis cache
+    const allPurchases = await prismaDB.purchase.findMany({
+      where: {
+        restaurantId: outlet?.id,
+      },
+      include: {
+        purchaseItems: {
+          include: {
+            purchaseUnit: true,
+            rawMaterial: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    await Promise.all([
+      getfetchOutletStocksToRedis(outletId),
+      redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
+      fetchOutletRawMaterialsToRedis(outlet?.id),
+    ]);
+
+    return res.json({
+      success: true,
+      message: "Purchase Settlement Pending & Stock Restocked,Recipes Updated",
+    });
+  }
+};
+
+export const updateStockRawMaterial = async (req: Request, res: Response) => {
+  const { outletId, id } = req.params;
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  let userId = req.user?.id;
+
+  const { stock } = req?.body;
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findRawMaterial = await prismaDB.rawMaterial.findFirst({
+    where: {
+      id: id,
+    },
+  });
+
+  if (!findRawMaterial?.id) {
+    throw new NotFoundException(
+      "Raw Material / Stock not found",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  await prismaDB.rawMaterial.update({
+    where: {
+      restaurantId: outlet?.id,
+      id: findRawMaterial?.id,
+    },
+    data: {
+      currentStock: stock ?? findRawMaterial?.currentStock,
+    },
+  });
+  await getfetchOutletStocksToRedis(outletId);
+  return res.json({
+    success: true,
+    message: "Stock Updated",
+  });
 };

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
+exports.updateStockRawMaterial = exports.settlePayForRaisedPurchase = exports.restockPurchase = exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -727,7 +727,7 @@ const validatePurchaseSchema = zod_1.z.object({
             .min(1, { message: "Request Unit is Required" }),
         requestQuantity: zod_1.z.coerce
             .number()
-            .min(0, { message: "Request Quantity is Required" }),
+            .min(1, { message: "Request Quantity is Required" }),
         gst: zod_1.z.coerce.number(),
         total: zod_1.z.coerce
             .number()
@@ -736,15 +736,20 @@ const validatePurchaseSchema = zod_1.z.object({
         .min(1, { message: "Atleast 1 Raw Material you need to request" }),
     isPaid: zod_1.z.boolean({ required_error: "You need to choose" }),
     billImage: zod_1.z.string().optional(),
-    chooseInvoice: zod_1.z.enum(["generateInvoice", "uploadInvoice"], {
+    amountToBePaid: zod_1.z.coerce.number().min(0, { message: "Amount Required" }),
+    chooseInvoice: zod_1.z
+        .enum(["generateInvoice", "uploadInvoice"], {
         required_error: "You need to select a invoice type.",
-    }),
+    })
+        .optional(),
+    paymentMethod: zod_1.z
+        .enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
+        required_error: "Settlement Payment Method Required.",
+    })
+        .optional(),
     totalTaxes: zod_1.z.coerce.number().min(0, { message: "taxes invalid" }),
     subTotal: zod_1.z.coerce.number().min(0, { message: "taxes invalid" }),
     total: zod_1.z.coerce.number().min(0, { message: "total required" }),
-    paymentMethod: zod_1.z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
-        required_error: "Settlement Payment Method Required.",
-    }),
 });
 const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _f;
@@ -752,6 +757,12 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
     const { data: validateFields, error } = validatePurchaseSchema.safeParse(req.body);
     if (error) {
         throw new bad_request_1.BadRequestsException(error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.total) === undefined || (validateFields === null || validateFields === void 0 ? void 0 : validateFields.total) < 1) {
+        throw new bad_request_1.BadRequestsException("Please Provide Raw Material Purchase Prices", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.isPaid) && (validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod) === undefined) {
+        throw new bad_request_1.BadRequestsException("Please select your payment settlement mode", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
@@ -947,29 +958,8 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                 createdAt: "desc",
             },
         });
-        const rawMaterials = yield __1.prismaDB.rawMaterial.findMany({
-            where: {
-                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
-            },
-            include: {
-                rawMaterialCategory: true,
-                consumptionUnit: true,
-                minimumStockUnit: true,
-            },
-        });
-        const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => ({
-            id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
-            name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
-            consumptionUnit: rawItem.consumptionUnit.name,
-            stock: `${rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
-            purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
-            lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
-            purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
-            purchasedStock: `${rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
-            createdAt: rawItem.createdAt,
-        }));
         yield Promise.all([
-            redis_1.redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks)),
+            (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId),
             redis_1.redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
             (0, get_inventory_1.fetchOutletRawMaterialsToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id),
         ]);
@@ -1602,3 +1592,382 @@ const getRecipeById = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     return res.json({ success: true, recipe: findRecipe });
 });
 exports.getRecipeById = getRecipeById;
+const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _q;
+    const { outletId, id } = req.params;
+    const { data: validateFields, error } = validatePurchaseSchema.safeParse(req.body);
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.total) === undefined || (validateFields === null || validateFields === void 0 ? void 0 : validateFields.total) < 1) {
+        throw new bad_request_1.BadRequestsException("Please Provide Raw Material Purchase Prices", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (error) {
+        throw new bad_request_1.BadRequestsException(error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    let userId = (_q = req.user) === null || _q === void 0 ? void 0 : _q.id;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const findPurchase = yield __1.prismaDB.purchase.findFirst({
+        where: {
+            id,
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+    });
+    if (!(findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.id)) {
+        throw new not_found_1.NotFoundException("Purchase Not Found to Validate", root_1.ErrorCode.NOT_FOUND);
+    }
+    const findVendor = yield __1.prismaDB.vendor.findFirst({
+        where: {
+            restaurantId: outlet.id,
+            id: validateFields.vendorId,
+        },
+    });
+    if (!(findVendor === null || findVendor === void 0 ? void 0 : findVendor.id)) {
+        throw new not_found_1.NotFoundException("Vendor Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const transaction = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        var _r, _s;
+        // Step 1: Restock raw materials and update `RecipeIngredient` costs
+        yield Promise.all((_r = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _r === void 0 ? void 0 : _r.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            var _t, _u;
+            const rawMaterial = yield prisma.rawMaterial.findFirst({
+                where: {
+                    id: item.rawMaterialId,
+                    restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+                },
+                include: {
+                    RecipeIngredient: true,
+                },
+            });
+            if (rawMaterial) {
+                const newStock = Number((_t = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _t !== void 0 ? _t : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                const newPricePerItem = Number(item.total) / Number(item.requestQuantity);
+                yield prisma.rawMaterial.update({
+                    where: {
+                        id: rawMaterial.id,
+                    },
+                    data: {
+                        currentStock: newStock,
+                        purchasedPrice: item.total,
+                        purchasedPricePerItem: newPricePerItem,
+                        purchasedUnit: item.unitName,
+                        lastPurchasedPrice: (_u = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _u !== void 0 ? _u : 0,
+                        purchasedStock: newStock,
+                    },
+                });
+                const findRecipeIngredients = yield prisma.recipeIngredient.findFirst({
+                    where: {
+                        rawMaterialId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
+                    },
+                });
+                if (findRecipeIngredients) {
+                    const recipeCostWithQuantity = Number(findRecipeIngredients === null || findRecipeIngredients === void 0 ? void 0 : findRecipeIngredients.quantity) /
+                        Number(rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.conversionFactor);
+                    const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+                    // Update linked `RecipeIngredient` cost
+                    yield prisma.recipeIngredient.updateMany({
+                        where: {
+                            rawMaterialId: rawMaterial.id,
+                        },
+                        data: {
+                            cost: ingredientCost,
+                        },
+                    });
+                }
+            }
+        })));
+        // Step 2: Recalculate `ItemRecipe` gross margin and related fields
+        const recipesToUpdate = yield prisma.itemRecipe.findMany({
+            where: {
+                restaurantId: outlet.id,
+            },
+            include: {
+                ingredients: {
+                    include: {
+                        rawMaterial: true,
+                    },
+                },
+            },
+        });
+        yield Promise.all(recipesToUpdate.map((recipe) => __awaiter(void 0, void 0, void 0, function* () {
+            const totalCost = recipe.ingredients.reduce((sum, ingredient) => {
+                var _a, _b;
+                return sum +
+                    (Number(ingredient.quantity) /
+                        Number((_a = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _a === void 0 ? void 0 : _a.conversionFactor)) *
+                        Number((_b = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _b === void 0 ? void 0 : _b.purchasedPricePerItem);
+            }, 0);
+            const grossMargin = Number(recipe.itemPrice) - totalCost;
+            yield prisma.itemRecipe.update({
+                where: {
+                    id: recipe.id,
+                },
+                data: {
+                    itemCost: totalCost,
+                    grossMargin,
+                },
+            });
+            // Update linked entities
+            if (recipe.menuId) {
+                yield prisma.menuItem.update({
+                    where: {
+                        id: recipe.menuId,
+                        restaurantId: outlet.id,
+                    },
+                    data: {
+                        grossProfit: grossMargin,
+                    },
+                });
+            }
+            if (recipe.menuVariantId) {
+                yield prisma.menuItemVariant.update({
+                    where: {
+                        id: recipe.menuVariantId,
+                        restaurantId: outlet.id,
+                    },
+                    data: {
+                        grossProfit: grossMargin,
+                    },
+                });
+            }
+            if (recipe.addonItemVariantId) {
+                yield prisma.addOnVariants.update({
+                    where: {
+                        id: recipe.addonItemVariantId,
+                        restaurantId: outlet.id,
+                    },
+                    data: {
+                        grossProfit: grossMargin,
+                    },
+                });
+            }
+        })));
+        // Step 3: Update purchase details
+        const updatePurchase = yield prisma.purchase.update({
+            where: {
+                id: findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.id,
+                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            },
+            data: {
+                isPaid: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod) !== undefined,
+                paymentMethod: validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod,
+                billImageUrl: validateFields === null || validateFields === void 0 ? void 0 : validateFields.billImage,
+                invoiceType: validateFields === null || validateFields === void 0 ? void 0 : validateFields.chooseInvoice,
+                subTotal: validateFields === null || validateFields === void 0 ? void 0 : validateFields.subTotal,
+                taxes: validateFields === null || validateFields === void 0 ? void 0 : validateFields.totalTaxes,
+                generatedAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.total,
+                totalAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amountToBePaid,
+                purchaseStatus: "SETTLEMENT",
+                purchaseItems: {
+                    update: (_s = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _s === void 0 ? void 0 : _s.map((item) => ({
+                        where: {
+                            id: item === null || item === void 0 ? void 0 : item.id,
+                            purchaseId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.id,
+                        },
+                        data: {
+                            cgst: item.gst / 2,
+                            sgst: item.gst / 2,
+                            purchasePrice: item === null || item === void 0 ? void 0 : item.total,
+                        },
+                    })),
+                },
+            },
+        });
+        return updatePurchase;
+    }));
+    if (transaction === null || transaction === void 0 ? void 0 : transaction.id) {
+        // Step 4: Refresh Redis cache
+        const allPurchases = yield __1.prismaDB.purchase.findMany({
+            where: {
+                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            },
+            include: {
+                purchaseItems: {
+                    include: {
+                        purchaseUnit: true,
+                        rawMaterial: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+        });
+        yield Promise.all([
+            (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId),
+            redis_1.redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
+            (0, get_inventory_1.fetchOutletRawMaterialsToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id),
+        ]);
+        return res.json({
+            success: true,
+            message: "Purchase Settlement Pending & Stock Restocked,Recipes Updated",
+        });
+    }
+});
+exports.restockPurchase = restockPurchase;
+const settleFormSchema = zod_1.z.object({
+    id: zod_1.z.string().min(1, { message: "Purchase Id Missing" }),
+    vendorId: zod_1.z.string().min(1, { message: "Vendor is Missing" }),
+    rawMaterials: zod_1.z
+        .array(zod_1.z.object({
+        id: zod_1.z.string().min(1, { message: "Purchase Item Id is missing" }),
+        rawMaterialId: zod_1.z
+            .string()
+            .min(1, { message: "Raw Material Is Required" }),
+        rawMaterialName: zod_1.z.string().min(1, { message: "Raw Material Name" }),
+        unitName: zod_1.z.string().min(1, { message: "Unit Name is required" }),
+        requestUnitId: zod_1.z
+            .string()
+            .min(1, { message: "Request Unit is Required" }),
+        requestQuantity: zod_1.z.coerce
+            .number()
+            .min(1, { message: "Request Quantity is Required" }),
+        gst: zod_1.z.coerce.number(),
+        total: zod_1.z.coerce
+            .number()
+            .min(0, { message: "Purchase price is required" }),
+    }))
+        .min(1, { message: "Atleast 1 Raw Material you need to request" }),
+    isPaid: zod_1.z.boolean({ required_error: "You need to choose" }),
+    billImage: zod_1.z.string().optional(),
+    amountToBePaid: zod_1.z.coerce.number().min(0, { message: "Amount Required" }),
+    chooseInvoice: zod_1.z
+        .enum(["generateInvoice", "uploadInvoice"], {
+        required_error: "You need to select a invoice type.",
+    })
+        .optional(),
+    paymentMethod: zod_1.z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
+        required_error: "Settlement Payment Method Required.",
+    }),
+});
+const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _v;
+    const { outletId, id } = req.params;
+    const { data: validateFields, error } = settleFormSchema.safeParse(req.body);
+    console.log("Amount to be paid", validateFields);
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.amountToBePaid) === undefined ||
+        (validateFields === null || validateFields === void 0 ? void 0 : validateFields.amountToBePaid) < 1) {
+        throw new bad_request_1.BadRequestsException("Please Provide the amount you paid in input field", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.isPaid) && (validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod) === undefined) {
+        throw new bad_request_1.BadRequestsException("Please select your payment settlement mode", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (error) {
+        throw new bad_request_1.BadRequestsException(error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    let userId = (_v = req.user) === null || _v === void 0 ? void 0 : _v.id;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const findPurchase = yield __1.prismaDB.purchase.findFirst({
+        where: {
+            id,
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+    });
+    if (!(findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.id)) {
+        throw new not_found_1.NotFoundException("Purchase Not Found to Validate", root_1.ErrorCode.NOT_FOUND);
+    }
+    const findVendor = yield __1.prismaDB.vendor.findFirst({
+        where: {
+            restaurantId: outlet.id,
+            id: validateFields.vendorId,
+        },
+    });
+    if (!(findVendor === null || findVendor === void 0 ? void 0 : findVendor.id)) {
+        throw new not_found_1.NotFoundException("Vendor Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const transaction = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        // Step 3: Update purchase details
+        const updatePurchase = yield prisma.purchase.update({
+            where: {
+                id: findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.id,
+                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            },
+            data: {
+                isPaid: validateFields === null || validateFields === void 0 ? void 0 : validateFields.isPaid,
+                paymentMethod: validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod,
+                billImageUrl: validateFields === null || validateFields === void 0 ? void 0 : validateFields.billImage,
+                invoiceType: validateFields === null || validateFields === void 0 ? void 0 : validateFields.chooseInvoice,
+                totalAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amountToBePaid,
+                purchaseStatus: "COMPLETED",
+            },
+        });
+        return updatePurchase;
+    }));
+    if (transaction === null || transaction === void 0 ? void 0 : transaction.id) {
+        // Step 4: Refresh Redis cache
+        const allPurchases = yield __1.prismaDB.purchase.findMany({
+            where: {
+                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            },
+            include: {
+                purchaseItems: {
+                    include: {
+                        purchaseUnit: true,
+                        rawMaterial: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+        });
+        yield Promise.all([
+            (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId),
+            redis_1.redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
+            (0, get_inventory_1.fetchOutletRawMaterialsToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id),
+        ]);
+        return res.json({
+            success: true,
+            message: "Purchase Settlement Pending & Stock Restocked,Recipes Updated",
+        });
+    }
+});
+exports.settlePayForRaisedPurchase = settlePayForRaisedPurchase;
+const updateStockRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _w;
+    const { outletId, id } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    let userId = (_w = req.user) === null || _w === void 0 ? void 0 : _w.id;
+    const { stock } = req === null || req === void 0 ? void 0 : req.body;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const findRawMaterial = yield __1.prismaDB.rawMaterial.findFirst({
+        where: {
+            id: id,
+        },
+    });
+    if (!(findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.id)) {
+        throw new not_found_1.NotFoundException("Raw Material / Stock not found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.rawMaterial.update({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            id: findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.id,
+        },
+        data: {
+            currentStock: stock !== null && stock !== void 0 ? stock : findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.currentStock,
+        },
+    });
+    yield (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId);
+    return res.json({
+        success: true,
+        message: "Stock Updated",
+    });
+});
+exports.updateStockRawMaterial = updateStockRawMaterial;

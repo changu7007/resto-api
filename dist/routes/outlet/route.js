@@ -125,6 +125,7 @@ outletRoute.get("/:outletId/inventory/get-raw-materials", auth_1.isAuthMiddelwar
 outletRoute.get("/:outletId/inventory/get-raw-materials/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getRawMaterialById));
 outletRoute.post("/:outletId/inventory/create-raw-material", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.createRawMaterial));
 outletRoute.patch("/:outletId/inventory/update-raw-material/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateRawMaterialById));
+outletRoute.patch("/:outletId/inventory/current-stock-update/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateStockRawMaterial));
 outletRoute.delete("/:outletId/inventory/delete-raw-material/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.deleteRawMaterialById));
 // Raw Material POST,PATCH,DELETE END
 //Category GETALL,GETBYID,POST,PATCH,DELETE START
@@ -148,6 +149,8 @@ outletRoute.post("/:outletId/inventory/create-request-purchase", auth_1.isAuthMi
 outletRoute.patch("/:outletId/inventory/update-request-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateRequestPurchase));
 outletRoute.delete("/:outletId/inventory/delete-request-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.deleteRequestPurchase));
 outletRoute.post("/:outletId/inventory/validate-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.validatePurchasenRestock));
+outletRoute.post("/:outletId/inventory/validate-purchase-for-settlement/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.restockPurchase));
+outletRoute.post("/:outletId/inventory/settle-validate-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.settlePayForRaisedPurchase));
 //PURCHASE GET,CREATE END
 //Vendors GET,CREATE START
 outletRoute.get("/:outletId/inventory/get-all-vendors", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllVendors));

@@ -939,6 +939,7 @@ model Vendor {
 enum PurchaseStatus {
   PROCESSED
   REQUESTED
+  SETTLEMENT
   ACCEPTED
   COMPLETED
   RETURNED
@@ -946,25 +947,26 @@ enum PurchaseStatus {
 }
 
 model Purchase {
-  id             String          @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId   String          @db.ObjectId
-  restaurant     Restaurant      @relation("RestaurantToPurchase", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  invoiceNo      String
-  vendorId       String          @db.ObjectId
-  vendor         Vendor          @relation("PurchaseToVendor", fields: [vendorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  purchaseItems  PurchaseItems[] @relation("PurchaseToPurchaseItems")
-  purchaseStatus PurchaseStatus  @default(PROCESSED)
-  isPaid         Boolean?
-  createdBy      String?
-  paymentMethod  PaymentMethod?
-  subTotal       Float?
-  totalAmount    Float?
-  taxes          Float?
-  invoiceType    String?
-  invoiceUrl     String?
-  billImageUrl   String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId    String          @db.ObjectId
+  restaurant      Restaurant      @relation("RestaurantToPurchase", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  invoiceNo       String
+  vendorId        String          @db.ObjectId
+  vendor          Vendor          @relation("PurchaseToVendor", fields: [vendorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  purchaseItems   PurchaseItems[] @relation("PurchaseToPurchaseItems")
+  purchaseStatus  PurchaseStatus  @default(PROCESSED)
+  isPaid          Boolean?
+  createdBy       String?
+  paymentMethod   PaymentMethod?
+  subTotal        Float?
+  generatedAmount Float?
+  totalAmount     Float?
+  taxes           Float?
+  invoiceType     String?
+  invoiceUrl      String?
+  billImageUrl    String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model PurchaseItems {

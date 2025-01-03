@@ -23,6 +23,13 @@ export const getOAllItems = async (outletId: string) => {
           },
         },
       },
+      itemRecipe: {
+        include: {
+          menuItem: true,
+          menuItemVariant: true,
+          addOnItemVariant: true,
+        },
+      },
     },
   });
 

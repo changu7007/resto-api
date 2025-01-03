@@ -737,7 +737,7 @@ const totalInventory = (req, res) => __awaiter(void 0, void 0, void 0, function*
         where: {
             restaurantId: outlet.id,
             purchaseStatus: {
-                in: ["PROCESSED", "REQUESTED"],
+                in: ["PROCESSED", "REQUESTED", "ACCEPTED", "SETTLEMENT"],
             },
         },
     });

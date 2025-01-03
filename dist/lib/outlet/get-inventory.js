@@ -59,12 +59,13 @@ const getfetchOutletStocksToRedis = (outletId) => __awaiter(void 0, void 0, void
         },
     });
     const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
-        var _a;
+        var _a, _b;
         return ({
             id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
             name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
             consumptionUnit: rawItem.consumptionUnit.name,
-            stock: `${(_a = rawItem.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            lastPurchasedStock: `${(_a = rawItem.purchasedStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            stock: `${(_b = rawItem.currentStock) === null || _b === void 0 ? void 0 : _b.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
             purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
             lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
             purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
