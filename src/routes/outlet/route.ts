@@ -25,6 +25,8 @@ import {
   getAllOrders,
   getAllSessionOrders,
   getLiveOrders,
+  getTableAllOrders,
+  getTableAllSessionOrders,
   getTodayOrdersCount,
   orderessionBatchDelete,
   orderessionDeleteById,
@@ -38,12 +40,16 @@ import {
   addItemToUserFav,
   deleteItem,
   getAddONById,
+  getAddonsForTable,
   getAllItem,
+  getCategoriesForTable,
   getItemById,
+  getItemForTable,
   getMenuVariants,
   getShortCodeStatus,
   getSingleAddons,
   getVariantById,
+  getVariantsForTable,
   postItem,
   updateItembyId,
 } from "../../controllers/outlet/items/itemsController";
@@ -102,6 +108,7 @@ import {
   deleteStaff,
   getAllStaffs,
   getStaffId,
+  getStaffsForTable,
   updateStaff,
 } from "../../controllers/outlet/staffs/staffController";
 import {
@@ -109,13 +116,17 @@ import {
   getThisMonthPayroll,
   updatePayrollStatus,
 } from "../../controllers/outlet/payroll/payrollController";
-import { getAllCustomer } from "../../controllers/outlet/customers/customerController";
+import {
+  getAllCustomer,
+  getCustomersForTable,
+} from "../../controllers/outlet/customers/customerController";
 import {
   createVendorAccount,
   fetchBankAccountStatus,
 } from "../../controllers/outlet/plans/planController";
 import {
   allStocks,
+  allTableStocks,
   createItemRecipe,
   createRawMaterial,
   createRawMaterialCategory,
@@ -132,6 +143,11 @@ import {
   getAllRawMaterialCategory,
   getAllRawMaterials,
   getAllRawMaterialUnit,
+  getAllTableItemRecipe,
+  getAllTablePurcahses,
+  getAllTableRawMaterialCategory,
+  getAllTableRawMaterials,
+  getAllTableRawMaterialUnit,
   getAllVendors,
   getCategoryById,
   getPurchaseId,
@@ -155,6 +171,12 @@ import {
   resendInvite,
   verifyInvite,
 } from "../../controllers/auth/owner/appAuthController";
+import {
+  createExpenses,
+  deleteExpenses,
+  getAllExpensesForTable,
+  updateExpenses,
+} from "../../controllers/outlet/expenses/expenseController";
 
 const outletRoute: Router = Router();
 
@@ -213,6 +235,16 @@ outletRoute.post(
   "/:outletId/create-staff",
   isAuthMiddelware,
   errorHandler(createStaff)
+);
+outletRoute.post(
+  "/:outletId/get-table-staffs",
+  isAuthMiddelware,
+  errorHandler(getStaffsForTable)
+);
+outletRoute.post(
+  "/:outletId/get-table-customers",
+  isAuthMiddelware,
+  errorHandler(getCustomersForTable)
 );
 outletRoute.patch(
   "/:outletId/update-staff/:staffId",
@@ -300,6 +332,16 @@ outletRoute.get(
   "/:outletId/all-session-orders",
   errorHandler(getAllSessionOrders)
 );
+outletRoute.post(
+  "/:outletId/all-table-session-orders",
+  isAuthMiddelware,
+  errorHandler(getTableAllSessionOrders)
+);
+outletRoute.post(
+  "/:outletId/all-table-orders",
+  isAuthMiddelware,
+  errorHandler(getTableAllOrders)
+);
 outletRoute.get(
   "/:outletId/all-staff-orders",
   isAuthMiddelware,
@@ -318,6 +360,26 @@ outletRoute.post(
   errorHandler(postItem)
 );
 outletRoute.get("/:outletId/get-items", errorHandler(getAllItem));
+outletRoute.post(
+  "/:outletId/get-table-items",
+  isAuthMiddelware,
+  errorHandler(getItemForTable)
+);
+outletRoute.post(
+  "/:outletId/get-table-categories",
+  isAuthMiddelware,
+  errorHandler(getCategoriesForTable)
+);
+outletRoute.post(
+  "/:outletId/get-table-variants",
+  isAuthMiddelware,
+  errorHandler(getVariantsForTable)
+);
+outletRoute.post(
+  "/:outletId/get-table-addons",
+  isAuthMiddelware,
+  errorHandler(getAddonsForTable)
+);
 outletRoute.post(
   "/:outletId/add-to-fav",
   isAuthMiddelware,
@@ -503,7 +565,7 @@ outletRoute.delete(
 );
 
 //payroll
-outletRoute.get(
+outletRoute.post(
   "/:outletId/get-monthly-payroll",
   errorHandler(getThisMonthPayroll)
 );
@@ -561,6 +623,11 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getAllRawMaterials)
 );
+outletRoute.post(
+  "/:outletId/inventory/get-table-raw-materials",
+  isAuthMiddelware,
+  errorHandler(getAllTableRawMaterials)
+);
 outletRoute.get(
   "/:outletId/inventory/get-raw-materials/:id",
   isAuthMiddelware,
@@ -597,6 +664,11 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getAllRawMaterialCategory)
 );
+outletRoute.post(
+  "/:outletId/inventory/get-table-raw-material-categories",
+  isAuthMiddelware,
+  errorHandler(getAllTableRawMaterialCategory)
+);
 outletRoute.get(
   "/:outletId/inventory/get-raw-material-categories/:categoryId",
   isAuthMiddelware,
@@ -628,6 +700,11 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getAllRawMaterialUnit)
 );
+outletRoute.post(
+  "/:outletId/inventory/get-table-raw-material-units",
+  isAuthMiddelware,
+  errorHandler(getAllTableRawMaterialUnit)
+);
 outletRoute.get(
   "/:outletId/inventory/get-raw-material-unit/:unitId",
   isAuthMiddelware,
@@ -657,6 +734,11 @@ outletRoute.get(
   "/:outletId/inventory/get-all-purchases",
   isAuthMiddelware,
   errorHandler(getAllPurcahses)
+);
+outletRoute.post(
+  "/:outletId/inventory/get-all-table-purchases",
+  isAuthMiddelware,
+  errorHandler(getAllTablePurcahses)
 );
 outletRoute.get(
   "/:outletId/inventory/get-purchase/:id",
@@ -722,6 +804,11 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(allStocks)
 );
+outletRoute.post(
+  "/:outletId/inventory/get-all-table-stocks",
+  isAuthMiddelware,
+  errorHandler(allTableStocks)
+);
 
 //Item REcipe CREATE START
 outletRoute.post(
@@ -733,6 +820,11 @@ outletRoute.get(
   "/:outletId/inventory/all-recipes",
   isAuthMiddelware,
   errorHandler(getAllItemRecipe)
+);
+outletRoute.post(
+  "/:outletId/inventory/all-table-recipes",
+  // isAuthMiddelware,
+  errorHandler(getAllTableItemRecipe)
 );
 outletRoute.get(
   "/:outletId/inventory/get-recipe/:id",
@@ -782,4 +874,28 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getFinancialMetrics)
 );
+
+//EXPENSES GET,CREATE START
+outletRoute.post(
+  "/:outletId/expenses/get-all-table-expenses",
+  isAuthMiddelware,
+  errorHandler(getAllExpensesForTable)
+);
+outletRoute.post(
+  "/:outletId/expenses/create-expense",
+  isAuthMiddelware,
+  errorHandler(createExpenses)
+);
+outletRoute.patch(
+  "/:outletId/expenses/update-expense/:id",
+  isAuthMiddelware,
+  errorHandler(updateExpenses)
+);
+outletRoute.delete(
+  "/:outletId/expenses/delete-expense/:id",
+  isAuthMiddelware,
+  errorHandler(deleteExpenses)
+);
+//EXPENSES GET,CREATE END
+
 export default outletRoute;

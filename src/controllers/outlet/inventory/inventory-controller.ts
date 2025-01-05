@@ -3,7 +3,12 @@ import { generatePurchaseNo, getOutletById } from "../../../lib/outlet";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
-import { rawMaterialSchema } from "../../../schema/staff";
+import {
+  ColumnFilters,
+  ColumnSort,
+  PaginationState,
+  rawMaterialSchema,
+} from "../../../schema/staff";
 import { z } from "zod";
 import { redis } from "../../../services/redis";
 import {
@@ -966,6 +971,13 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
   if (validateFields?.isPaid && validateFields?.paymentMethod === undefined) {
     throw new BadRequestsException(
       "Please select your payment settlement mode",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (validateFields?.amountToBePaid < 1) {
+    throw new BadRequestsException(
+      "You have selected IsPaid, Please Input the Amount you Paid",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -2387,5 +2399,566 @@ export const updateStockRawMaterial = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "Stock Updated",
+  });
+};
+
+export const getAllTableRawMaterials = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.rawMaterial.count({
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const rawMaterials = await prismaDB.rawMaterial.findMany({
+    skip,
+    take,
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+    include: {
+      rawMaterialCategory: true,
+      consumptionUnit: true,
+      minimumStockUnit: true,
+    },
+    orderBy,
+  });
+
+  const formattedRawMaterias = rawMaterials?.map((raw) => ({
+    id: raw?.id,
+    name: raw?.name,
+    barcode: raw?.shortcode,
+    categoryId: raw?.categoryId,
+    consumptionUnitId: raw?.consumptionUnitId,
+    consumptionUnitName: raw?.consumptionUnit?.name,
+    minimumStockLevelUnitName: raw?.minimumStockUnit?.name,
+    minimumStockLevelUnitId: raw?.minimumStockLevelUnit,
+    conversionFactor: raw?.conversionFactor,
+    minimumStockLevel: raw?.minimumStockLevel,
+    category: raw?.rawMaterialCategory?.name,
+    createdAt: raw?.createdAt,
+  }));
+
+  return res.json({
+    success: true,
+    data: { totalCount: totalCount, rawMaterials: formattedRawMaterias },
+  });
+};
+
+export const getAllTableRawMaterialCategory = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.rawMaterialCategory.count({
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const rawMaterialsCategory = await prismaDB.rawMaterialCategory.findMany({
+    take,
+    skip,
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+    orderBy,
+  });
+
+  const formattedRawMaterialCategories = rawMaterialsCategory?.map((raw) => ({
+    id: raw?.id,
+    name: raw?.name,
+    createdAt: raw?.createdAt,
+    updatedAt: raw?.updatedAt,
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      totalCount: totalCount,
+      categories: formattedRawMaterialCategories,
+    },
+  });
+};
+
+export const allTableStocks = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.rawMaterial.count({
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const rawMaterials = await prismaDB.rawMaterial.findMany({
+    skip,
+    take,
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+    include: {
+      rawMaterialCategory: true,
+      consumptionUnit: true,
+      minimumStockUnit: true,
+    },
+    orderBy,
+  });
+
+  const formattedStocks = rawMaterials?.map((rawItem) => ({
+    id: rawItem?.id,
+    name: rawItem?.name,
+    consumptionUnit: rawItem?.consumptionUnit?.name,
+    stock: `${rawItem?.currentStock} - ${rawItem?.purchasedUnit}`,
+    purchasedPrice: rawItem?.purchasedPrice,
+    lastPurchasedPrice: rawItem?.lastPurchasedPrice,
+    purchasedPricePerItem: rawItem?.purchasedPricePerItem,
+    purchasedStock: `${rawItem?.currentStock} - ${rawItem?.purchasedUnit}`,
+    createdAt: rawItem?.createdAt,
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      totalCount: totalCount,
+      stocks: formattedStocks,
+    },
+    message: "Fetched Items by database ✅",
+  });
+};
+
+export const getAllTableItemRecipe = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.itemRecipe.count({
+    where: {
+      restaurantId: outlet?.id,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const getRecipes = await prismaDB.itemRecipe.findMany({
+    skip,
+    take,
+    where: {
+      restaurantId: outlet?.id,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+    include: {
+      addOnItemVariant: true,
+      ingredients: {
+        include: {
+          rawMaterial: true,
+          unit: true,
+        },
+      },
+      menuItem: true,
+      menuItemVariant: {
+        include: {
+          menuItem: true,
+          variant: true,
+        },
+      },
+    },
+    orderBy,
+  });
+
+  const formattedRecipes = getRecipes?.map((item) => ({
+    id: item?.id,
+    recipeType: item?.recipeType,
+    recipeFor: item?.recipeFor,
+    itemId:
+      item?.recipeFor === "MENU_ITEMS"
+        ? item?.menuId
+        : item?.recipeFor === "MENU_VARIANTS"
+        ? item?.menuVariantId
+        : item?.addonItemVariantId,
+    name:
+      item?.name ?? item?.recipeFor === "MENU_ITEMS"
+        ? item?.menuItem?.find((me) => me?.id === item?.menuId)?.name
+        : item?.recipeFor === "MENU_VARIANTS"
+        ? `${
+            item?.menuItemVariant?.find((v) => v.id === item?.menuVariantId)
+              ?.menuItem?.name
+          } - ${
+            item?.menuItemVariant?.find((v) => v.id === item?.menuVariantId)
+              ?.variant?.name
+          }`
+        : item?.addOnItemVariant?.find((a) => a.id === item?.addonItemVariantId)
+            ?.name,
+    grossMargin: item?.grossMargin,
+    itemPrice: item?.itemPrice,
+    itemCost: item?.itemCost,
+    ingredients: item?.ingredients.map((ing) => ({
+      id: ing?.id,
+      rawMaterialId: ing?.rawMaterialId,
+      rawMaterialName: ing?.rawMaterial?.name,
+      unitId: ing?.unitId,
+      unitName: ing?.unit?.name,
+      cost: ing?.cost,
+      quanity: ing?.quantity,
+    })),
+    createdBy: item.createdBy,
+    createdAt: item?.createdAt,
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      totalCount: totalCount,
+      recipes: formattedRecipes,
+    },
+  });
+};
+
+export const getTableAllRawMaterialUnit = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  const rawMaterialsUnitFromRedis = await redis.get(
+    `${outletId}-raw-materials-unit`
+  );
+
+  if (rawMaterialsUnitFromRedis) {
+    return res.json({
+      success: true,
+      units: JSON.parse(rawMaterialsUnitFromRedis),
+    });
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const rawMaterialsUnit = await prismaDB.unit.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+  });
+
+  await redis.set(
+    `${outletId}-raw-materials-unit`,
+    JSON.stringify(rawMaterialsUnit)
+  );
+
+  return res.json({
+    success: true,
+    units: rawMaterialsUnit,
+  });
+};
+
+export const getAllTablePurcahses = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.purchase.count({
+    where: {
+      restaurantId: outletId,
+      OR: [{ invoiceNo: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const allPurchases = await prismaDB.purchase.findMany({
+    skip,
+    take,
+    where: {
+      restaurantId: outletId,
+      OR: [{ invoiceNo: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+    include: {
+      purchaseItems: {
+        include: {
+          purchaseUnit: true,
+          rawMaterial: true,
+        },
+      },
+    },
+    orderBy,
+  });
+
+  const formattedPurchase = allPurchases?.map((purchase) => ({
+    id: purchase?.id,
+    invoiceNo: purchase?.invoiceNo,
+    vendorId: purchase?.vendorId,
+    isPaid: purchase?.isPaid,
+    subTotal: purchase?.subTotal,
+    taxes: purchase?.taxes,
+    paymentMethod: purchase?.paymentMethod,
+    generatedAmount: purchase?.generatedAmount,
+    totalAmount: purchase?.totalAmount,
+    purchaseStatus: purchase?.purchaseStatus,
+    createdBy: purchase?.createdBy,
+    createdAt: purchase?.createdAt,
+    purchaseItems: purchase?.purchaseItems?.map((item) => ({
+      id: item?.id,
+      rawMaterialId: item?.rawMaterialId,
+      rawMaterialName: item?.rawMaterialName,
+      purchaseUnitId: item?.purchaseUnitId,
+      purchaseUnitName: item?.purchaseUnitName,
+      purchaseQuantity: item?.purchaseQuantity,
+      cgst: item?.cgst,
+      purchasePrice: item?.purchasePrice,
+    })),
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      totalCount,
+      purchases: formattedPurchase,
+    },
+  });
+};
+
+export const getAllTableRawMaterialUnit = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.unit.count({
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const rawMaterialsUnit = await prismaDB.unit.findMany({
+    take,
+    skip,
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+    orderBy,
+  });
+
+  const formanttedUnits = rawMaterialsUnit?.map((unit) => ({
+    id: unit?.id,
+    name: unit?.name,
+    createdAt: unit?.createdAt,
+    updatedAt: unit?.updatedAt,
+  }));
+
+  return res.json({
+    success: true,
+    data: { totalCount, units: formanttedUnits },
   });
 };

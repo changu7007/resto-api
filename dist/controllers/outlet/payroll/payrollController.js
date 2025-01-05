@@ -22,7 +22,26 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const currentDate = new Date();
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ date: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
     let startDate;
     let endDate;
     if (month === "last") {
@@ -37,6 +56,20 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
         startDate = (0, date_fns_1.startOfMonth)(new Date());
         endDate = (0, date_fns_1.endOfMonth)(new Date());
     }
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.payroll.count({
+        where: {
+            staff: {
+                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            },
+            payDate: {
+                gte: startDate,
+                lte: endDate,
+            },
+            OR: [{ staff: { name: { contains: search, mode: "insensitive" } } }],
+            AND: filterConditions,
+        },
+    });
     // Fetch all payrolls for the specified restaurant within the current month
     const payrolls = yield __1.prismaDB.payroll.findMany({
         where: {
@@ -52,13 +85,46 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
             staff: true, // Include staff information for display
         },
     });
+    // Fetch all payrolls for the specified restaurant within the current month
+    const tablepayrolls = yield __1.prismaDB.payroll.findMany({
+        skip,
+        take,
+        where: {
+            staff: {
+                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            },
+            payDate: {
+                gte: startDate,
+                lte: endDate,
+            },
+            OR: [{ staff: { name: { contains: search, mode: "insensitive" } } }],
+            AND: filterConditions,
+        },
+        include: {
+            staff: true, // Include staff information for display
+        },
+    });
+    const formattedPayRoll = tablepayrolls === null || tablepayrolls === void 0 ? void 0 : tablepayrolls.map((table, i) => {
+        var _a, _b, _c, _d;
+        return ({
+            id: table === null || table === void 0 ? void 0 : table.id,
+            slNo: i + 1,
+            name: (_a = table === null || table === void 0 ? void 0 : table.staff) === null || _a === void 0 ? void 0 : _a.name,
+            email: (_b = table === null || table === void 0 ? void 0 : table.staff) === null || _b === void 0 ? void 0 : _b.email,
+            role: (_c = table === null || table === void 0 ? void 0 : table.staff) === null || _c === void 0 ? void 0 : _c.role,
+            salary: (_d = table === null || table === void 0 ? void 0 : table.staff) === null || _d === void 0 ? void 0 : _d.salary,
+            status: table === null || table === void 0 ? void 0 : table.status,
+            date: (0, date_fns_1.format)(table === null || table === void 0 ? void 0 : table.payDate, "PP"),
+        });
+    });
     if (payrolls.length > 0) {
         const totalPayout = payrolls.reduce((total, payroll) => total + parseFloat(payroll.staff.salary), 0);
         const totalSuccessPayouts = payrolls.filter((payroll) => payroll.status === "COMPLETED").length;
         const totalPendingPayouts = payrolls.filter((payroll) => payroll.status === "PENDING").length;
         return res.json({
             success: true,
-            payrolls,
+            totalCount,
+            payrolls: formattedPayRoll,
             totalPayout,
             totalPayouts: payrolls.length,
             totalSuccessPayouts,
@@ -101,10 +167,23 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
         });
         newPayrolls.push(newPayroll);
     }
+    const formattedNewPayRoll = newPayrolls === null || newPayrolls === void 0 ? void 0 : newPayrolls.map((table, i) => {
+        var _a, _b, _c, _d;
+        return ({
+            id: table === null || table === void 0 ? void 0 : table.id,
+            slNo: i + 1,
+            name: (_a = table === null || table === void 0 ? void 0 : table.staff) === null || _a === void 0 ? void 0 : _a.name,
+            email: (_b = table === null || table === void 0 ? void 0 : table.staff) === null || _b === void 0 ? void 0 : _b.email,
+            role: (_c = table === null || table === void 0 ? void 0 : table.staff) === null || _c === void 0 ? void 0 : _c.role,
+            salary: (_d = table === null || table === void 0 ? void 0 : table.staff) === null || _d === void 0 ? void 0 : _d.salary,
+            status: table === null || table === void 0 ? void 0 : table.status,
+            date: (0, date_fns_1.format)(table === null || table === void 0 ? void 0 : table.payDate, "PP"),
+        });
+    });
     // Return the newly created payrolls
     return res.json({
         success: true,
-        payrolls: newPayrolls,
+        payrolls: formattedNewPayRoll,
         totalPayout: newPayrolls.reduce((total, payroll) => total + parseFloat(payroll.staff.salary), 0),
         totalPayouts: newPayrolls.length,
         totalSuccessPayouts: 0, // No successful payouts initially

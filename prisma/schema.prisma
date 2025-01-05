@@ -69,6 +69,7 @@ model Restaurant {
   ItemRecipes           ItemRecipe[]           @relation("RestaurantToRecepies")
   Invite                Invite[]
   userAccess            UserRestaurantAccess[] @relation("RestaurantToAccess")
+  Expenses              Expenses[]             @relation("RestaurantToExpenses")
 }
 
 model Invite {
@@ -577,6 +578,7 @@ model ItemRecipe {
   grossMargin        Float?
   itemPrice          Float?
   itemCost           Float?
+  name               String             @default("")
   ingredients        RecipeIngredient[]
   createdBy          String?
   lastModifiedBy     String?
@@ -986,4 +988,26 @@ model PurchaseItems {
   cgst             Float?
   totalPrice       Float?
   purchasePrice    Float?
+}
+
+enum ExpenseCategory {
+  Ingredients
+  Utilities
+  Salaries
+  Equipment
+  Marketing
+  Rent
+  Miscellaneous
+}
+
+model Expenses {
+  id           String          @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String          @db.ObjectId
+  restaurant   Restaurant      @relation("RestaurantToExpenses", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  category     ExpenseCategory
+  date         DateTime
+  amount       Float
+  description  String
+
+  @@index([restaurantId])
 }

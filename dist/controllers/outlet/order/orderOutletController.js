@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.inviteCode = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -93,6 +93,366 @@ const getAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 });
 exports.getAllSessionOrders = getAllSessionOrders;
+const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    const { outletId } = req.params;
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.orderSession.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ billId: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    // Fetch counts for specific payment methods and order types
+    const [paymentMethodCounts, orderTypeCounts] = yield Promise.all([
+        __1.prismaDB.orderSession.groupBy({
+            by: ["paymentMethod"],
+            where: {
+                restaurantId: outletId,
+                OR: [{ billId: { contains: search, mode: "insensitive" } }],
+                AND: filterConditions,
+                paymentMethod: { in: ["UPI", "CASH", "DEBIT", "CREDIT"] },
+            },
+            _count: {
+                paymentMethod: true,
+            },
+            // _sum: {
+            //   subTotal: true, // Calculate total revenue per payment method
+            // },
+        }),
+        __1.prismaDB.orderSession.groupBy({
+            by: ["orderType"],
+            where: {
+                restaurantId: outletId,
+                OR: [{ billId: { contains: search, mode: "insensitive" } }],
+                AND: filterConditions,
+                orderType: { in: ["DINEIN", "EXPRESS", "DELIVERY", "TAKEAWAY"] },
+            },
+            _count: {
+                orderType: true,
+            },
+        }),
+    ]);
+    const activeOrders = yield __1.prismaDB.orderSession.findMany({
+        take,
+        skip,
+        where: {
+            restaurantId: outletId,
+            OR: [
+                { billId: { contains: (_a = search) !== null && _a !== void 0 ? _a : "" } },
+                { username: { contains: (_b = search) !== null && _b !== void 0 ? _b : "" } },
+            ],
+            AND: filterConditions, // Apply filters dynamically
+        },
+        select: {
+            id: true,
+            billId: true,
+            username: true,
+            phoneNo: true,
+            isPaid: true,
+            active: true,
+            invoiceUrl: true,
+            paymentMethod: true,
+            subTotal: true,
+            sessionStatus: true,
+            orderType: true,
+            createdAt: true,
+            updatedAt: true,
+            table: {
+                select: {
+                    name: true,
+                },
+            },
+            orders: {
+                select: {
+                    id: true,
+                    generatedOrderId: true,
+                    orderStatus: true,
+                    orderType: true,
+                    createdAt: true,
+                    totalAmount: true,
+                    orderItems: {
+                        select: {
+                            id: true,
+                            name: true,
+                            quantity: true,
+                            totalPrice: true,
+                        },
+                    },
+                },
+            },
+        },
+        orderBy,
+    });
+    const data = {
+        totalCount: totalCount,
+        paymentMethodStats: paymentMethodCounts.map((item) => ({
+            paymentMethod: item.paymentMethod,
+            count: item._count.paymentMethod,
+            // revenue: parseFloat(item._sum.subTotal) || 0, // Revenue for each payment method
+        })),
+        orderTypeCounts: orderTypeCounts.map((item) => ({
+            orderType: item.orderType,
+            count: item._count.orderType,
+        })),
+        activeOrders: activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => ({
+            id: order.id,
+            billId: order.billId,
+            userName: order.username,
+            isPaid: order.isPaid,
+            active: order.active,
+            invoiceUrl: order.invoiceUrl,
+            paymentMethod: order.paymentMethod,
+            subTotal: order.subTotal,
+            status: order.sessionStatus,
+            orderType: order.orderType === "DINEIN" ? order.table : order.orderType,
+            date: order.createdAt,
+            modified: order === null || order === void 0 ? void 0 : order.updatedAt,
+            viewOrders: [
+                {
+                    name: order.username,
+                    phoneNo: order.phoneNo,
+                    orderItems: order.orders.map((o) => ({
+                        id: o.id,
+                        generatedOrderId: o.generatedOrderId,
+                        orderStatus: o.orderStatus,
+                        total: o.totalAmount,
+                        items: o.orderItems.map((item) => ({
+                            id: item.id,
+                            name: item.name,
+                            quantity: item.quantity,
+                            totalPrice: item.totalPrice,
+                        })),
+                        mode: o.orderType,
+                        date: o.createdAt,
+                    })),
+                },
+            ], // Make sure viewOrders is an array
+        })),
+    };
+    return res.json({
+        success: true,
+        activeOrders: data,
+        message: "Fetched ✅",
+    });
+});
+exports.getTableAllSessionOrders = getTableAllSessionOrders;
+const getTableAllOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _c;
+    const { outletId } = req.params;
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.order.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ generatedOrderId: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    // Fetch counts for specific payment methods and order types
+    // const [paymentMethodCounts, orderTypeCounts] = await Promise.all([
+    //   prismaDB.order.groupBy({
+    //     by: ["paymentMethod"],
+    //     where: {
+    //       restaurantId: outletId,
+    //       OR: [{ billId: { contains: search, mode: "insensitive" } }],
+    //       AND: filterConditions,
+    //       paymentMethod: { in: ["UPI", "CASH", "DEBIT", "CREDIT"] },
+    //     },
+    //     _count: {
+    //       paymentMethod: true,
+    //     },
+    //     // _sum: {
+    //     //   subTotal: true, // Calculate total revenue per payment method
+    //     // },
+    //   }),
+    //   prismaDB.orderSession.groupBy({
+    //     by: ["orderType"],
+    //     where: {
+    //       restaurantId: outletId,
+    //       OR: [{ billId: { contains: search, mode: "insensitive" } }],
+    //       AND: filterConditions,
+    //       orderType: { in: ["DINEIN", "EXPRESS", "DELIVERY", "TAKEAWAY"] },
+    //     },
+    //     _count: {
+    //       orderType: true,
+    //     },
+    //   }),
+    // ]);
+    const tableOrders = yield __1.prismaDB.order.findMany({
+        take,
+        skip,
+        where: {
+            restaurantId: outletId,
+            OR: [{ generatedOrderId: { contains: (_c = search) !== null && _c !== void 0 ? _c : "" } }],
+            AND: filterConditions, // Apply filters dynamically
+        },
+        include: {
+            orderSession: true,
+            orderItems: {
+                include: {
+                    selectedVariant: true,
+                    addOnSelected: {
+                        include: {
+                            selectedAddOnVariantsId: true,
+                        },
+                    },
+                    menuItem: {
+                        include: {
+                            category: true,
+                            images: true,
+                            menuItemVariants: {
+                                include: {
+                                    variant: true,
+                                },
+                            },
+                            menuGroupAddOns: {
+                                include: {
+                                    addOnGroups: {
+                                        include: {
+                                            addOnVariants: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        orderBy,
+    });
+    const data = {
+        totalCount: totalCount,
+        // paymentMethodStats: paymentMethodCounts.map((item) => ({
+        //   paymentMethod: item.paymentMethod,
+        //   count: item._count.paymentMethod,
+        //   // revenue: parseFloat(item._sum.subTotal) || 0, // Revenue for each payment method
+        // })),
+        // orderTypeCounts: orderTypeCounts.map((item) => ({
+        //   orderType: item.orderType,
+        //   count: item._count.orderType,
+        // })),
+        orders: tableOrders === null || tableOrders === void 0 ? void 0 : tableOrders.map((order) => {
+            var _a;
+            return ({
+                id: order.id,
+                generatedOrderId: order.generatedOrderId,
+                name: (_a = order.orderSession) === null || _a === void 0 ? void 0 : _a.username,
+                orderType: order.orderType,
+                orderItems: order.orderItems.map((item) => {
+                    var _a, _b;
+                    return ({
+                        id: item.id,
+                        menuItem: {
+                            id: item.menuItem.id,
+                            name: item.menuItem.name,
+                            shortCode: item.menuItem.shortCode,
+                            categoryId: (_a = item.menuItem.category) === null || _a === void 0 ? void 0 : _a.id,
+                            categoryName: (_b = item.menuItem.category) === null || _b === void 0 ? void 0 : _b.name,
+                            type: item.menuItem.type,
+                            price: item.menuItem.price,
+                            isVariants: item.menuItem.isVariants,
+                            isAddOns: item.menuItem.isAddons,
+                            images: item.menuItem.images.map((image) => ({
+                                id: image.id,
+                                url: image.url,
+                            })),
+                            menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+                                id: variant.id,
+                                variantName: variant.variant.name,
+                                price: variant.price,
+                                type: variant.price,
+                            })),
+                            menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
+                                id: groupAddOn.id,
+                                addOnGroupName: groupAddOn.addOnGroups.title,
+                                description: groupAddOn.addOnGroups.description,
+                                addonVariants: groupAddOn.addOnGroups.addOnVariants.map((addOnVariant) => ({
+                                    id: addOnVariant.id,
+                                    name: addOnVariant.name,
+                                    price: addOnVariant.price,
+                                    type: addOnVariant.type,
+                                })),
+                            })),
+                        },
+                        name: item.name,
+                        quantity: item.quantity,
+                        netPrice: item.netPrice,
+                        gst: item.gst,
+                        gstPrice: (Number(item.originalRate) - parseFloat(item.netPrice || "0")) *
+                            Number(item.quantity),
+                        grossProfit: item.grossProfit,
+                        originalRate: item.originalRate,
+                        isVariants: item.isVariants,
+                        totalPrice: item.totalPrice,
+                        selectedVariant: item.selectedVariant,
+                        addOnSelected: item.addOnSelected,
+                    });
+                }),
+                orderStatus: order.orderStatus,
+                paid: order.isPaid,
+                total: Number(order.totalAmount),
+                createdAt: order.createdAt,
+                date: order.createdAt, // Make sure viewOrders is an array
+            });
+        }),
+    };
+    return res.json({
+        success: true,
+        activeOrders: data,
+        message: "Fetched ✅",
+    });
+});
+exports.getTableAllOrders = getTableAllOrders;
 const getAllOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisAllOrder = yield redis_1.redis.get(`all-orders-${outletId}`);
@@ -143,7 +503,7 @@ const getTodayOrdersCount = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.getTodayOrdersCount = getTodayOrdersCount;
 const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _d;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
     const { adminId, username, isPaid, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, } = req.body;
@@ -152,7 +512,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     }
     // Authorization and basic validation
     // @ts-ignore
-    if (adminId !== ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
+    if (adminId !== ((_d = req.user) === null || _d === void 0 ? void 0 : _d.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     if (isPaid === true && !paymentMethod) {
@@ -183,7 +543,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
             ? "COMPLETED"
             : "FOODREADY";
     const result = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _b, _c, _d, _e;
+        var _e, _f, _g, _h;
         let customer;
         if (isValid) {
             customer = yield prisma.customer.findFirst({
@@ -219,8 +579,8 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 sessionStatus: isPaid === true && orderStatus === "COMPLETED"
                     ? "COMPLETED"
                     : "ONPROGRESS",
-                billId: ((_b = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _b === void 0 ? void 0 : _b.isGSTEnabled)
-                    ? `${(_c = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _c === void 0 ? void 0 : _c.prefix}${(_d = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _d === void 0 ? void 0 : _d.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
+                billId: ((_e = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _e === void 0 ? void 0 : _e.isGSTEnabled)
+                    ? `${(_f = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _f === void 0 ? void 0 : _f.prefix}${(_g = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _g === void 0 ? void 0 : _g.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
                     : billNo,
                 orderType: orderType,
                 username: username !== null && username !== void 0 ? username : findUser.name,
@@ -352,7 +712,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 orderType: tableId ? "DINEIN" : orderType,
             },
         });
-        if ((_e = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _e === void 0 ? void 0 : _e.id) {
+        if ((_h = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _h === void 0 ? void 0 : _h.id) {
             yield prisma.invoice.update({
                 where: {
                     restaurantId: getOutlet.id,
@@ -384,12 +744,12 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.postOrderForOwner = postOrderForOwner;
 const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _f;
+    var _j;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
     const { billerId, username, isPaid, phoneNo, orderType, totalAmount, orderItems, tableId, orderMode, } = req.body;
     // @ts-ignore
-    if (billerId !== ((_f = req.user) === null || _f === void 0 ? void 0 : _f.id)) {
+    if (billerId !== ((_j = req.user) === null || _j === void 0 ? void 0 : _j.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const findBiller = yield __1.prismaDB.staff.findFirst({
@@ -566,12 +926,12 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.postOrderForStaf = postOrderForStaf;
 const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _g;
+    var _k;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
     const { customerId, isPaid, orderType, totalAmount, orderItems, tableId, paymentId, } = req.body;
     // @ts-ignore
-    if (customerId !== ((_g = req.user) === null || _g === void 0 ? void 0 : _g.id)) {
+    if (customerId !== ((_k = req.user) === null || _k === void 0 ? void 0 : _k.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const validCustomer = yield __1.prismaDB.customer.findFirst({
@@ -749,11 +1109,11 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.postOrderForUser = postOrderForUser;
 const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _h, _j;
+    var _l, _m;
     const { outletId, orderId } = req.params;
     const { billerId, isPaid, totalAmount, orderItems, orderMode } = req.body;
     // @ts-ignore
-    if (billerId !== ((_h = req.user) === null || _h === void 0 ? void 0 : _h.id)) {
+    if (billerId !== ((_l = req.user) === null || _l === void 0 ? void 0 : _l.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const findBiller = yield __1.prismaDB.staff.findFirst({
@@ -857,7 +1217,7 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
             orderId: generatedId,
             message: "You have a new Order",
             orderType: getOrder.orderType === "DINEIN"
-                ? (_j = getOrder.table) === null || _j === void 0 ? void 0 : _j.name
+                ? (_m = getOrder.table) === null || _m === void 0 ? void 0 : _m.name
                 : getOrder.orderType,
         },
     });
@@ -880,11 +1240,11 @@ const existingOrderPatch = (req, res) => __awaiter(void 0, void 0, void 0, funct
 });
 exports.existingOrderPatch = existingOrderPatch;
 const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _k, _l;
+    var _o, _p;
     const { outletId, orderId } = req.params;
     const { billerId, isPaid, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, orderMode, } = req.body;
     // @ts-ignore
-    if (billerId !== ((_k = req.user) === null || _k === void 0 ? void 0 : _k.id)) {
+    if (billerId !== ((_o = req.user) === null || _o === void 0 ? void 0 : _o.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const [findBiller, getOutlet] = yield Promise.all([
@@ -987,7 +1347,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
             orderId: generatedId,
             message: "You have a new Order",
             orderType: getOrder.orderType === "DINEIN"
-                ? (_l = getOrder.table) === null || _l === void 0 ? void 0 : _l.name
+                ? (_p = getOrder.table) === null || _p === void 0 ? void 0 : _p.name
                 : getOrder.orderType,
         },
     });
@@ -1048,10 +1408,10 @@ const orderessionPaymentModePatch = (req, res) => __awaiter(void 0, void 0, void
 });
 exports.orderessionPaymentModePatch = orderessionPaymentModePatch;
 const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _m;
+    var _q;
     const { id, outletId } = req.params;
     // @ts-ignore
-    const userId = (_m = req === null || req === void 0 ? void 0 : req.user) === null || _m === void 0 ? void 0 : _m.id;
+    const userId = (_q = req === null || req === void 0 ? void 0 : req.user) === null || _q === void 0 ? void 0 : _q.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -1084,11 +1444,11 @@ const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, fu
 });
 exports.orderessionDeleteById = orderessionDeleteById;
 const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _o;
+    var _r;
     const { outletId } = req.params;
     const { selectedId } = req.body;
     // @ts-ignore
-    const userId = (_o = req === null || req === void 0 ? void 0 : req.user) === null || _o === void 0 ? void 0 : _o.id;
+    const userId = (_r = req === null || req === void 0 ? void 0 : req.user) === null || _r === void 0 ? void 0 : _r.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -1165,7 +1525,7 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.orderStatusPatch = orderStatusPatch;
 const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _p;
+    var _s;
     const { outletId } = req.params;
     const redisOrderByStaff = yield redis_1.redis.get(`all-order-staff-${outletId}`);
     if (redisOrderByStaff) {
@@ -1180,7 +1540,7 @@ const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, funct
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     // @ts-ignore
-    const staff = yield (0, get_users_1.getStaffById)(outletId, (_p = req.user) === null || _p === void 0 ? void 0 : _p.id);
+    const staff = yield (0, get_users_1.getStaffById)(outletId, (_s = req.user) === null || _s === void 0 ? void 0 : _s.id);
     if (!(staff === null || staff === void 0 ? void 0 : staff.id)) {
         throw new not_found_1.NotFoundException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }

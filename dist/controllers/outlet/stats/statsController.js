@@ -195,6 +195,19 @@ const getRevenueAndExpenses = (req, res) => __awaiter(void 0, void 0, void 0, fu
             createdAt: true,
         },
     });
+    // Fetch  expenses
+    const expenses = yield __1.prismaDB.expenses.findMany({
+        where: {
+            restaurantId: outlet.id,
+            date: {
+                gte: sixMonthsAgo,
+            },
+        },
+        select: {
+            amount: true,
+            date: true,
+        },
+    });
     // Fetch payroll costs
     const payrolls = yield __1.prismaDB.payroll.findMany({
         where: {
@@ -227,6 +240,14 @@ const getRevenueAndExpenses = (req, res) => __awaiter(void 0, void 0, void 0, fu
             monthlyData[month] = { revenue: 0, expenses: 0 };
         }
         monthlyData[month].expenses += Number(purchase.totalAmount || "0");
+    });
+    // Aggregate purchase expenses by month
+    expenses.forEach((expense) => {
+        const month = (0, date_fns_1.format)(expense.date, "MMMM");
+        if (!monthlyData[month]) {
+            monthlyData[month] = { revenue: 0, expenses: 0 };
+        }
+        monthlyData[month].expenses += Number(expense.amount || "0");
     });
     // Aggregate payroll expenses by month
     payrolls.forEach((payroll) => {
@@ -553,7 +574,9 @@ const outletTopSellingItems = (req, res) => __awaiter(void 0, void 0, void 0, fu
             Number(item.grossProfit) * Number(item.quantity);
     });
     // Convert the aggregated object to an array and sort by orders
-    const sortedTopItems = Object.values(aggregated).sort((a, b) => b.orders - a.orders);
+    const sortedTopItems = Object.values(aggregated)
+        .sort((a, b) => b.orders - a.orders)
+        .map((item, index) => (Object.assign(Object.assign({}, item), { rank: index + 1 })));
     // .slice(0, 5); // Top 5 items
     return res.json({
         success: true,
@@ -889,6 +912,18 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         },
     });
     const totalPurchaseCost = purchases.reduce((sum, purchase) => sum + Number(purchase.totalAmount || "0"), 0);
+    // Fetch  expenses
+    const expenses = yield __1.prismaDB.expenses.findMany({
+        where: {
+            restaurantId: outlet.id,
+            date: { gte: startDate, lte: endDate },
+        },
+        select: {
+            amount: true,
+            date: true,
+        },
+    });
+    const totalExpensesCost = expenses.reduce((sum, purchase) => sum + Number(purchase.amount || "0"), 0);
     // Fetch labour costs from payroll
     const payrolls = yield __1.prismaDB.payroll.findMany({
         where: {
@@ -901,7 +936,7 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
     const totalLabourCost = payrolls.reduce((sum, payroll) => sum + Number(payroll.amountPaid || "0"), 0);
     // Calculate total expenses
-    const totalExpenses = totalPurchaseCost + totalLabourCost;
+    const totalExpenses = totalPurchaseCost + totalLabourCost + totalExpensesCost;
     // Calculate net profit
     const netProfit = totalGrossProfit - totalExpenses;
     // Calculate profit margin

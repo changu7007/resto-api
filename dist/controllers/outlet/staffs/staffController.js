@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = void 0;
+exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = exports.getStaffsForTable = void 0;
 const redis_1 = require("../../../services/redis");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -17,6 +17,77 @@ const __1 = require("../../..");
 const outlet_1 = require("../../../lib/outlet");
 const get_staffs_1 = require("../../../lib/outlet/get-staffs");
 const get_users_1 = require("../../../lib/get-users");
+const getStaffsForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.staff.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const getStaffs = yield __1.prismaDB.staff.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        include: {
+            orders: true,
+        },
+        orderBy,
+    });
+    const formattedStaffs = getStaffs === null || getStaffs === void 0 ? void 0 : getStaffs.map((staff) => {
+        var _a;
+        return ({
+            id: staff === null || staff === void 0 ? void 0 : staff.id,
+            name: staff === null || staff === void 0 ? void 0 : staff.name,
+            email: staff === null || staff === void 0 ? void 0 : staff.email,
+            role: staff === null || staff === void 0 ? void 0 : staff.role,
+            salary: staff === null || staff === void 0 ? void 0 : staff.salary,
+            orders: (_a = staff === null || staff === void 0 ? void 0 : staff.orders) === null || _a === void 0 ? void 0 : _a.length,
+            phoneNo: staff === null || staff === void 0 ? void 0 : staff.phoneNo,
+            joinedDate: staff === null || staff === void 0 ? void 0 : staff.joinedDate,
+            createdAt: staff === null || staff === void 0 ? void 0 : staff.createdAt,
+        });
+    });
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            staffs: formattedStaffs,
+        },
+        message: "Fetched Items by database ✅",
+    });
+});
+exports.getStaffsForTable = getStaffsForTable;
 const getAllStaffs = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisStaff = yield redis_1.redis.get(`staffs-${outletId}`);

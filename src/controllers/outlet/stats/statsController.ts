@@ -252,6 +252,20 @@ export const getRevenueAndExpenses = async (req: Request, res: Response) => {
     },
   });
 
+  // Fetch  expenses
+  const expenses = await prismaDB.expenses.findMany({
+    where: {
+      restaurantId: outlet.id,
+      date: {
+        gte: sixMonthsAgo,
+      },
+    },
+    select: {
+      amount: true,
+      date: true,
+    },
+  });
+
   // Fetch payroll costs
   const payrolls = await prismaDB.payroll.findMany({
     where: {
@@ -287,6 +301,15 @@ export const getRevenueAndExpenses = async (req: Request, res: Response) => {
       monthlyData[month] = { revenue: 0, expenses: 0 };
     }
     monthlyData[month].expenses += Number(purchase.totalAmount || "0");
+  });
+
+  // Aggregate purchase expenses by month
+  expenses.forEach((expense) => {
+    const month = format(expense.date, "MMMM");
+    if (!monthlyData[month]) {
+      monthlyData[month] = { revenue: 0, expenses: 0 };
+    }
+    monthlyData[month].expenses += Number(expense.amount || "0");
   });
 
   // Aggregate payroll expenses by month
@@ -661,9 +684,12 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
   });
 
   // Convert the aggregated object to an array and sort by orders
-  const sortedTopItems = Object.values(aggregated).sort(
-    (a, b) => b.orders - a.orders
-  );
+  const sortedTopItems = Object.values(aggregated)
+    .sort((a, b) => b.orders - a.orders)
+    .map((item, index) => ({
+      ...item,
+      rank: index + 1,
+    }));
   // .slice(0, 5); // Top 5 items
   return res.json({
     success: true,
@@ -1075,6 +1101,23 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
     0
   );
 
+  // Fetch  expenses
+  const expenses = await prismaDB.expenses.findMany({
+    where: {
+      restaurantId: outlet.id,
+      date: { gte: startDate, lte: endDate },
+    },
+    select: {
+      amount: true,
+      date: true,
+    },
+  });
+
+  const totalExpensesCost = expenses.reduce(
+    (sum, purchase) => sum + Number(purchase.amount || "0"),
+    0
+  );
+
   // Fetch labour costs from payroll
   const payrolls = await prismaDB.payroll.findMany({
     where: {
@@ -1092,7 +1135,7 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
   );
 
   // Calculate total expenses
-  const totalExpenses = totalPurchaseCost + totalLabourCost;
+  const totalExpenses = totalPurchaseCost + totalLabourCost + totalExpensesCost;
 
   // Calculate net profit
   const netProfit = totalGrossProfit - totalExpenses;

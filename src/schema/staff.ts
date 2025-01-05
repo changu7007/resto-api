@@ -35,3 +35,18 @@ export const rawMaterialSchema = z.object({
     .number()
     .min(0, "Minimum stock level is required"),
 });
+
+export interface ColumnSort {
+  desc: boolean;
+  id: string;
+}
+
+export interface PaginationState {
+  pageIndex: number;
+  pageSize: number;
+}
+
+export interface ColumnFilters {
+  id: string;
+  value: string[];
+}

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateStockRawMaterial = exports.settlePayForRaisedPurchase = exports.restockPurchase = exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
+exports.getAllTableRawMaterialUnit = exports.getAllTablePurcahses = exports.getTableAllRawMaterialUnit = exports.getAllTableItemRecipe = exports.allTableStocks = exports.getAllTableRawMaterialCategory = exports.getAllTableRawMaterials = exports.updateStockRawMaterial = exports.settlePayForRaisedPurchase = exports.restockPurchase = exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -763,6 +763,9 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
     }
     if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.isPaid) && (validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod) === undefined) {
         throw new bad_request_1.BadRequestsException("Please select your payment settlement mode", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.amountToBePaid) < 1) {
+        throw new bad_request_1.BadRequestsException("You have selected IsPaid, Please Input the Amount you Paid", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
@@ -1971,3 +1974,480 @@ const updateStockRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, f
     });
 });
 exports.updateStockRawMaterial = updateStockRawMaterial;
+const getAllTableRawMaterials = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.rawMaterial.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const rawMaterials = yield __1.prismaDB.rawMaterial.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        include: {
+            rawMaterialCategory: true,
+            consumptionUnit: true,
+            minimumStockUnit: true,
+        },
+        orderBy,
+    });
+    const formattedRawMaterias = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((raw) => {
+        var _a, _b, _c;
+        return ({
+            id: raw === null || raw === void 0 ? void 0 : raw.id,
+            name: raw === null || raw === void 0 ? void 0 : raw.name,
+            barcode: raw === null || raw === void 0 ? void 0 : raw.shortcode,
+            categoryId: raw === null || raw === void 0 ? void 0 : raw.categoryId,
+            consumptionUnitId: raw === null || raw === void 0 ? void 0 : raw.consumptionUnitId,
+            consumptionUnitName: (_a = raw === null || raw === void 0 ? void 0 : raw.consumptionUnit) === null || _a === void 0 ? void 0 : _a.name,
+            minimumStockLevelUnitName: (_b = raw === null || raw === void 0 ? void 0 : raw.minimumStockUnit) === null || _b === void 0 ? void 0 : _b.name,
+            minimumStockLevelUnitId: raw === null || raw === void 0 ? void 0 : raw.minimumStockLevelUnit,
+            conversionFactor: raw === null || raw === void 0 ? void 0 : raw.conversionFactor,
+            minimumStockLevel: raw === null || raw === void 0 ? void 0 : raw.minimumStockLevel,
+            category: (_c = raw === null || raw === void 0 ? void 0 : raw.rawMaterialCategory) === null || _c === void 0 ? void 0 : _c.name,
+            createdAt: raw === null || raw === void 0 ? void 0 : raw.createdAt,
+        });
+    });
+    return res.json({
+        success: true,
+        data: { totalCount: totalCount, rawMaterials: formattedRawMaterias },
+    });
+});
+exports.getAllTableRawMaterials = getAllTableRawMaterials;
+const getAllTableRawMaterialCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.rawMaterialCategory.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const rawMaterialsCategory = yield __1.prismaDB.rawMaterialCategory.findMany({
+        take,
+        skip,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        orderBy,
+    });
+    const formattedRawMaterialCategories = rawMaterialsCategory === null || rawMaterialsCategory === void 0 ? void 0 : rawMaterialsCategory.map((raw) => ({
+        id: raw === null || raw === void 0 ? void 0 : raw.id,
+        name: raw === null || raw === void 0 ? void 0 : raw.name,
+        createdAt: raw === null || raw === void 0 ? void 0 : raw.createdAt,
+        updatedAt: raw === null || raw === void 0 ? void 0 : raw.updatedAt,
+    }));
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            categories: formattedRawMaterialCategories,
+        },
+    });
+});
+exports.getAllTableRawMaterialCategory = getAllTableRawMaterialCategory;
+const allTableStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.rawMaterial.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const rawMaterials = yield __1.prismaDB.rawMaterial.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        include: {
+            rawMaterialCategory: true,
+            consumptionUnit: true,
+            minimumStockUnit: true,
+        },
+        orderBy,
+    });
+    const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
+        var _a;
+        return ({
+            id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
+            name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
+            consumptionUnit: (_a = rawItem === null || rawItem === void 0 ? void 0 : rawItem.consumptionUnit) === null || _a === void 0 ? void 0 : _a.name,
+            stock: `${rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
+            lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
+            purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
+            purchasedStock: `${rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            createdAt: rawItem === null || rawItem === void 0 ? void 0 : rawItem.createdAt,
+        });
+    });
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            stocks: formattedStocks,
+        },
+        message: "Fetched Items by database ✅",
+    });
+});
+exports.allTableStocks = allTableStocks;
+const getAllTableItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.itemRecipe.count({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const getRecipes = yield __1.prismaDB.itemRecipe.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        include: {
+            addOnItemVariant: true,
+            ingredients: {
+                include: {
+                    rawMaterial: true,
+                    unit: true,
+                },
+            },
+            menuItem: true,
+            menuItemVariant: {
+                include: {
+                    menuItem: true,
+                    variant: true,
+                },
+            },
+        },
+        orderBy,
+    });
+    const formattedRecipes = getRecipes === null || getRecipes === void 0 ? void 0 : getRecipes.map((item) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+        return ({
+            id: item === null || item === void 0 ? void 0 : item.id,
+            recipeType: item === null || item === void 0 ? void 0 : item.recipeType,
+            recipeFor: item === null || item === void 0 ? void 0 : item.recipeFor,
+            itemId: (item === null || item === void 0 ? void 0 : item.recipeFor) === "MENU_ITEMS"
+                ? item === null || item === void 0 ? void 0 : item.menuId
+                : (item === null || item === void 0 ? void 0 : item.recipeFor) === "MENU_VARIANTS"
+                    ? item === null || item === void 0 ? void 0 : item.menuVariantId
+                    : item === null || item === void 0 ? void 0 : item.addonItemVariantId,
+            name: ((_a = item === null || item === void 0 ? void 0 : item.name) !== null && _a !== void 0 ? _a : (item === null || item === void 0 ? void 0 : item.recipeFor) === "MENU_ITEMS")
+                ? (_c = (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.find((me) => (me === null || me === void 0 ? void 0 : me.id) === (item === null || item === void 0 ? void 0 : item.menuId))) === null || _c === void 0 ? void 0 : _c.name
+                : (item === null || item === void 0 ? void 0 : item.recipeFor) === "MENU_VARIANTS"
+                    ? `${(_f = (_e = (_d = item === null || item === void 0 ? void 0 : item.menuItemVariant) === null || _d === void 0 ? void 0 : _d.find((v) => v.id === (item === null || item === void 0 ? void 0 : item.menuVariantId))) === null || _e === void 0 ? void 0 : _e.menuItem) === null || _f === void 0 ? void 0 : _f.name} - ${(_j = (_h = (_g = item === null || item === void 0 ? void 0 : item.menuItemVariant) === null || _g === void 0 ? void 0 : _g.find((v) => v.id === (item === null || item === void 0 ? void 0 : item.menuVariantId))) === null || _h === void 0 ? void 0 : _h.variant) === null || _j === void 0 ? void 0 : _j.name}`
+                    : (_l = (_k = item === null || item === void 0 ? void 0 : item.addOnItemVariant) === null || _k === void 0 ? void 0 : _k.find((a) => a.id === (item === null || item === void 0 ? void 0 : item.addonItemVariantId))) === null || _l === void 0 ? void 0 : _l.name,
+            grossMargin: item === null || item === void 0 ? void 0 : item.grossMargin,
+            itemPrice: item === null || item === void 0 ? void 0 : item.itemPrice,
+            itemCost: item === null || item === void 0 ? void 0 : item.itemCost,
+            ingredients: item === null || item === void 0 ? void 0 : item.ingredients.map((ing) => {
+                var _a, _b;
+                return ({
+                    id: ing === null || ing === void 0 ? void 0 : ing.id,
+                    rawMaterialId: ing === null || ing === void 0 ? void 0 : ing.rawMaterialId,
+                    rawMaterialName: (_a = ing === null || ing === void 0 ? void 0 : ing.rawMaterial) === null || _a === void 0 ? void 0 : _a.name,
+                    unitId: ing === null || ing === void 0 ? void 0 : ing.unitId,
+                    unitName: (_b = ing === null || ing === void 0 ? void 0 : ing.unit) === null || _b === void 0 ? void 0 : _b.name,
+                    cost: ing === null || ing === void 0 ? void 0 : ing.cost,
+                    quanity: ing === null || ing === void 0 ? void 0 : ing.quantity,
+                });
+            }),
+            createdBy: item.createdBy,
+            createdAt: item === null || item === void 0 ? void 0 : item.createdAt,
+        });
+    });
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            recipes: formattedRecipes,
+        },
+    });
+});
+exports.getAllTableItemRecipe = getAllTableItemRecipe;
+const getTableAllRawMaterialUnit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const rawMaterialsUnitFromRedis = yield redis_1.redis.get(`${outletId}-raw-materials-unit`);
+    if (rawMaterialsUnitFromRedis) {
+        return res.json({
+            success: true,
+            units: JSON.parse(rawMaterialsUnitFromRedis),
+        });
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const rawMaterialsUnit = yield __1.prismaDB.unit.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+    });
+    yield redis_1.redis.set(`${outletId}-raw-materials-unit`, JSON.stringify(rawMaterialsUnit));
+    return res.json({
+        success: true,
+        units: rawMaterialsUnit,
+    });
+});
+exports.getTableAllRawMaterialUnit = getTableAllRawMaterialUnit;
+const getAllTablePurcahses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.purchase.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ invoiceNo: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const allPurchases = yield __1.prismaDB.purchase.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ invoiceNo: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        include: {
+            purchaseItems: {
+                include: {
+                    purchaseUnit: true,
+                    rawMaterial: true,
+                },
+            },
+        },
+        orderBy,
+    });
+    const formattedPurchase = allPurchases === null || allPurchases === void 0 ? void 0 : allPurchases.map((purchase) => {
+        var _a;
+        return ({
+            id: purchase === null || purchase === void 0 ? void 0 : purchase.id,
+            invoiceNo: purchase === null || purchase === void 0 ? void 0 : purchase.invoiceNo,
+            vendorId: purchase === null || purchase === void 0 ? void 0 : purchase.vendorId,
+            isPaid: purchase === null || purchase === void 0 ? void 0 : purchase.isPaid,
+            subTotal: purchase === null || purchase === void 0 ? void 0 : purchase.subTotal,
+            taxes: purchase === null || purchase === void 0 ? void 0 : purchase.taxes,
+            paymentMethod: purchase === null || purchase === void 0 ? void 0 : purchase.paymentMethod,
+            generatedAmount: purchase === null || purchase === void 0 ? void 0 : purchase.generatedAmount,
+            totalAmount: purchase === null || purchase === void 0 ? void 0 : purchase.totalAmount,
+            purchaseStatus: purchase === null || purchase === void 0 ? void 0 : purchase.purchaseStatus,
+            createdBy: purchase === null || purchase === void 0 ? void 0 : purchase.createdBy,
+            createdAt: purchase === null || purchase === void 0 ? void 0 : purchase.createdAt,
+            purchaseItems: (_a = purchase === null || purchase === void 0 ? void 0 : purchase.purchaseItems) === null || _a === void 0 ? void 0 : _a.map((item) => ({
+                id: item === null || item === void 0 ? void 0 : item.id,
+                rawMaterialId: item === null || item === void 0 ? void 0 : item.rawMaterialId,
+                rawMaterialName: item === null || item === void 0 ? void 0 : item.rawMaterialName,
+                purchaseUnitId: item === null || item === void 0 ? void 0 : item.purchaseUnitId,
+                purchaseUnitName: item === null || item === void 0 ? void 0 : item.purchaseUnitName,
+                purchaseQuantity: item === null || item === void 0 ? void 0 : item.purchaseQuantity,
+                cgst: item === null || item === void 0 ? void 0 : item.cgst,
+                purchasePrice: item === null || item === void 0 ? void 0 : item.purchasePrice,
+            })),
+        });
+    });
+    return res.json({
+        success: true,
+        data: {
+            totalCount,
+            purchases: formattedPurchase,
+        },
+    });
+});
+exports.getAllTablePurcahses = getAllTablePurcahses;
+const getAllTableRawMaterialUnit = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.unit.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const rawMaterialsUnit = yield __1.prismaDB.unit.findMany({
+        take,
+        skip,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        orderBy,
+    });
+    const formanttedUnits = rawMaterialsUnit === null || rawMaterialsUnit === void 0 ? void 0 : rawMaterialsUnit.map((unit) => ({
+        id: unit === null || unit === void 0 ? void 0 : unit.id,
+        name: unit === null || unit === void 0 ? void 0 : unit.name,
+        createdAt: unit === null || unit === void 0 ? void 0 : unit.createdAt,
+        updatedAt: unit === null || unit === void 0 ? void 0 : unit.updatedAt,
+    }));
+    return res.json({
+        success: true,
+        data: { totalCount, units: formanttedUnits },
+    });
+});
+exports.getAllTableRawMaterialUnit = getAllTableRawMaterialUnit;

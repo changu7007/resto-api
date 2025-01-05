@@ -2,8 +2,13 @@ import { Request, Response } from "express";
 import { getOutletById } from "../../../lib/outlet";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
-import { startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 import { prismaDB } from "../../..";
+import {
+  ColumnFilters,
+  ColumnSort,
+  PaginationState,
+} from "../../../schema/staff";
 
 export const getThisMonthPayroll = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -14,7 +19,32 @@ export const getThisMonthPayroll = async (req: Request, res: Response) => {
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
-  const currentDate = new Date();
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ date: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
   let startDate;
   let endDate;
 
@@ -28,6 +58,21 @@ export const getThisMonthPayroll = async (req: Request, res: Response) => {
     startDate = startOfMonth(new Date());
     endDate = endOfMonth(new Date());
   }
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.payroll.count({
+    where: {
+      staff: {
+        restaurantId: outlet?.id,
+      },
+      payDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+      OR: [{ staff: { name: { contains: search, mode: "insensitive" } } }],
+      AND: filterConditions,
+    },
+  });
 
   // Fetch all payrolls for the specified restaurant within the current month
   const payrolls = await prismaDB.payroll.findMany({
@@ -45,6 +90,37 @@ export const getThisMonthPayroll = async (req: Request, res: Response) => {
     },
   });
 
+  // Fetch all payrolls for the specified restaurant within the current month
+  const tablepayrolls = await prismaDB.payroll.findMany({
+    skip,
+    take,
+    where: {
+      staff: {
+        restaurantId: outlet?.id,
+      },
+      payDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+      OR: [{ staff: { name: { contains: search, mode: "insensitive" } } }],
+      AND: filterConditions,
+    },
+    include: {
+      staff: true, // Include staff information for display
+    },
+  });
+
+  const formattedPayRoll = tablepayrolls?.map((table, i) => ({
+    id: table?.id,
+    slNo: i + 1,
+    name: table?.staff?.name,
+    email: table?.staff?.email,
+    role: table?.staff?.role,
+    salary: table?.staff?.salary,
+    status: table?.status,
+    date: format(table?.payDate, "PP"),
+  }));
+
   if (payrolls.length > 0) {
     const totalPayout = payrolls.reduce(
       (total, payroll) => total + parseFloat(payroll.staff.salary),
@@ -58,7 +134,8 @@ export const getThisMonthPayroll = async (req: Request, res: Response) => {
     ).length;
     return res.json({
       success: true,
-      payrolls,
+      totalCount,
+      payrolls: formattedPayRoll,
       totalPayout,
       totalPayouts: payrolls.length,
       totalSuccessPayouts,
@@ -106,10 +183,21 @@ export const getThisMonthPayroll = async (req: Request, res: Response) => {
     newPayrolls.push(newPayroll);
   }
 
+  const formattedNewPayRoll = newPayrolls?.map((table, i) => ({
+    id: table?.id,
+    slNo: i + 1,
+    name: table?.staff?.name,
+    email: table?.staff?.email,
+    role: table?.staff?.role,
+    salary: table?.staff?.salary,
+    status: table?.status,
+    date: format(table?.payDate, "PP"),
+  }));
+
   // Return the newly created payrolls
   return res.json({
     success: true,
-    payrolls: newPayrolls,
+    payrolls: formattedNewPayRoll,
     totalPayout: newPayrolls.reduce(
       (total, payroll) => total + parseFloat(payroll.staff.salary),
       0

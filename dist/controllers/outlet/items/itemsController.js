@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = void 0;
+exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -20,6 +20,291 @@ const redis_1 = require("../../../services/redis");
 const get_items_1 = require("../../../lib/outlet/get-items");
 const zod_1 = require("zod");
 const get_users_1 = require("../../../lib/get-users");
+const date_fns_1 = require("date-fns");
+const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.menuItem.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const getItems = yield __1.prismaDB.menuItem.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        include: {
+            category: true,
+            images: true,
+            menuItemVariants: {
+                include: {
+                    variant: true,
+                },
+            },
+            menuGroupAddOns: {
+                include: {
+                    addOnGroups: {
+                        include: {
+                            addOnVariants: true,
+                        },
+                    },
+                },
+            },
+            itemRecipe: {
+                include: {
+                    menuItem: true,
+                    menuItemVariant: true,
+                    addOnItemVariant: true,
+                },
+            },
+        },
+        orderBy,
+    });
+    const formattedMenuItems = getItems === null || getItems === void 0 ? void 0 : getItems.map((item) => {
+        var _a, _b;
+        return ({
+            id: item === null || item === void 0 ? void 0 : item.id,
+            name: item === null || item === void 0 ? void 0 : item.name,
+            shortCode: item === null || item === void 0 ? void 0 : item.shortCode,
+            category: (_a = item === null || item === void 0 ? void 0 : item.category) === null || _a === void 0 ? void 0 : _a.name,
+            isPos: item === null || item === void 0 ? void 0 : item.isDineIn,
+            isOnline: item === null || item === void 0 ? void 0 : item.isOnline,
+            isVariants: item === null || item === void 0 ? void 0 : item.isVariants,
+            variants: (_b = item === null || item === void 0 ? void 0 : item.menuItemVariants) === null || _b === void 0 ? void 0 : _b.map((variant) => {
+                var _a;
+                return ({
+                    name: (_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.name,
+                    price: variant === null || variant === void 0 ? void 0 : variant.price,
+                });
+            }),
+            createdAt: item === null || item === void 0 ? void 0 : item.createdAt,
+            createdBy: "Admin",
+            type: item === null || item === void 0 ? void 0 : item.type,
+            price: item === null || item === void 0 ? void 0 : item.price,
+        });
+    });
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            items: formattedMenuItems,
+        },
+        message: "Fetched Items by database ✅",
+    });
+});
+exports.getItemForTable = getItemForTable;
+const getCategoriesForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.category.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const getCategories = yield __1.prismaDB.category.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        orderBy,
+    });
+    const formattedCategories = getCategories === null || getCategories === void 0 ? void 0 : getCategories.map((category) => ({
+        id: category === null || category === void 0 ? void 0 : category.id,
+        name: category === null || category === void 0 ? void 0 : category.name,
+        createdAt: (0, date_fns_1.format)(category.createdAt, "MMMM do, yyyy"),
+        updatedAt: (0, date_fns_1.format)(category.updatedAt, "MMMM do, yyyy"),
+    }));
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            categories: formattedCategories,
+        },
+        message: "Fetched Items by database ✅",
+    });
+});
+exports.getCategoriesForTable = getCategoriesForTable;
+const getVariantsForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.variants.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const getVariants = yield __1.prismaDB.variants.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        orderBy,
+    });
+    const formattedVariants = getVariants === null || getVariants === void 0 ? void 0 : getVariants.map((item) => ({
+        id: item.id,
+        name: item.name,
+        variantCategory: item.variantCategory.toLowerCase(),
+        createdAt: (0, date_fns_1.format)(item.createdAt, "MMMM do, yyyy"),
+        updatedAt: (0, date_fns_1.format)(item.updatedAt, "MMMM do, yyyy"),
+    }));
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            variants: formattedVariants,
+        },
+        message: "Fetched Items by database ✅",
+    });
+});
+exports.getVariantsForTable = getVariantsForTable;
+const getAddonsForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.addOns.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ title: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const getAddons = yield __1.prismaDB.addOns.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ title: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        orderBy,
+    });
+    const formattedAddOns = getAddons === null || getAddons === void 0 ? void 0 : getAddons.map((addOn) => ({
+        id: addOn.id,
+        addOnName: addOn.title,
+        status: addOn.status,
+        createdAt: (0, date_fns_1.format)(addOn.createdAt, "MMMM do, yyyy"),
+        updatedAt: (0, date_fns_1.format)(addOn.updatedAt, "MMMM do, yyyy"),
+    }));
+    return res.json({
+        success: true,
+        data: {
+            totalCount: totalCount,
+            addons: formattedAddOns,
+        },
+        message: "Fetched Items by database ✅",
+    });
+});
+exports.getAddonsForTable = getAddonsForTable;
 const getAllItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const allItems = yield redis_1.redis.get(`${outletId}-all-items`);
