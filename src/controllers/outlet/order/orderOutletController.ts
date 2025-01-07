@@ -1850,6 +1850,112 @@ export const orderessionPaymentModePatch = async (
   });
 };
 
+export const orderessionNamePatch = async (req: Request, res: Response) => {
+  const { id, outletId } = req.params;
+  const { name } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getOrderById = await getOrderSessionById(outlet.id, id);
+
+  if (!getOrderById?.id) {
+    throw new NotFoundException(
+      "No Order Found to Update",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  await prismaDB.orderSession.update({
+    where: {
+      id: getOrderById.id,
+      restaurantId: outlet.id,
+    },
+    data: {
+      username: name,
+    },
+  });
+  await Promise.all([
+    getFetchActiveOrderSessionToRedis(outletId),
+    getFetchAllOrderSessionToRedis(outletId),
+    getFetchAllOrdersToRedis(outletId),
+    getFetchLiveOrderToRedis(outletId),
+    getFetchAllTablesToRedis(outletId),
+    getFetchAllAreastoRedis(outletId),
+  ]);
+
+  websocketManager.notifyClients(outlet?.id, "ORDER_UPDATED");
+
+  return res.json({
+    success: true,
+    message: "UserName Updated ✅",
+  });
+};
+
+export const orderessionCancelPatch = async (req: Request, res: Response) => {
+  const { id, outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getOrderById = await getOrderSessionById(outlet.id, id);
+
+  if (!getOrderById?.id) {
+    throw new NotFoundException(
+      "No Order Found to Update",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  // Perform updates within a transaction
+  await prismaDB.$transaction(async (tx) => {
+    // Update the `orderSession` status to "CANCELLED"
+    await tx.orderSession.update({
+      where: {
+        id: getOrderById.id,
+      },
+      data: {
+        sessionStatus: "CANCELLED",
+        active: false,
+      },
+    });
+
+    // Update all related orders' status to "CANCELLED"
+    await tx.order.updateMany({
+      where: {
+        orderSessionId: getOrderById.id,
+        restaurantId: outletId,
+      },
+      data: {
+        orderStatus: "CANCELLED",
+      },
+    });
+  });
+
+  // Refresh Redis cache
+  await Promise.all([
+    getFetchActiveOrderSessionToRedis(outletId),
+    getFetchAllOrderSessionToRedis(outletId),
+    getFetchAllOrdersToRedis(outletId),
+    getFetchLiveOrderToRedis(outletId),
+    getFetchAllTablesToRedis(outletId),
+    getFetchAllAreastoRedis(outletId),
+  ]);
+
+  websocketManager.notifyClients(outlet?.id, "ORDER_UPDATED");
+
+  return res.json({
+    success: true,
+    message: "Order Transaction Cancelled✅",
+  });
+};
+
 export const orderessionDeleteById = async (req: Request, res: Response) => {
   const { id, outletId } = req.params;
   // @ts-ignore
@@ -1924,13 +2030,34 @@ export const orderessionBatchDelete = async (req: Request, res: Response) => {
     });
   }
 
-  await prismaDB.orderSession.deleteMany({
-    where: {
-      restaurantId: outlet?.id,
-      id: {
-        in: selectedId,
+  // Perform status update within a transaction
+  await prismaDB.$transaction(async (tx) => {
+    // Update related orders' statuses to "CANCELLED"
+    await tx.order.updateMany({
+      where: {
+        orderSessionId: {
+          in: selectedId,
+        },
+        restaurantId: outlet.id,
       },
-    },
+      data: {
+        orderStatus: "CANCELLED",
+      },
+    });
+
+    // Update `orderSession` statuses to "CANCELLED"
+    await tx.orderSession.updateMany({
+      where: {
+        restaurantId: outlet.id,
+        id: {
+          in: selectedId,
+        },
+      },
+      data: {
+        sessionStatus: "CANCELLED",
+        active: false,
+      },
+    });
   });
 
   await Promise.all([

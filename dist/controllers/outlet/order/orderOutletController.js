@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionCancelPatch = exports.orderessionNamePatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.existingOrderPatch = exports.postOrderForUser = exports.postOrderForStaf = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getAllOrders = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -1417,6 +1417,90 @@ const orderessionPaymentModePatch = (req, res) => __awaiter(void 0, void 0, void
     });
 });
 exports.orderessionPaymentModePatch = orderessionPaymentModePatch;
+const orderessionNamePatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id, outletId } = req.params;
+    const { name } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getOrderById = yield (0, outlet_1.getOrderSessionById)(outlet.id, id);
+    if (!(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.id)) {
+        throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.orderSession.update({
+        where: {
+            id: getOrderById.id,
+            restaurantId: outlet.id,
+        },
+        data: {
+            username: name,
+        },
+    });
+    yield Promise.all([
+        (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
+        (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
+        (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
+        (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+    ]);
+    ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "ORDER_UPDATED");
+    return res.json({
+        success: true,
+        message: "UserName Updated ✅",
+    });
+});
+exports.orderessionNamePatch = orderessionNamePatch;
+const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id, outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getOrderById = yield (0, outlet_1.getOrderSessionById)(outlet.id, id);
+    if (!(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.id)) {
+        throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
+    }
+    // Perform updates within a transaction
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        // Update the `orderSession` status to "CANCELLED"
+        yield tx.orderSession.update({
+            where: {
+                id: getOrderById.id,
+            },
+            data: {
+                sessionStatus: "CANCELLED",
+                active: false,
+            },
+        });
+        // Update all related orders' status to "CANCELLED"
+        yield tx.order.updateMany({
+            where: {
+                orderSessionId: getOrderById.id,
+                restaurantId: outletId,
+            },
+            data: {
+                orderStatus: "CANCELLED",
+            },
+        });
+    }));
+    // Refresh Redis cache
+    yield Promise.all([
+        (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
+        (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
+        (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
+        (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
+        (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+    ]);
+    ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "ORDER_UPDATED");
+    return res.json({
+        success: true,
+        message: "Order Transaction Cancelled✅",
+    });
+});
+exports.orderessionCancelPatch = orderessionCancelPatch;
 const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _q;
     const { id, outletId } = req.params;
@@ -1473,14 +1557,34 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
             message: "Please select neccessarry Order Transaction",
         });
     }
-    yield __1.prismaDB.orderSession.deleteMany({
-        where: {
-            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
-            id: {
-                in: selectedId,
+    // Perform status update within a transaction
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        // Update related orders' statuses to "CANCELLED"
+        yield tx.order.updateMany({
+            where: {
+                orderSessionId: {
+                    in: selectedId,
+                },
+                restaurantId: outlet.id,
             },
-        },
-    });
+            data: {
+                orderStatus: "CANCELLED",
+            },
+        });
+        // Update `orderSession` statuses to "CANCELLED"
+        yield tx.orderSession.updateMany({
+            where: {
+                restaurantId: outlet.id,
+                id: {
+                    in: selectedId,
+                },
+            },
+            data: {
+                sessionStatus: "CANCELLED",
+                active: false,
+            },
+        });
+    }));
     yield Promise.all([
         (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
         (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),

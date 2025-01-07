@@ -30,7 +30,9 @@ import {
   getTableAllSessionOrders,
   getTodayOrdersCount,
   orderessionBatchDelete,
+  orderessionCancelPatch,
   orderessionDeleteById,
+  orderessionNamePatch,
   orderessionPaymentModePatch,
   orderItemModification,
   orderStatusPatch,
@@ -309,6 +311,11 @@ outletRoute.patch(
   errorHandler(orderessionPaymentModePatch)
 );
 outletRoute.patch(
+  "/:outletId/order-session-cancel/:id",
+  isAuthMiddelware,
+  errorHandler(orderessionCancelPatch)
+);
+outletRoute.patch(
   "/:outletId/orders/:orderId",
   isAuthMiddelware,
   errorHandler(orderStatusPatch)
@@ -318,11 +325,11 @@ outletRoute.patch(
   isAuthMiddelware,
   errorHandler(billingOrderSession)
 );
-outletRoute.delete(
-  "/:outletId/order-session-delete/:id",
-  isAuthMiddelware,
-  errorHandler(orderessionDeleteById)
-);
+// outletRoute.delete(
+//   "/:outletId/order-session-delete/:id",
+//   isAuthMiddelware,
+//   errorHandler(orderessionDeleteById)
+// );
 outletRoute.patch(
   "/:outletId/order-session-bulk-delete",
   isAuthMiddelware,
