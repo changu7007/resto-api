@@ -311,6 +311,11 @@ outletRoute.patch(
   errorHandler(orderessionPaymentModePatch)
 );
 outletRoute.patch(
+  "/:outletId/order-session-update-name/:id",
+  isAuthMiddelware,
+  errorHandler(orderessionNamePatch)
+);
+outletRoute.patch(
   "/:outletId/order-session-cancel/:id",
   isAuthMiddelware,
   errorHandler(orderessionCancelPatch)
@@ -325,11 +330,7 @@ outletRoute.patch(
   isAuthMiddelware,
   errorHandler(billingOrderSession)
 );
-// outletRoute.delete(
-//   "/:outletId/order-session-delete/:id",
-//   isAuthMiddelware,
-//   errorHandler(orderessionDeleteById)
-// );
+
 outletRoute.patch(
   "/:outletId/order-session-bulk-delete",
   isAuthMiddelware,
