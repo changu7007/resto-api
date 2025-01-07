@@ -47,6 +47,8 @@ outletRoute.post("/:outletId/staff-post-order", auth_1.isAuthMiddelware, (0, err
 outletRoute.post("/:outletId/app-post-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.postOrderForOwner));
 outletRoute.post("/:outletId/user-post-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.postOrderForUser));
 outletRoute.patch("/:outletId/add-orders/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.existingOrderPatch));
+outletRoute.patch("/:outletId/order-item-patch/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderItemModification));
+outletRoute.delete("/:outletId/order-item-delete/:orderItemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.deleteOrderItem));
 outletRoute.patch("/:outletId/app-add-orders/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.existingOrderPatchApp));
 outletRoute.patch("/:outletId/order-session-update-payment/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderessionPaymentModePatch));
 outletRoute.patch("/:outletId/orders/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderStatusPatch));
@@ -97,6 +99,8 @@ outletRoute.post("/s3-upload", auth_1.isAuthMiddelware, (0, error_handler_1.erro
 //area-table
 outletRoute.get("/:outletId/tables", (0, error_handler_1.errorHandler)(outletTableController_1.getAllTables));
 outletRoute.get("/:outletId/areas", (0, error_handler_1.errorHandler)(outletTableController_1.getAllAreas));
+outletRoute.post("/:outletId/get-table-tables", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.getAllTablesForTable));
+outletRoute.post("/:outletId/get-table-areas", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.getAllAreasForTable));
 outletRoute.post("/:outletId/create-table", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.createTable));
 outletRoute.patch("/:outletId/update-table/:tableId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.updateTable));
 outletRoute.delete("/:outletId/delete-table/:tableId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.deleteTable));

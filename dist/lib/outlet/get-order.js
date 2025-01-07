@@ -83,6 +83,7 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
                 include: {
                     orderItems: {
                         include: {
+                            selectedVariant: true,
                             addOnSelected: {
                                 include: {
                                     selectedAddOnVariantsId: true,

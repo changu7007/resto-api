@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = void 0;
+exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = exports.getAllAreasForTable = exports.getAllTablesForTable = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -18,6 +18,145 @@ const redis_1 = require("../../../services/redis");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const get_tables_1 = require("../../../lib/outlet/get-tables");
 const orderOutletController_1 = require("../order/orderOutletController");
+const getAllTablesForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.table.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const tables = yield __1.prismaDB.table.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+            name: true,
+            areaId: true,
+            qrcode: true,
+            uniqueId: true,
+            shortCode: true,
+            areas: {
+                select: {
+                    name: true,
+                },
+            },
+            capacity: true,
+            occupied: true,
+        },
+        orderBy,
+    });
+    const formattedTable = tables === null || tables === void 0 ? void 0 : tables.map((table) => {
+        var _a;
+        return ({
+            id: table === null || table === void 0 ? void 0 : table.id,
+            name: table === null || table === void 0 ? void 0 : table.name,
+            areaId: table === null || table === void 0 ? void 0 : table.areaId,
+            qrcode: table === null || table === void 0 ? void 0 : table.qrcode,
+            uniqueId: table === null || table === void 0 ? void 0 : table.uniqueId,
+            shortCode: table === null || table === void 0 ? void 0 : table.shortCode,
+            area: (_a = table === null || table === void 0 ? void 0 : table.areas) === null || _a === void 0 ? void 0 : _a.name,
+            capacity: table === null || table === void 0 ? void 0 : table.capacity,
+            occupied: table === null || table === void 0 ? void 0 : table.occupied,
+        });
+    });
+    return res.json({
+        success: true,
+        data: {
+            totalCount,
+            tables: formattedTable,
+        },
+        message: "Fetched ✅",
+    });
+});
+exports.getAllTablesForTable = getAllTablesForTable;
+const getAllAreasForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    // Fetch total count for the given query
+    const totalCount = yield __1.prismaDB.areas.count({
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+    });
+    const areas = yield ((_a = __1.prismaDB === null || __1.prismaDB === void 0 ? void 0 : __1.prismaDB.areas) === null || _a === void 0 ? void 0 : _a.findMany({
+        skip,
+        take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        select: {
+            id: true,
+            name: true,
+            createdAt: true,
+            updatedAt: true,
+        },
+        orderBy,
+    }));
+    return res.json({
+        success: true,
+        data: { totalCount, areas: areas },
+        message: "Powered Up ",
+    });
+});
+exports.getAllAreasForTable = getAllAreasForTable;
 const getAllTables = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const rTables = yield redis_1.redis.get(`tables-${outletId}`);
@@ -346,10 +485,10 @@ const getTableByUniqueId = (req, res) => __awaiter(void 0, void 0, void 0, funct
 });
 exports.getTableByUniqueId = getTableByUniqueId;
 const getTableCurrentOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _b;
     const { outletId, tableId, customerId } = req.params;
     // @ts-ignore
-    if (customerId !== ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
+    if (customerId !== ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const validCustomer = yield __1.prismaDB.customer.findFirst({

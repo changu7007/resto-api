@@ -1,4 +1,5 @@
 import {
+  MenuItem,
   OrderSessionStatus,
   OrderStatus,
   OrderType,
@@ -44,6 +45,7 @@ import {
   ColumnSort,
   PaginationState,
 } from "../../../schema/staff";
+import { z } from "zod";
 
 export const getLiveOrders = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -745,12 +747,30 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
                         type: item?.menuItem?.menuItemVariants?.find(
                           (variant: any) => variant?.id === item?.sizeVariantsId
                         )?.type,
-                        price: Number(
-                          item?.menuItem?.menuItemVariants?.find(
-                            (variant: any) =>
-                              variant?.id === item?.sizeVariantsId
-                          )?.price
+                        price:
+                          Number(
+                            item?.menuItem.menuItemVariants.find(
+                              (v: any) => v?.id === item?.sizeVariantsId
+                            )?.price as string
+                          ) * item?.quantity,
+                        gst: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.gst
                         ),
+                        netPrice: (
+                          Number(
+                            item?.menuItem.menuItemVariants.find(
+                              (v: any) => v?.id === item?.sizeVariantsId
+                            )?.netPrice as string
+                          ) * item?.quantity
+                        ).toString(),
+                        grossProfit:
+                          Number(
+                            item?.menuItem.menuItemVariants.find(
+                              (v: any) => v?.id === item?.sizeVariantsId
+                            )?.grossProfit
+                          ) * item?.quantity,
                       },
                     }
                   : undefined,
@@ -1497,11 +1517,30 @@ export const existingOrderPatch = async (req: Request, res: Response) => {
                       type: item?.menuItem?.menuItemVariants?.find(
                         (variant: any) => variant?.id === item?.sizeVariantsId
                       )?.type,
-                      price: Number(
-                        item?.menuItem?.menuItemVariants?.find(
-                          (variant: any) => variant?.id === item?.sizeVariantsId
-                        )?.price
+                      price:
+                        Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.price as string
+                        ) * item?.quantity,
+                      gst: Number(
+                        item?.menuItem.menuItemVariants.find(
+                          (v: any) => v?.id === item?.sizeVariantsId
+                        )?.gst
                       ),
+                      netPrice: (
+                        Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.netPrice as string
+                        ) * item?.quantity
+                      ).toString(),
+                      grossProfit:
+                        Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.grossProfit
+                        ) * item?.quantity,
                     },
                   }
                 : undefined,
@@ -1665,11 +1704,30 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
                       type: item?.menuItem?.menuItemVariants?.find(
                         (variant: any) => variant?.id === item?.sizeVariantsId
                       )?.type,
-                      price: Number(
-                        item?.menuItem?.menuItemVariants?.find(
-                          (variant: any) => variant?.id === item?.sizeVariantsId
-                        )?.price
+                      price:
+                        Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.price as string
+                        ) * item?.quantity,
+                      gst: Number(
+                        item?.menuItem.menuItemVariants.find(
+                          (v: any) => v?.id === item?.sizeVariantsId
+                        )?.gst
                       ),
+                      netPrice: (
+                        Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.netPrice as string
+                        ) * item?.quantity
+                      ).toString(),
+                      grossProfit:
+                        Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.grossProfit
+                        ) * item?.quantity,
                     },
                   }
                 : undefined,
@@ -1975,6 +2033,358 @@ export const getAllOrderByStaff = async (req: Request, res: Response) => {
     success: true,
     orders: getAllOrders,
     message: "Fetched ✅",
+  });
+};
+
+const menuCardSchema = z.object({
+  quantity: z.number().min(1, "Quantity must be at least 1"),
+  selectedVariantId: z.string().optional(),
+  addOnSelected: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      selectedAddOnVariantsId: z.array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          price: z.number(),
+        })
+      ),
+    })
+  ),
+  totalPrice: z.number().min(1, "Invalid Total"),
+});
+
+export const orderItemModification = async (req: Request, res: Response) => {
+  const { orderId, outletId } = req.params;
+  const { data: validateFields, error } = menuCardSchema.safeParse(req.body);
+
+  if (error) {
+    throw new BadRequestsException(
+      error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getOrderById = await prismaDB.orderItem.findFirst({
+    where: {
+      id: orderId,
+      order: {
+        restaurantId: outletId,
+      },
+    },
+    include: {
+      order: {
+        include: {
+          orderItems: true,
+          orderSession: true,
+        },
+      },
+      menuItem: {
+        include: {
+          menuItemVariants: {
+            include: {
+              variant: true,
+            },
+          },
+          menuGroupAddOns: {
+            include: {
+              addOnGroups: true,
+            },
+          },
+        },
+      },
+      selectedVariant: true,
+      addOnSelected: true,
+    },
+  });
+
+  if (!getOrderById?.id) {
+    throw new NotFoundException(
+      "No Order Found to Update",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  const txs = await prismaDB.$transaction(async (prisma) => {
+    await prisma.orderItem.update({
+      where: {
+        id: getOrderById.id,
+        order: { restaurantId: outlet.id },
+      },
+      data: {
+        quantity: validateFields?.quantity.toString(),
+        selectedVariant: validateFields.selectedVariantId
+          ? {
+              update: {
+                where: {
+                  id: getOrderById?.selectedVariant?.id,
+                },
+                data: {
+                  sizeVariantId: validateFields?.selectedVariantId,
+                  name: getOrderById?.menuItem.menuItemVariants.find(
+                    (v) => v?.id === validateFields?.selectedVariantId
+                  )?.variant?.name,
+                  price:
+                    parseFloat(
+                      getOrderById?.menuItem.menuItemVariants.find(
+                        (v) => v?.id === validateFields?.selectedVariantId
+                      )?.price as string
+                    ) * validateFields?.quantity,
+                  gst: Number(
+                    getOrderById?.menuItem.menuItemVariants.find(
+                      (v) => v?.id === validateFields?.selectedVariantId
+                    )?.gst
+                  ),
+                  netPrice: (
+                    parseFloat(
+                      getOrderById?.menuItem.menuItemVariants.find(
+                        (v) => v?.id === validateFields?.selectedVariantId
+                      )?.netPrice as string
+                    ) * validateFields?.quantity
+                  ).toString(),
+                  grossProfit:
+                    Number(
+                      getOrderById?.menuItem.menuItemVariants.find(
+                        (v) => v?.id === validateFields?.selectedVariantId
+                      )?.grossProfit
+                    ) * validateFields?.quantity,
+                },
+              },
+            }
+          : undefined,
+        // addOnSelected: {
+        //   set: [],
+        //   create: validateFields.addOnSelected.map((addOn) => ({
+        //     id: addOn.id,
+        //     name: addOn.name,
+        //     selectedAddOnVariantsId: {
+        //       create: addOn.selectedAddOnVariantsId.map((subVariant) => ({
+        //         id: subVariant.id,
+        //         name: subVariant.name,
+        //         price: subVariant.price,
+        //       })),
+        //     },
+        //   })),
+        // },
+        netPrice: !getOrderById?.isVariants
+          ? (
+              Number(getOrderById?.menuItem?.netPrice as string) *
+              validateFields?.quantity
+            ).toString()
+          : (
+              Number(
+                getOrderById?.menuItem.menuItemVariants.find(
+                  (v) => v?.id === validateFields?.selectedVariantId
+                )?.netPrice as string
+              ) * validateFields?.quantity
+            ).toString(),
+        originalRate: !getOrderById?.isVariants
+          ? Number(getOrderById?.menuItem?.price as string)
+          : Number(
+              getOrderById?.menuItem.menuItemVariants.find(
+                (v) => v?.id === validateFields?.selectedVariantId
+              )?.price as string
+            ),
+        grossProfit: !getOrderById?.isVariants
+          ? Number(getOrderById?.menuItem?.grossProfit) *
+            validateFields?.quantity
+          : Number(
+              getOrderById?.menuItem.menuItemVariants.find(
+                (v) => v?.id === validateFields?.selectedVariantId
+              )?.grossProfit
+            ) * validateFields?.quantity,
+        gst: !getOrderById?.isVariants
+          ? getOrderById?.menuItem?.gst
+          : getOrderById?.menuItem.menuItemVariants.find(
+              (v) => v?.id === validateFields?.selectedVariantId
+            )?.gst,
+        totalPrice: validateFields?.totalPrice,
+      },
+    });
+
+    const getOrder = await prisma.orderItem.findFirst({
+      where: {
+        id: orderId,
+        order: {
+          restaurantId: outletId,
+        },
+      },
+      include: {
+        order: {
+          include: {
+            orderItems: true,
+            orderSession: true,
+          },
+        },
+      },
+    });
+
+    if (!getOrder?.id) {
+      throw new NotFoundException(
+        "No Order Found to Update",
+        ErrorCode.NOT_FOUND
+      );
+    }
+
+    // Recalculate the totals for the order
+    const updatedOrderItems = getOrder.order.orderItems;
+
+    const totalGrossProfit = updatedOrderItems.reduce(
+      (total, item) => total + (Number(item.grossProfit) || 0),
+      0
+    );
+    const totalNetPrice = updatedOrderItems.reduce(
+      (total, item) => total + (Number(item.netPrice as string) || 0),
+      0
+    );
+    const gstPrice = updatedOrderItems.reduce(
+      (total, item) =>
+        total +
+        ((Number(item.netPrice as string) * Number(item.gst)) / 100 || 0),
+      0
+    );
+    const totalAmount = updatedOrderItems.reduce(
+      (total, item) => total + item.totalPrice,
+      0
+    );
+
+    // Update the order with recalculated values
+    await prisma.order.update({
+      where: {
+        id: getOrder.order.id,
+      },
+      data: {
+        totalGrossProfit,
+        totalNetPrice,
+        gstPrice,
+        totalAmount: totalAmount.toString(),
+      },
+    });
+  });
+
+  await Promise.all([
+    getFetchActiveOrderSessionToRedis(outletId),
+    getFetchAllOrderSessionToRedis(outletId),
+    getFetchAllOrdersToRedis(outletId),
+    getFetchLiveOrderToRedis(outletId),
+    getFetchAllTablesToRedis(outletId),
+    getFetchAllAreastoRedis(outletId),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Order Item Updated Success ✅",
+  });
+};
+
+export const deleteOrderItem = async (req: Request, res: Response) => {
+  const { orderItemId, outletId } = req.params;
+
+  // Validate outlet
+  const outlet = await getOutletById(outletId);
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Fetch the OrderItem and its parent Order
+  const orderItem = await prismaDB.orderItem.findFirst({
+    where: {
+      id: orderItemId,
+      order: {
+        restaurantId: outletId,
+      },
+    },
+    include: {
+      order: {
+        include: {
+          orderItems: true, // Include all order items for recalculation
+        },
+      },
+    },
+  });
+
+  if (!orderItem?.id) {
+    throw new NotFoundException("OrderItem Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  // Use Prisma transaction for atomic operation
+  await prismaDB.$transaction(async (tx) => {
+    // Delete the OrderItem
+    await tx.orderItem.delete({
+      where: {
+        id: orderItem.id,
+      },
+    });
+
+    const remainingOrderItems = orderItem.order.orderItems.filter(
+      (item) => item.id !== orderItem.id
+    );
+
+    // If no order items remain, delete the order
+    if (remainingOrderItems.length === 0) {
+      await tx.order.delete({
+        where: {
+          id: orderItem.order.id,
+        },
+      });
+    } else {
+      // Recalculate Order totals
+      const totalGrossProfit = remainingOrderItems.reduce(
+        (total, item) =>
+          total + (Number(item.grossProfit) * parseFloat(item.quantity) || 0),
+        0
+      );
+      const totalNetPrice = remainingOrderItems.reduce(
+        (total, item) =>
+          total +
+          (parseFloat(item.netPrice as string) * parseFloat(item.quantity) ||
+            0),
+        0
+      );
+      const gstPrice = remainingOrderItems.reduce(
+        (total, item) =>
+          total + (Number(item.gst) * parseFloat(item.quantity) || 0),
+        0
+      );
+      const totalAmount = remainingOrderItems.reduce(
+        (total, item) => total + item.totalPrice,
+        0
+      );
+
+      // Update the Order
+      await tx.order.update({
+        where: {
+          id: orderItem.order.id,
+        },
+        data: {
+          totalGrossProfit,
+          totalNetPrice,
+          gstPrice,
+          totalAmount: totalAmount.toString(),
+        },
+      });
+    }
+  });
+
+  // Refresh caches after successful transaction
+  await Promise.all([
+    getFetchActiveOrderSessionToRedis(outletId),
+    getFetchAllOrderSessionToRedis(outletId),
+    getFetchAllOrdersToRedis(outletId),
+    getFetchLiveOrderToRedis(outletId),
+    getFetchAllTablesToRedis(outletId),
+    getFetchAllAreastoRedis(outletId),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Order Item Deleted",
   });
 };
 

@@ -18,6 +18,7 @@ import {
 import { errorHandler } from "../../error-handler";
 import { isAuthMiddelware } from "../../middlewares/auth";
 import {
+  deleteOrderItem,
   existingOrderPatch,
   existingOrderPatchApp,
   getAllActiveSessionOrders,
@@ -31,6 +32,7 @@ import {
   orderessionBatchDelete,
   orderessionDeleteById,
   orderessionPaymentModePatch,
+  orderItemModification,
   orderStatusPatch,
   postOrderForOwner,
   postOrderForStaf,
@@ -66,7 +68,9 @@ import {
   deleteArea,
   deleteTable,
   getAllAreas,
+  getAllAreasForTable,
   getAllTables,
+  getAllTablesForTable,
   getTableByUniqueId,
   getTableCurrentOrders,
   updateArea,
@@ -285,6 +289,16 @@ outletRoute.patch(
   errorHandler(existingOrderPatch)
 );
 outletRoute.patch(
+  "/:outletId/order-item-patch/:orderId",
+  isAuthMiddelware,
+  errorHandler(orderItemModification)
+);
+outletRoute.delete(
+  "/:outletId/order-item-delete/:orderItemId",
+  isAuthMiddelware,
+  errorHandler(deleteOrderItem)
+);
+outletRoute.patch(
   "/:outletId/app-add-orders/:orderId",
   isAuthMiddelware,
   errorHandler(existingOrderPatchApp)
@@ -474,6 +488,16 @@ outletRoute.post("/s3-upload", isAuthMiddelware, errorHandler(s3Upload));
 //area-table
 outletRoute.get("/:outletId/tables", errorHandler(getAllTables));
 outletRoute.get("/:outletId/areas", errorHandler(getAllAreas));
+outletRoute.post(
+  "/:outletId/get-table-tables",
+  isAuthMiddelware,
+  errorHandler(getAllTablesForTable)
+);
+outletRoute.post(
+  "/:outletId/get-table-areas",
+  isAuthMiddelware,
+  errorHandler(getAllAreasForTable)
+);
 outletRoute.post(
   "/:outletId/create-table",
   isAuthMiddelware,

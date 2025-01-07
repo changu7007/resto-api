@@ -73,6 +73,7 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
         include: {
           orderItems: {
             include: {
+              selectedVariant: true,
               addOnSelected: {
                 include: {
                   selectedAddOnVariantsId: true,

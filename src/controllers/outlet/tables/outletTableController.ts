@@ -10,6 +10,168 @@ import {
   getFetchAllTablesToRedis,
 } from "../../../lib/outlet/get-tables";
 import { inviteCode } from "../order/orderOutletController";
+import {
+  ColumnFilters,
+  ColumnSort,
+  PaginationState,
+} from "../../../schema/staff";
+
+export const getAllTablesForTable = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.table.count({
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const tables = await prismaDB.table.findMany({
+    skip,
+    take,
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+      name: true,
+      areaId: true,
+      qrcode: true,
+      uniqueId: true,
+      shortCode: true,
+      areas: {
+        select: {
+          name: true,
+        },
+      },
+      capacity: true,
+      occupied: true,
+    },
+    orderBy,
+  });
+
+  const formattedTable = tables?.map((table) => ({
+    id: table?.id,
+    name: table?.name,
+    areaId: table?.areaId,
+    qrcode: table?.qrcode,
+    uniqueId: table?.uniqueId,
+    shortCode: table?.shortCode,
+    area: table?.areas?.name,
+    capacity: table?.capacity,
+    occupied: table?.occupied,
+  }));
+  return res.json({
+    success: true,
+    data: {
+      totalCount,
+      tables: formattedTable,
+    },
+    message: "Fetched ✅",
+  });
+};
+
+export const getAllAreasForTable = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const search: string = req.body.search;
+  const sorting: ColumnSort[] = req.body.sorting || [];
+
+  const filters: ColumnFilters[] = req.body.filters || [];
+  const pagination: PaginationState = req.body.pagination || {
+    pageIndex: 0,
+    pageSize: 8,
+  };
+
+  // Build orderBy for Prisma query
+  const orderBy =
+    sorting?.length > 0
+      ? sorting.map((sort) => ({
+          [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+      : [{ createdAt: "desc" }];
+
+  // Calculate pagination parameters
+  const take = pagination.pageSize || 8;
+  const skip = pagination.pageIndex * take;
+
+  // Build filters dynamically
+  const filterConditions = filters.map((filter) => ({
+    [filter.id]: { in: filter.value },
+  }));
+
+  // Fetch total count for the given query
+  const totalCount = await prismaDB.areas.count({
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+  });
+
+  const areas = await prismaDB?.areas?.findMany({
+    skip,
+    take,
+    where: {
+      restaurantId: outletId,
+      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      AND: filterConditions,
+    },
+    select: {
+      id: true,
+      name: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy,
+  });
+
+  return res.json({
+    success: true,
+    data: { totalCount, areas: areas },
+    message: "Powered Up ",
+  });
+};
 
 export const getAllTables = async (req: Request, res: Response) => {
   const { outletId } = req.params;
