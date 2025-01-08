@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchBankAccountStatus = exports.createVendorAccount = exports.getAllPlans = exports.buyPlan = exports.paymentRazorpayVerification = exports.CreateRazorPayOrderForOutlet = exports.CreateRazorPayOrder = void 0;
+exports.fetchBankAccountStatus = exports.createVendorAccount = exports.getAllPlans = exports.buyPlan = exports.paymentWebhookVerification = exports.paymentRazorpayVerification = exports.CreateRazorPaySubscriptionForOutlet = exports.CreateRazorPayOrderForOutlet = exports.CreateRazorPayOrder = void 0;
 const razorpay_1 = __importDefault(require("razorpay"));
 const crypto_1 = __importDefault(require("crypto"));
 const bad_request_1 = require("../../../exceptions/bad-request");
@@ -73,6 +73,48 @@ function CreateRazorPayOrderForOutlet(req, res) {
     });
 }
 exports.CreateRazorPayOrderForOutlet = CreateRazorPayOrderForOutlet;
+function CreateRazorPaySubscriptionForOutlet(req, res) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const { outletId } = req.params;
+        // @ts-ignore
+        const userId = req.user.id;
+        const outlet = yield (0, outlet_1.getOutletById)(outletId);
+        if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+            throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+        }
+        if (outlet.adminId !== userId) {
+            throw new not_found_1.NotFoundException("Only Restaurant Owner/manager Can Subscribe", root_1.ErrorCode.UNAUTHORIZED);
+        }
+        const user = yield __1.prismaDB.user.findFirst({
+            where: {
+                id: userId,
+            },
+        });
+        if (!(user === null || user === void 0 ? void 0 : user.id)) {
+            throw new not_found_1.NotFoundException("Admin Not Found", root_1.ErrorCode.UNAUTHORIZED);
+        }
+        const subs = yield razorpay.subscriptions.create({
+            plan_id: "plan_PgvSrK72iPruyR",
+            customer_notify: 1,
+            total_count: 12,
+        });
+        // const userUpdate = await prismaDB.user.update({
+        //   where:{
+        //     id: user.id
+        //   },
+        //   data:{
+        //     billings:{
+        //       create:{
+        //       }
+        //     }
+        //   }
+        // })
+        return res.json({
+            success: true,
+        });
+    });
+}
+exports.CreateRazorPaySubscriptionForOutlet = CreateRazorPaySubscriptionForOutlet;
 const paymentRazorpayVerification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
     const body = razorpayOrderId + "|" + razorpayPaymentId;
@@ -92,6 +134,29 @@ const paymentRazorpayVerification = (req, res) => __awaiter(void 0, void 0, void
     }
 });
 exports.paymentRazorpayVerification = paymentRazorpayVerification;
+const paymentWebhookVerification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const secret = "JaiHanumantha@15";
+    const shasum = crypto_1.default
+        .createHmac("sha256", secret)
+        .update(JSON.stringify(req.body));
+    const digest = shasum.digest("hex");
+    console.log(`Digest:${digest}`, req.headers["x-razorpay-signature"], req.body);
+    if (digest === req.headers["x-razorpay-signature"]) {
+        console.log("Request is legit");
+        return res.json({
+            success: true,
+            message: "legit",
+        });
+    }
+    else {
+        console.log("Messing");
+        return res.json({
+            success: false,
+            message: "not-legit",
+        });
+    }
+});
+exports.paymentWebhookVerification = paymentWebhookVerification;
 const buyPlan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { paymentId, subscriptionId, paidAmount } = req.body;

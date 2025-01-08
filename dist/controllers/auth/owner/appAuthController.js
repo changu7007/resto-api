@@ -245,7 +245,6 @@ const getUserByIdAndVerifyEmail = (req, res) => __awaiter(void 0, void 0, void 0
 exports.getUserByIdAndVerifyEmail = getUserByIdAndVerifyEmail;
 const get2FAConfirmationUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { userId } = req.params;
-    console.log("UserId", userId);
     const twoFactorConfirmation = yield __1.prismaDB.twoFactorConfirmation.findUnique({
         where: { userId: userId },
     });

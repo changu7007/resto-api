@@ -10,6 +10,7 @@ import {
 import {
   CreateRazorPayOrder,
   paymentRazorpayVerification,
+  paymentWebhookVerification,
 } from "../../controllers/outlet/plans/planController";
 import { sendFireBaseNotification } from "../../controllers/utilsController";
 
@@ -35,6 +36,10 @@ onboardingRoute.post(
 onboardingRoute.post(
   "/verify-razorpay-payment",
   errorHandler(paymentRazorpayVerification)
+);
+onboardingRoute.post(
+  "/razorpay-verification",
+  errorHandler(paymentWebhookVerification)
 );
 onboardingRoute.post(
   "/send-notification",

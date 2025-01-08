@@ -280,7 +280,6 @@ export const getUserByIdAndVerifyEmail = async (
 
 export const get2FAConfirmationUser = async (req: Request, res: Response) => {
   const { userId } = req.params;
-  console.log("UserId", userId);
 
   const twoFactorConfirmation = await prismaDB.twoFactorConfirmation.findUnique(
     {

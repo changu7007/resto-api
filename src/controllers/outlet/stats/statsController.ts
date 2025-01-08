@@ -11,6 +11,7 @@ interface Metrics {
   totalRevenue: number;
   totalOrders: number;
   avgOrderTime: number;
+  totalGrossProfit: number;
 }
 
 interface GrowthRate {
@@ -20,10 +21,14 @@ interface GrowthRate {
 }
 
 interface DashboardMetrics {
-  revenue: { totalRevenue: string; revenueGrowth: string };
+  revenue: { totalRevenue: number; revenueGrowth: string };
+  grossProfit: { totalGrossProfit: number; grossProfitGrowth: string };
+  expenses: { totalExpenses: number; expenseGrowth: string };
+  netProfit: { totalNetProfit: number; percentage: number };
   orders: { totalOrders: number; orderGrowth: string };
   orderTime: { avgOrderTime: string; avgOrderTimeGrowth: string };
   customers: { totalCustomers: number; customerGrowth: string };
+  profitMargin: { totalProfitPercentage: number; percentage: number };
 }
 
 const getPreviousPeriodDates = (period: string) => {
@@ -60,6 +65,10 @@ const calculateMetrics = (orders: any[]): Metrics => ({
     (sum, order) => sum + parseFloat(order.totalAmount || "0"),
     0
   ),
+  totalGrossProfit: orders.reduce(
+    (sum, order) => sum + parseFloat(order.totalGrossProfit || "0"),
+    0
+  ),
   totalOrders: orders.length,
   avgOrderTime: orders.length
     ? orders.reduce(
@@ -72,6 +81,13 @@ const calculateMetrics = (orders: any[]): Metrics => ({
       orders.length /
       60000
     : 0,
+});
+
+const calculateExpMetrics = (orders: any[]) => ({
+  totalExpenses: orders?.reduce(
+    (sum, expense) => sum + parseFloat(expense?.amount || "0"),
+    0
+  ),
 });
 
 const calculateGrowthRate = (current: number, previous: number): GrowthRate => {
@@ -119,61 +135,97 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
   const { startDate: prevStartDate, endDate: prevEndDate } =
     getPreviousPeriodDates(period);
 
-  const [currentOrders, prevOrders, currentCustomers, prevCustomers] =
-    await Promise.all([
-      prismaDB.order.findMany({
-        where: {
-          restaurantId: outlet.id,
-          createdAt: { gte: startDate, lte: endDate },
-          orderStatus: "COMPLETED",
-          orderSession: { sessionStatus: "COMPLETED" },
-        },
-        select: {
-          totalAmount: true,
-          createdAt: true,
-          updatedAt: true,
-          orderType: true,
-        },
-      }),
-      prismaDB.order.findMany({
-        where: {
-          restaurantId: outlet.id,
-          createdAt: { gte: prevStartDate, lte: prevEndDate },
-          orderStatus: "COMPLETED",
-          orderSession: { sessionStatus: "COMPLETED" },
-        },
-        select: {
-          totalAmount: true,
-          createdAt: true,
-          updatedAt: true,
-          orderType: true,
-        },
-      }),
-      prismaDB.customer.count({
-        where: {
-          restaurantId: outlet.id,
-          createdAt: { gte: startDate, lte: endDate },
-        },
-      }),
-      prismaDB.customer.count({
-        where: {
-          restaurantId: outlet.id,
-          createdAt: { gte: prevStartDate, lte: prevEndDate },
-        },
-      }),
-    ]);
+  const [
+    currentOrders,
+    prevOrders,
+    currentCustomers,
+    prevCustomers,
+    currentExpenses,
+    prevExpenses,
+  ] = await Promise.all([
+    prismaDB.order.findMany({
+      where: {
+        restaurantId: outlet.id,
+        createdAt: { gte: startDate, lte: endDate },
+        orderStatus: "COMPLETED",
+        orderSession: { sessionStatus: "COMPLETED" },
+      },
+      select: {
+        totalAmount: true,
+        totalGrossProfit: true,
+        createdAt: true,
+        updatedAt: true,
+        orderType: true,
+      },
+    }),
+    prismaDB.order.findMany({
+      where: {
+        restaurantId: outlet.id,
+        createdAt: { gte: prevStartDate, lte: prevEndDate },
+        orderStatus: "COMPLETED",
+        orderSession: { sessionStatus: "COMPLETED" },
+      },
+      select: {
+        totalAmount: true,
+        totalGrossProfit: true,
+        createdAt: true,
+        updatedAt: true,
+        orderType: true,
+      },
+    }),
+    prismaDB.customer.count({
+      where: {
+        restaurantId: outlet.id,
+        createdAt: { gte: startDate, lte: endDate },
+      },
+    }),
+    prismaDB.customer.count({
+      where: {
+        restaurantId: outlet.id,
+        createdAt: { gte: prevStartDate, lte: prevEndDate },
+      },
+    }),
+    prismaDB.expenses.findMany({
+      where: {
+        restaurantId: outlet.id,
+        date: { gte: startDate, lte: endDate },
+      },
+      select: {
+        amount: true,
+      },
+    }),
+    prismaDB.expenses.findMany({
+      where: {
+        restaurantId: outlet.id,
+        date: { gte: startDate, lte: endDate },
+      },
+      select: {
+        amount: true,
+      },
+    }),
+  ]);
 
   const currentMetrics = calculateMetrics(currentOrders);
   const prevMetrics = calculateMetrics(prevOrders);
+  const currentExpMetrics = calculateExpMetrics(currentExpenses);
+  const prevExpMetrics = calculateExpMetrics(prevExpenses);
 
   const growthRates = {
     revenue: calculateGrowthRate(
       currentMetrics.totalRevenue,
       prevMetrics.totalRevenue
     ),
+    grossProfit: calculateGrowthRate(
+      currentMetrics.totalGrossProfit,
+      prevMetrics.totalGrossProfit
+    ),
     orders: calculateGrowthRate(
       currentMetrics.totalOrders,
       prevMetrics.totalOrders
+    ),
+    expenses: calculateGrowthRate(
+      currentExpMetrics.totalExpenses,
+      prevExpMetrics.totalExpenses
     ),
     avgOrderTime: calculateGrowthRate(
       currentMetrics.avgOrderTime,
@@ -186,8 +238,35 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
 
   const metrics: DashboardMetrics = {
     revenue: {
-      totalRevenue: currentMetrics.totalRevenue.toFixed(2),
+      totalRevenue: parseFloat(currentMetrics.totalRevenue.toFixed(2)),
       revenueGrowth: formatGrowthMessage(growthRates.revenue, periodLabel),
+    },
+    grossProfit: {
+      totalGrossProfit: parseFloat(currentMetrics.totalGrossProfit.toFixed(2)),
+      grossProfitGrowth: formatGrowthMessage(growthRates.revenue, periodLabel),
+    },
+    netProfit: {
+      totalNetProfit:
+        parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+        currentExpMetrics.totalExpenses.toFixed(2),
+      percentage:
+        (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+          currentExpMetrics.totalExpenses.toFixed(2)) /
+        100,
+    },
+    profitMargin: {
+      totalProfitPercentage:
+        (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+          parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
+          100 || 0,
+      percentage:
+        (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+          parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
+          100 || 0,
+    },
+    expenses: {
+      totalExpenses: parseFloat(currentExpMetrics.totalExpenses.toFixed(2)),
+      expenseGrowth: formatGrowthMessage(growthRates.expenses, periodLabel),
     },
     orders: {
       totalOrders: currentMetrics.totalOrders,
@@ -647,6 +726,7 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
           gte: startDate,
           lte: endDate,
         },
+        orderStatus: "COMPLETED",
       },
       menuItem: categoryFilter.categoryId ? { categoryId: categoryId } : {},
     },
@@ -663,7 +743,7 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
   // Aggregate the data
   const aggregated: { [key: string]: TopItem } = {};
 
-  topItems.forEach((item, i) => {
+  topItems?.forEach((item, i) => {
     const foodId = item.menuItem.id;
     if (!aggregated[foodId]) {
       aggregated[foodId] = {

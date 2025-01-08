@@ -46,6 +46,7 @@ const getPreviousPeriodDates = (period) => {
 };
 const calculateMetrics = (orders) => ({
     totalRevenue: orders.reduce((sum, order) => sum + parseFloat(order.totalAmount || "0"), 0),
+    totalGrossProfit: orders.reduce((sum, order) => sum + parseFloat(order.totalGrossProfit || "0"), 0),
     totalOrders: orders.length,
     avgOrderTime: orders.length
         ? orders.reduce((sum, order) => sum +
@@ -54,6 +55,9 @@ const calculateMetrics = (orders) => ({
             orders.length /
             60000
         : 0,
+});
+const calculateExpMetrics = (orders) => ({
+    totalExpenses: orders === null || orders === void 0 ? void 0 : orders.reduce((sum, expense) => sum + parseFloat((expense === null || expense === void 0 ? void 0 : expense.amount) || "0"), 0),
 });
 const calculateGrowthRate = (current, previous) => {
     const delta = current - previous;
@@ -86,7 +90,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     }
     const { startDate, endDate } = (0, utils_1.getPeriodDates)(period);
     const { startDate: prevStartDate, endDate: prevEndDate } = getPreviousPeriodDates(period);
-    const [currentOrders, prevOrders, currentCustomers, prevCustomers] = yield Promise.all([
+    const [currentOrders, prevOrders, currentCustomers, prevCustomers, currentExpenses, prevExpenses,] = yield Promise.all([
         __1.prismaDB.order.findMany({
             where: {
                 restaurantId: outlet.id,
@@ -96,6 +100,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
             },
             select: {
                 totalAmount: true,
+                totalGrossProfit: true,
                 createdAt: true,
                 updatedAt: true,
                 orderType: true,
@@ -110,6 +115,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
             },
             select: {
                 totalAmount: true,
+                totalGrossProfit: true,
                 createdAt: true,
                 updatedAt: true,
                 orderType: true,
@@ -125,22 +131,67 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
             where: {
                 restaurantId: outlet.id,
                 createdAt: { gte: prevStartDate, lte: prevEndDate },
+            },
+        }),
+        __1.prismaDB.expenses.findMany({
+            where: {
+                restaurantId: outlet.id,
+                date: { gte: startDate, lte: endDate },
+            },
+            select: {
+                amount: true,
+            },
+        }),
+        __1.prismaDB.expenses.findMany({
+            where: {
+                restaurantId: outlet.id,
+                date: { gte: startDate, lte: endDate },
+            },
+            select: {
+                amount: true,
             },
         }),
     ]);
     const currentMetrics = calculateMetrics(currentOrders);
     const prevMetrics = calculateMetrics(prevOrders);
+    const currentExpMetrics = calculateExpMetrics(currentExpenses);
+    const prevExpMetrics = calculateExpMetrics(prevExpenses);
     const growthRates = {
         revenue: calculateGrowthRate(currentMetrics.totalRevenue, prevMetrics.totalRevenue),
+        grossProfit: calculateGrowthRate(currentMetrics.totalGrossProfit, prevMetrics.totalGrossProfit),
         orders: calculateGrowthRate(currentMetrics.totalOrders, prevMetrics.totalOrders),
+        expenses: calculateGrowthRate(currentExpMetrics.totalExpenses, prevExpMetrics.totalExpenses),
         avgOrderTime: calculateGrowthRate(currentMetrics.avgOrderTime, prevMetrics.avgOrderTime),
         customers: calculateGrowthRate(currentCustomers, prevCustomers),
     };
     const periodLabel = getPeriodLabel(period);
     const metrics = {
         revenue: {
-            totalRevenue: currentMetrics.totalRevenue.toFixed(2),
+            totalRevenue: parseFloat(currentMetrics.totalRevenue.toFixed(2)),
             revenueGrowth: formatGrowthMessage(growthRates.revenue, periodLabel),
+        },
+        grossProfit: {
+            totalGrossProfit: parseFloat(currentMetrics.totalGrossProfit.toFixed(2)),
+            grossProfitGrowth: formatGrowthMessage(growthRates.revenue, periodLabel),
+        },
+        netProfit: {
+            totalNetProfit: parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+                currentExpMetrics.totalExpenses.toFixed(2),
+            percentage: (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+                currentExpMetrics.totalExpenses.toFixed(2)) /
+                100,
+        },
+        profitMargin: {
+            totalProfitPercentage: (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+                parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
+                100 || 0,
+            percentage: (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+                parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
+                100 || 0,
+        },
+        expenses: {
+            totalExpenses: parseFloat(currentExpMetrics.totalExpenses.toFixed(2)),
+            expenseGrowth: formatGrowthMessage(growthRates.expenses, periodLabel),
         },
         orders: {
             totalOrders: currentMetrics.totalOrders,
@@ -541,6 +592,7 @@ const outletTopSellingItems = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     gte: startDate,
                     lte: endDate,
                 },
+                orderStatus: "COMPLETED",
             },
             menuItem: categoryFilter.categoryId ? { categoryId: categoryId } : {},
         },
@@ -555,7 +607,7 @@ const outletTopSellingItems = (req, res) => __awaiter(void 0, void 0, void 0, fu
     });
     // Aggregate the data
     const aggregated = {};
-    topItems.forEach((item, i) => {
+    topItems === null || topItems === void 0 ? void 0 : topItems.forEach((item, i) => {
         const foodId = item.menuItem.id;
         if (!aggregated[foodId]) {
             aggregated[foodId] = {

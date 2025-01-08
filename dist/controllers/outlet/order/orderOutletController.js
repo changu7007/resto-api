@@ -221,40 +221,40 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
             orderType: item.orderType,
             count: item._count.orderType,
         })),
-        activeOrders: activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => ({
-            id: order.id,
-            billId: order.billId,
-            userName: order.username,
-            isPaid: order.isPaid,
-            active: order.active,
-            invoiceUrl: order.invoiceUrl,
-            paymentMethod: order.paymentMethod,
-            subTotal: order.subTotal,
-            status: order.sessionStatus,
-            orderType: order.orderType === "DINEIN" ? order.table : order.orderType,
-            date: order.createdAt,
-            modified: order === null || order === void 0 ? void 0 : order.updatedAt,
-            viewOrders: [
-                {
-                    name: order.username,
-                    phoneNo: order.phoneNo,
-                    orderItems: order.orders.map((o) => ({
-                        id: o.id,
-                        generatedOrderId: o.generatedOrderId,
-                        orderStatus: o.orderStatus,
-                        total: o.totalAmount,
-                        items: o.orderItems.map((item) => ({
-                            id: item.id,
-                            name: item.name,
-                            quantity: item.quantity,
-                            totalPrice: item.totalPrice,
+        activeOrders: activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => {
+            var _a, _b;
+            return ({
+                id: order === null || order === void 0 ? void 0 : order.id,
+                billId: order === null || order === void 0 ? void 0 : order.billId,
+                userName: order === null || order === void 0 ? void 0 : order.username,
+                isPaid: order === null || order === void 0 ? void 0 : order.isPaid,
+                active: order === null || order === void 0 ? void 0 : order.active,
+                invoiceUrl: order === null || order === void 0 ? void 0 : order.invoiceUrl,
+                paymentMethod: order === null || order === void 0 ? void 0 : order.paymentMethod,
+                subTotal: order === null || order === void 0 ? void 0 : order.subTotal,
+                status: order === null || order === void 0 ? void 0 : order.sessionStatus,
+                orderType: (order === null || order === void 0 ? void 0 : order.orderType) === "DINEIN" ? (_a = order === null || order === void 0 ? void 0 : order.table) === null || _a === void 0 ? void 0 : _a.name : order === null || order === void 0 ? void 0 : order.orderType,
+                date: order === null || order === void 0 ? void 0 : order.createdAt,
+                modified: order === null || order === void 0 ? void 0 : order.updatedAt,
+                viewOrders: (_b = order === null || order === void 0 ? void 0 : order.orders) === null || _b === void 0 ? void 0 : _b.map((o) => {
+                    var _a;
+                    return ({
+                        id: o === null || o === void 0 ? void 0 : o.id,
+                        generatedOrderId: o === null || o === void 0 ? void 0 : o.generatedOrderId,
+                        orderStatus: o === null || o === void 0 ? void 0 : o.orderStatus,
+                        total: o === null || o === void 0 ? void 0 : o.totalAmount,
+                        items: (_a = o === null || o === void 0 ? void 0 : o.orderItems) === null || _a === void 0 ? void 0 : _a.map((item) => ({
+                            id: item === null || item === void 0 ? void 0 : item.id,
+                            name: item === null || item === void 0 ? void 0 : item.name,
+                            quantity: item === null || item === void 0 ? void 0 : item.quantity,
+                            totalPrice: item === null || item === void 0 ? void 0 : item.totalPrice,
                         })),
-                        mode: o.orderType,
-                        date: o.createdAt,
-                    })),
-                },
-            ], // Make sure viewOrders is an array
-        })),
+                        mode: o === null || o === void 0 ? void 0 : o.orderType,
+                        date: o === null || o === void 0 ? void 0 : o.createdAt,
+                    });
+                }),
+            });
+        }),
     };
     return res.json({
         success: true,

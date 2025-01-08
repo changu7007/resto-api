@@ -969,6 +969,7 @@ model Purchase {
   billImageUrl    String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+  Expenses        Expenses[]
 }
 
 model PurchaseItems {
@@ -1001,13 +1002,16 @@ enum ExpenseCategory {
 }
 
 model Expenses {
-  id           String          @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId String          @db.ObjectId
-  restaurant   Restaurant      @relation("RestaurantToExpenses", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  category     ExpenseCategory
-  date         DateTime
-  amount       Float
-  description  String
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId  String          @db.ObjectId
+  restaurant    Restaurant      @relation("RestaurantToExpenses", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  purchaseId    String?         @db.ObjectId
+  purchase      Purchase?       @relation(fields: [purchaseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  category      ExpenseCategory
+  date          DateTime
+  paymentMethod PaymentMethod?
+  amount        Float
+  description   String
 
   @@index([restaurantId])
 }

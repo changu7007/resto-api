@@ -65,6 +65,62 @@ export async function CreateRazorPayOrderForOutlet(
   });
 }
 
+export async function CreateRazorPaySubscriptionForOutlet(
+  req: Request,
+  res: Response
+) {
+  const { outletId } = req.params;
+
+  // @ts-ignore
+  const userId = req.user.id;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (outlet.adminId !== userId) {
+    throw new NotFoundException(
+      "Only Restaurant Owner/manager Can Subscribe",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const user = await prismaDB.user.findFirst({
+    where: {
+      id: userId,
+    },
+  });
+
+  if (!user?.id) {
+    throw new NotFoundException("Admin Not Found", ErrorCode.UNAUTHORIZED);
+  }
+
+  const subs = await razorpay.subscriptions.create({
+    plan_id: "plan_PgvSrK72iPruyR",
+    customer_notify: 1,
+    total_count: 12,
+  });
+
+  // const userUpdate = await prismaDB.user.update({
+  //   where:{
+  //     id: user.id
+  //   },
+  //   data:{
+  //     billings:{
+  //       create:{
+
+  //       }
+  //     }
+  //   }
+  // })
+
+  return res.json({
+    success: true,
+  });
+}
+
 export const paymentRazorpayVerification = async (
   req: Request,
   res: Response
@@ -83,6 +139,35 @@ export const paymentRazorpayVerification = async (
   } else {
     return res.json({
       success: false,
+    });
+  }
+};
+
+export const paymentWebhookVerification = async (
+  req: Request,
+  res: Response
+) => {
+  const secret = "JaiHanumantha@15";
+  const shasum = crypto
+    .createHmac("sha256", secret)
+    .update(JSON.stringify(req.body));
+  const digest = shasum.digest("hex");
+  console.log(
+    `Digest:${digest}`,
+    req.headers["x-razorpay-signature"],
+    req.body
+  );
+  if (digest === req.headers["x-razorpay-signature"]) {
+    console.log("Request is legit");
+    return res.json({
+      success: true,
+      message: "legit",
+    });
+  } else {
+    console.log("Messing");
+    return res.json({
+      success: false,
+      message: "not-legit",
     });
   }
 };
