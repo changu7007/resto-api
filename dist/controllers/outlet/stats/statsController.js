@@ -172,7 +172,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         },
         grossProfit: {
             totalGrossProfit: parseFloat(currentMetrics.totalGrossProfit.toFixed(2)),
-            grossProfitGrowth: formatGrowthMessage(growthRates.revenue, periodLabel),
+            grossProfitGrowth: formatGrowthMessage(growthRates.grossProfit, periodLabel),
         },
         netProfit: {
             totalNetProfit: parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -

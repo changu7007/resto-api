@@ -243,7 +243,10 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     },
     grossProfit: {
       totalGrossProfit: parseFloat(currentMetrics.totalGrossProfit.toFixed(2)),
-      grossProfitGrowth: formatGrowthMessage(growthRates.revenue, periodLabel),
+      grossProfitGrowth: formatGrowthMessage(
+        growthRates.grossProfit,
+        periodLabel
+      ),
     },
     netProfit: {
       totalNetProfit:
