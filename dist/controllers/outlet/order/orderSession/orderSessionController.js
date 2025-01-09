@@ -40,7 +40,7 @@ const s3Client = new client_s3_1.S3Client({
     },
 });
 const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a, _b, _c;
     const { orderSessionId, outletId } = req.params;
     const { subTotal, paymentMethod } = req.body;
     if (typeof subTotal !== "number" ||
@@ -65,7 +65,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
                 active: false,
                 isPaid: true,
                 paymentMethod: paymentMethod,
-                subTotal: String(subTotal),
+                subTotal: subTotal,
                 sessionStatus: "COMPLETED",
                 orders: {
                     updateMany: {
@@ -140,7 +140,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         paymentMethod: paymentMethod,
         customerAddress: "NA",
         orderSessionId: result === null || result === void 0 ? void 0 : result.id,
-        orderItems: result === null || result === void 0 ? void 0 : result.orders.filter((order) => order.orderStatus === "COMPLETED").flatMap((orderItem) => orderItem.orderItems.map((item, idx) => ({
+        orderItems: (_c = result === null || result === void 0 ? void 0 : result.orders) === null || _c === void 0 ? void 0 : _c.filter((order) => (order === null || order === void 0 ? void 0 : order.orderStatus) === "COMPLETED").flatMap((orderItem) => orderItem.orderItems.map((item, idx) => ({
             id: idx + 1,
             name: item.menuItem.name,
             quantity: item.quantity,

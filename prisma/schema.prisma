@@ -749,7 +749,7 @@ model OrderSession {
   adminId       String?            @db.ObjectId
   admin         User?              @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   createdAt     DateTime           @default(now())
-  subTotal      String?
+  subTotal      Float?
   isPaid        Boolean?           @default(false)
   invoiceUrl    String?
   createdBy     String?
@@ -1012,6 +1012,8 @@ model Expenses {
   paymentMethod PaymentMethod?
   amount        Float
   description   String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([restaurantId])
 }

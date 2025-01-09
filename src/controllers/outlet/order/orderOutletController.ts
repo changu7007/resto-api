@@ -178,35 +178,53 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
     },
   });
   // Fetch counts for specific payment methods and order types
-  const [paymentMethodCounts, orderTypeCounts] = await Promise.all([
-    prismaDB.orderSession.groupBy({
-      by: ["paymentMethod"],
-      where: {
-        restaurantId: outletId,
-        OR: [{ billId: { contains: search, mode: "insensitive" } }],
-        AND: filterConditions,
-        paymentMethod: { in: ["UPI", "CASH", "DEBIT", "CREDIT"] },
-      },
-      _count: {
-        paymentMethod: true,
-      },
-      // _sum: {
-      //   subTotal: true, // Calculate total revenue per payment method
-      // },
-    }),
-    prismaDB.orderSession.groupBy({
-      by: ["orderType"],
-      where: {
-        restaurantId: outletId,
-        OR: [{ billId: { contains: search, mode: "insensitive" } }],
-        AND: filterConditions,
-        orderType: { in: ["DINEIN", "EXPRESS", "DELIVERY", "TAKEAWAY"] },
-      },
-      _count: {
-        orderType: true,
-      },
-    }),
-  ]);
+  const [sessionStatusCounts, paymentMethodCounts, orderTypeCounts] =
+    await Promise.all([
+      prismaDB.orderSession.groupBy({
+        by: ["sessionStatus"],
+        where: {
+          restaurantId: outletId,
+          OR: [{ billId: { contains: search, mode: "insensitive" } }],
+          AND: filterConditions,
+          sessionStatus: { in: ["COMPLETED", "CANCELLED", "ONPROGRESS"] },
+        },
+        _count: {
+          sessionStatus: true,
+        },
+        _sum: {
+          subTotal: true, // Calculate total revenue per payment method
+        },
+      }),
+      prismaDB.orderSession.groupBy({
+        by: ["paymentMethod"],
+        where: {
+          restaurantId: outletId,
+          OR: [{ billId: { contains: search, mode: "insensitive" } }],
+          AND: filterConditions,
+          paymentMethod: { in: ["UPI", "CASH", "DEBIT", "CREDIT"] },
+        },
+        _count: {
+          paymentMethod: true,
+        },
+        _sum: {
+          subTotal: true, // Calculate total revenue per payment method
+        },
+      }),
+      prismaDB.orderSession.groupBy({
+        by: ["orderType"],
+        where: {
+          restaurantId: outletId,
+          OR: [{ billId: { contains: search, mode: "insensitive" } }],
+          AND: filterConditions,
+        },
+        _count: {
+          orderType: true,
+        },
+        _sum: {
+          subTotal: true,
+        },
+      }),
+    ]);
 
   const activeOrders = await prismaDB.orderSession.findMany({
     take,
@@ -262,12 +280,17 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
 
   const data = {
     totalCount: totalCount,
-    paymentMethodStats: paymentMethodCounts.map((item) => ({
+    sessionStatusStats: sessionStatusCounts?.map((item) => ({
+      status: item.sessionStatus,
+      count: item._count.sessionStatus,
+      revenue: item._sum.subTotal || 0, // Revenue for each payment method
+    })),
+    paymentMethodStats: paymentMethodCounts?.map((item) => ({
       paymentMethod: item.paymentMethod,
       count: item._count.paymentMethod,
-      // revenue: parseFloat(item._sum.subTotal) || 0, // Revenue for each payment method
+      revenue: item._sum.subTotal || 0, // Revenue for each payment method
     })),
-    orderTypeCounts: orderTypeCounts.map((item) => ({
+    orderTypeCounts: orderTypeCounts?.map((item) => ({
       orderType: item.orderType,
       count: item._count.orderType,
     })),
@@ -703,7 +726,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         isPaid: isPaid,
         restaurantId: getOutlet.id,
         createdBy: `${findUser?.name} (${findUser?.role})`,
-        subTotal: isPaid ? totalAmount.toString() : null,
+        subTotal: isPaid ? totalAmount : null,
         orders: {
           create: {
             restaurantId: getOutlet.id,
@@ -742,30 +765,26 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
                         type: item?.menuItem?.menuItemVariants?.find(
                           (variant: any) => variant?.id === item?.sizeVariantsId
                         )?.type,
-                        price:
-                          Number(
-                            item?.menuItem.menuItemVariants.find(
-                              (v: any) => v?.id === item?.sizeVariantsId
-                            )?.price as string
-                          ) * item?.quantity,
+                        price: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.price as string
+                        ),
                         gst: Number(
                           item?.menuItem.menuItemVariants.find(
                             (v: any) => v?.id === item?.sizeVariantsId
                           )?.gst
                         ),
-                        netPrice: (
-                          Number(
-                            item?.menuItem.menuItemVariants.find(
-                              (v: any) => v?.id === item?.sizeVariantsId
-                            )?.netPrice as string
-                          ) * item?.quantity
+                        netPrice: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.netPrice as string
                         ).toString(),
-                        grossProfit:
-                          Number(
-                            item?.menuItem.menuItemVariants.find(
-                              (v: any) => v?.id === item?.sizeVariantsId
-                            )?.grossProfit
-                          ) * item?.quantity,
+                        grossProfit: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.grossProfit
+                        ),
                       },
                     }
                   : undefined,
@@ -1370,7 +1389,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
         restaurantId: getOutlet.id,
         isPaid: true,
         paymentMethod: paymentId.length ? "UPI" : "CASH",
-        subTotal: calculate.roundedTotal.toString(),
+        subTotal: calculate.roundedTotal,
         orders: {
           create: createOrderData(
             getOutlet.id,
@@ -1699,30 +1718,26 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
                       type: item?.menuItem?.menuItemVariants?.find(
                         (variant: any) => variant?.id === item?.sizeVariantsId
                       )?.type,
-                      price:
-                        Number(
-                          item?.menuItem.menuItemVariants.find(
-                            (v: any) => v?.id === item?.sizeVariantsId
-                          )?.price as string
-                        ) * item?.quantity,
+                      price: Number(
+                        item?.menuItem.menuItemVariants.find(
+                          (v: any) => v?.id === item?.sizeVariantsId
+                        )?.price as string
+                      ),
                       gst: Number(
                         item?.menuItem.menuItemVariants.find(
                           (v: any) => v?.id === item?.sizeVariantsId
                         )?.gst
                       ),
-                      netPrice: (
-                        Number(
-                          item?.menuItem.menuItemVariants.find(
-                            (v: any) => v?.id === item?.sizeVariantsId
-                          )?.netPrice as string
-                        ) * item?.quantity
+                      netPrice: Number(
+                        item?.menuItem.menuItemVariants.find(
+                          (v: any) => v?.id === item?.sizeVariantsId
+                        )?.netPrice as string
                       ).toString(),
-                      grossProfit:
-                        Number(
-                          item?.menuItem.menuItemVariants.find(
-                            (v: any) => v?.id === item?.sizeVariantsId
-                          )?.grossProfit
-                        ) * item?.quantity,
+                      grossProfit: Number(
+                        item?.menuItem.menuItemVariants.find(
+                          (v: any) => v?.id === item?.sizeVariantsId
+                        )?.grossProfit
+                      ),
                     },
                   }
                 : undefined,
@@ -2252,30 +2267,26 @@ export const orderItemModification = async (req: Request, res: Response) => {
                   name: getOrderById?.menuItem.menuItemVariants.find(
                     (v) => v?.id === validateFields?.selectedVariantId
                   )?.variant?.name,
-                  price:
-                    parseFloat(
-                      getOrderById?.menuItem.menuItemVariants.find(
-                        (v) => v?.id === validateFields?.selectedVariantId
-                      )?.price as string
-                    ) * validateFields?.quantity,
+                  price: parseFloat(
+                    getOrderById?.menuItem.menuItemVariants.find(
+                      (v) => v?.id === validateFields?.selectedVariantId
+                    )?.price as string
+                  ),
                   gst: Number(
                     getOrderById?.menuItem.menuItemVariants.find(
                       (v) => v?.id === validateFields?.selectedVariantId
                     )?.gst
                   ),
-                  netPrice: (
-                    parseFloat(
-                      getOrderById?.menuItem.menuItemVariants.find(
-                        (v) => v?.id === validateFields?.selectedVariantId
-                      )?.netPrice as string
-                    ) * validateFields?.quantity
+                  netPrice: parseFloat(
+                    getOrderById?.menuItem.menuItemVariants.find(
+                      (v) => v?.id === validateFields?.selectedVariantId
+                    )?.netPrice as string
                   ).toString(),
-                  grossProfit:
-                    Number(
-                      getOrderById?.menuItem.menuItemVariants.find(
-                        (v) => v?.id === validateFields?.selectedVariantId
-                      )?.grossProfit
-                    ) * validateFields?.quantity,
+                  grossProfit: Number(
+                    getOrderById?.menuItem.menuItemVariants.find(
+                      (v) => v?.id === validateFields?.selectedVariantId
+                    )?.grossProfit
+                  ),
                 },
               },
             }
@@ -2295,16 +2306,11 @@ export const orderItemModification = async (req: Request, res: Response) => {
         //   })),
         // },
         netPrice: !getOrderById?.isVariants
-          ? (
-              Number(getOrderById?.menuItem?.netPrice as string) *
-              validateFields?.quantity
-            ).toString()
-          : (
-              Number(
-                getOrderById?.menuItem.menuItemVariants.find(
-                  (v) => v?.id === validateFields?.selectedVariantId
-                )?.netPrice as string
-              ) * validateFields?.quantity
+          ? Number(getOrderById?.menuItem?.netPrice as string).toString()
+          : Number(
+              getOrderById?.menuItem.menuItemVariants.find(
+                (v) => v?.id === validateFields?.selectedVariantId
+              )?.netPrice as string
             ).toString(),
         originalRate: !getOrderById?.isVariants
           ? Number(getOrderById?.menuItem?.price as string)
@@ -2314,13 +2320,12 @@ export const orderItemModification = async (req: Request, res: Response) => {
               )?.price as string
             ),
         grossProfit: !getOrderById?.isVariants
-          ? Number(getOrderById?.menuItem?.grossProfit) *
-            validateFields?.quantity
+          ? Number(getOrderById?.menuItem?.grossProfit)
           : Number(
               getOrderById?.menuItem.menuItemVariants.find(
                 (v) => v?.id === validateFields?.selectedVariantId
               )?.grossProfit
-            ) * validateFields?.quantity,
+            ),
         gst: !getOrderById?.isVariants
           ? getOrderById?.menuItem?.gst
           : getOrderById?.menuItem.menuItemVariants.find(
@@ -2358,17 +2363,24 @@ export const orderItemModification = async (req: Request, res: Response) => {
     const updatedOrderItems = getOrder.order.orderItems;
 
     const totalGrossProfit = updatedOrderItems.reduce(
-      (total, item) => total + (Number(item.grossProfit) || 0),
+      (total, item) =>
+        total +
+        (Number(Number(item.grossProfit) * Number(item?.quantity)) || 0),
       0
     );
     const totalNetPrice = updatedOrderItems.reduce(
-      (total, item) => total + (Number(item.netPrice as string) || 0),
+      (total, item) =>
+        total +
+        (Number(Number(item.netPrice as string) * Number(item?.quantity)) || 0),
       0
     );
     const gstPrice = updatedOrderItems.reduce(
       (total, item) =>
         total +
-        ((Number(item.netPrice as string) * Number(item.gst)) / 100 || 0),
+        ((Number(item.originalRate) *
+          Number(item.gst) *
+          Number(item.quantity)) /
+          100 || 0),
       0
     );
     const totalAmount = updatedOrderItems.reduce(

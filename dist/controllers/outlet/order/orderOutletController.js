@@ -130,7 +130,22 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
         },
     });
     // Fetch counts for specific payment methods and order types
-    const [paymentMethodCounts, orderTypeCounts] = yield Promise.all([
+    const [sessionStatusCounts, paymentMethodCounts, orderTypeCounts] = yield Promise.all([
+        __1.prismaDB.orderSession.groupBy({
+            by: ["sessionStatus"],
+            where: {
+                restaurantId: outletId,
+                OR: [{ billId: { contains: search, mode: "insensitive" } }],
+                AND: filterConditions,
+                sessionStatus: { in: ["COMPLETED", "CANCELLED", "ONPROGRESS"] },
+            },
+            _count: {
+                sessionStatus: true,
+            },
+            _sum: {
+                subTotal: true, // Calculate total revenue per payment method
+            },
+        }),
         __1.prismaDB.orderSession.groupBy({
             by: ["paymentMethod"],
             where: {
@@ -142,9 +157,9 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
             _count: {
                 paymentMethod: true,
             },
-            // _sum: {
-            //   subTotal: true, // Calculate total revenue per payment method
-            // },
+            _sum: {
+                subTotal: true, // Calculate total revenue per payment method
+            },
         }),
         __1.prismaDB.orderSession.groupBy({
             by: ["orderType"],
@@ -152,10 +167,12 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
                 restaurantId: outletId,
                 OR: [{ billId: { contains: search, mode: "insensitive" } }],
                 AND: filterConditions,
-                orderType: { in: ["DINEIN", "EXPRESS", "DELIVERY", "TAKEAWAY"] },
             },
             _count: {
                 orderType: true,
+            },
+            _sum: {
+                subTotal: true,
             },
         }),
     ]);
@@ -212,12 +229,17 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
     });
     const data = {
         totalCount: totalCount,
-        paymentMethodStats: paymentMethodCounts.map((item) => ({
+        sessionStatusStats: sessionStatusCounts === null || sessionStatusCounts === void 0 ? void 0 : sessionStatusCounts.map((item) => ({
+            status: item.sessionStatus,
+            count: item._count.sessionStatus,
+            revenue: item._sum.subTotal || 0, // Revenue for each payment method
+        })),
+        paymentMethodStats: paymentMethodCounts === null || paymentMethodCounts === void 0 ? void 0 : paymentMethodCounts.map((item) => ({
             paymentMethod: item.paymentMethod,
             count: item._count.paymentMethod,
-            // revenue: parseFloat(item._sum.subTotal) || 0, // Revenue for each payment method
+            revenue: item._sum.subTotal || 0, // Revenue for each payment method
         })),
-        orderTypeCounts: orderTypeCounts.map((item) => ({
+        orderTypeCounts: orderTypeCounts === null || orderTypeCounts === void 0 ? void 0 : orderTypeCounts.map((item) => ({
             orderType: item.orderType,
             count: item._count.orderType,
         })),
@@ -593,7 +615,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 isPaid: isPaid,
                 restaurantId: getOutlet.id,
                 createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
-                subTotal: isPaid ? totalAmount.toString() : null,
+                subTotal: isPaid ? totalAmount : null,
                 orders: {
                     create: {
                         restaurantId: getOutlet.id,
@@ -629,10 +651,10 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                                                 sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
                                                 name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
                                                 type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
-                                                price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price) * (item === null || item === void 0 ? void 0 : item.quantity),
+                                                price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price),
                                                 gst: Number((_k = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _k === void 0 ? void 0 : _k.gst),
-                                                netPrice: (Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice) * (item === null || item === void 0 ? void 0 : item.quantity)).toString(),
-                                                grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit) * (item === null || item === void 0 ? void 0 : item.quantity),
+                                                netPrice: Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice).toString(),
+                                                grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit),
                                             },
                                         }
                                         : undefined,
@@ -1079,7 +1101,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 restaurantId: getOutlet.id,
                 isPaid: true,
                 paymentMethod: paymentId.length ? "UPI" : "CASH",
-                subTotal: calculate.roundedTotal.toString(),
+                subTotal: calculate.roundedTotal,
                 orders: {
                     create: createOrderData(getOutlet.id, isPaid, orderId, orderType, totalAmount, "INCOMMING", orderItems),
                 },
@@ -1315,10 +1337,10 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
                                             sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
                                             name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
                                             type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
-                                            price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price) * (item === null || item === void 0 ? void 0 : item.quantity),
+                                            price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price),
                                             gst: Number((_k = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _k === void 0 ? void 0 : _k.gst),
-                                            netPrice: (Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice) * (item === null || item === void 0 ? void 0 : item.quantity)).toString(),
-                                            grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit) * (item === null || item === void 0 ? void 0 : item.quantity),
+                                            netPrice: Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice).toString(),
+                                            grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit),
                                         },
                                     }
                                     : undefined,
@@ -1743,10 +1765,10 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                             data: {
                                 sizeVariantId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId,
                                 name: (_v = (_u = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _u === void 0 ? void 0 : _u.variant) === null || _v === void 0 ? void 0 : _v.name,
-                                price: parseFloat((_w = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _w === void 0 ? void 0 : _w.price) * (validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity),
+                                price: parseFloat((_w = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _w === void 0 ? void 0 : _w.price),
                                 gst: Number((_x = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _x === void 0 ? void 0 : _x.gst),
-                                netPrice: (parseFloat((_y = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _y === void 0 ? void 0 : _y.netPrice) * (validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity)).toString(),
-                                grossProfit: Number((_z = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _z === void 0 ? void 0 : _z.grossProfit) * (validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity),
+                                netPrice: parseFloat((_y = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _y === void 0 ? void 0 : _y.netPrice).toString(),
+                                grossProfit: Number((_z = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _z === void 0 ? void 0 : _z.grossProfit),
                             },
                         },
                     }
@@ -1766,16 +1788,14 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 //   })),
                 // },
                 netPrice: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? (Number((_0 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _0 === void 0 ? void 0 : _0.netPrice) *
-                        (validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity)).toString()
-                    : (Number((_1 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _1 === void 0 ? void 0 : _1.netPrice) * (validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity)).toString(),
+                    ? Number((_0 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _0 === void 0 ? void 0 : _0.netPrice).toString()
+                    : Number((_1 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _1 === void 0 ? void 0 : _1.netPrice).toString(),
                 originalRate: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
                     ? Number((_2 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _2 === void 0 ? void 0 : _2.price)
                     : Number((_3 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _3 === void 0 ? void 0 : _3.price),
                 grossProfit: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_4 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _4 === void 0 ? void 0 : _4.grossProfit) *
-                        (validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity)
-                    : Number((_5 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _5 === void 0 ? void 0 : _5.grossProfit) * (validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity),
+                    ? Number((_4 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _4 === void 0 ? void 0 : _4.grossProfit)
+                    : Number((_5 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _5 === void 0 ? void 0 : _5.grossProfit),
                 gst: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
                     ? (_6 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _6 === void 0 ? void 0 : _6.gst
                     : (_7 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _7 === void 0 ? void 0 : _7.gst,
@@ -1803,10 +1823,15 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
         }
         // Recalculate the totals for the order
         const updatedOrderItems = getOrder.order.orderItems;
-        const totalGrossProfit = updatedOrderItems.reduce((total, item) => total + (Number(item.grossProfit) || 0), 0);
-        const totalNetPrice = updatedOrderItems.reduce((total, item) => total + (Number(item.netPrice) || 0), 0);
+        const totalGrossProfit = updatedOrderItems.reduce((total, item) => total +
+            (Number(Number(item.grossProfit) * Number(item === null || item === void 0 ? void 0 : item.quantity)) || 0), 0);
+        const totalNetPrice = updatedOrderItems.reduce((total, item) => total +
+            (Number(Number(item.netPrice) * Number(item === null || item === void 0 ? void 0 : item.quantity)) || 0), 0);
         const gstPrice = updatedOrderItems.reduce((total, item) => total +
-            ((Number(item.netPrice) * Number(item.gst)) / 100 || 0), 0);
+            ((Number(item.originalRate) *
+                Number(item.gst) *
+                Number(item.quantity)) /
+                100 || 0), 0);
         const totalAmount = updatedOrderItems.reduce((total, item) => total + item.totalPrice, 0);
         // Update the order with recalculated values
         yield prisma.order.update({

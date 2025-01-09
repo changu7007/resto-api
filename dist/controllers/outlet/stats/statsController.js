@@ -630,9 +630,18 @@ const outletTopSellingItems = (req, res) => __awaiter(void 0, void 0, void 0, fu
         .sort((a, b) => b.orders - a.orders)
         .map((item, index) => (Object.assign(Object.assign({}, item), { rank: index + 1 })));
     // .slice(0, 5); // Top 5 items
+    const stats = {
+        itemsTotal: sortedTopItems === null || sortedTopItems === void 0 ? void 0 : sortedTopItems.length,
+        totalRevenue: sortedTopItems === null || sortedTopItems === void 0 ? void 0 : sortedTopItems.reduce((accu, order) => {
+            return (accu += order.revenue);
+        }, 0),
+        totalGrossProfit: sortedTopItems === null || sortedTopItems === void 0 ? void 0 : sortedTopItems.reduce((accu, order) => {
+            return (accu += order.grossProfit);
+        }, 0),
+    };
     return res.json({
         success: true,
-        topItems: sortedTopItems,
+        topItems: { stats: stats, sortedTopItems: sortedTopItems },
         message: "Powered Up",
     });
 });
@@ -729,7 +738,7 @@ const cashFlowStats = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         CREDIT: { revenue: 0, transactions: 0 },
     };
     (_c = cashFlowOrderSession === null || cashFlowOrderSession === void 0 ? void 0 : cashFlowOrderSession.filter((o) => o.isPaid === true)) === null || _c === void 0 ? void 0 : _c.forEach((session) => {
-        const amount = parseFloat(session === null || session === void 0 ? void 0 : session.subTotal);
+        const amount = (session === null || session === void 0 ? void 0 : session.subTotal) || 0;
         switch (session.paymentMethod) {
             case "UPI":
                 paymentTotals.UPI.revenue += amount;

@@ -774,9 +774,20 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
       rank: index + 1,
     }));
   // .slice(0, 5); // Top 5 items
+
+  const stats = {
+    itemsTotal: sortedTopItems?.length,
+    totalRevenue: sortedTopItems?.reduce((accu, order) => {
+      return (accu += order.revenue);
+    }, 0),
+    totalGrossProfit: sortedTopItems?.reduce((accu, order) => {
+      return (accu += order.grossProfit);
+    }, 0),
+  };
+
   return res.json({
     success: true,
-    topItems: sortedTopItems,
+    topItems: { stats: stats, sortedTopItems: sortedTopItems },
     message: "Powered Up",
   });
 };
@@ -893,7 +904,7 @@ export const cashFlowStats = async (req: Request, res: Response) => {
   cashFlowOrderSession
     ?.filter((o) => o.isPaid === true)
     ?.forEach((session) => {
-      const amount = parseFloat(session?.subTotal as string);
+      const amount = session?.subTotal || 0;
 
       switch (session.paymentMethod) {
         case "UPI":

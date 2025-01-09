@@ -72,7 +72,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
         active: false,
         isPaid: true,
         paymentMethod: paymentMethod,
-        subTotal: String(subTotal),
+        subTotal: subTotal,
         sessionStatus: "COMPLETED",
         orders: {
           updateMany: {
@@ -159,7 +159,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     customerAddress: "NA",
     orderSessionId: result?.id,
     orderItems: result?.orders
-      .filter((order) => order.orderStatus === "COMPLETED")
+      ?.filter((order) => order?.orderStatus === "COMPLETED")
       .flatMap((orderItem) =>
         orderItem.orderItems.map((item, idx) => ({
           id: idx + 1,

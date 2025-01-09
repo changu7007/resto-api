@@ -181,6 +181,7 @@ import {
   createExpenses,
   deleteExpenses,
   getAllExpensesForTable,
+  getCategoryExpensesStats,
   updateExpenses,
 } from "../../controllers/outlet/expenses/expenseController";
 
@@ -912,6 +913,11 @@ outletRoute.post(
   "/:outletId/expenses/get-all-table-expenses",
   isAuthMiddelware,
   errorHandler(getAllExpensesForTable)
+);
+outletRoute.get(
+  "/:outletId/expenses/get-category-stats-expenses",
+  isAuthMiddelware,
+  errorHandler(getCategoryExpensesStats)
 );
 outletRoute.post(
   "/:outletId/expenses/create-expense",
