@@ -189,13 +189,13 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     redis.del(`all-order-staff-${outletId}`),
   ]);
 
-  if (outlet?.fcmToken) {
-    await NotificationService.sendNotification(
-      outlet?.fcmToken!,
-      "Bill Recieved",
-      `${subTotal}`
-    );
-  }
+  // if (outlet?.fcmToken) {
+  //   await NotificationService.sendNotification(
+  //     outlet?.fcmToken!,
+  //     "Bill Recieved",
+  //     `${subTotal}`
+  //   );
+  // }
 
   websocketManager.notifyClients(outlet?.id, "BILL_UPDATED");
 

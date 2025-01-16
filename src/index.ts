@@ -12,6 +12,7 @@ import client from "prom-client";
 import LokiTransport from "winston-loki";
 import { createLogger } from "winston";
 import { cleanupMiddleware } from "./monitoring";
+import { initializeAlertCrons } from "./lib/alert-service";
 
 const options = {
   transports: [
@@ -36,6 +37,7 @@ app.use(cookieParser());
 app.use(morgan("dev"));
 app.use("/api", rootRouter);
 app.use(errorMiddelware);
+initializeAlertCrons();
 
 export const prismaDB = new PrismaClient();
 

@@ -95,8 +95,11 @@ import {
 import { s3Upload } from "../../controllers/s3Upload";
 import {
   cashFlowStats,
+  expenseMetrics,
+  getCategoryContributionStats,
   getDashboardMetrics,
   getFinancialMetrics,
+  getOrderHourWise,
   getRevenueAndExpenses,
   lastSixMonthsOrders,
   orderStatsForOutlet,
@@ -184,6 +187,11 @@ import {
   getCategoryExpensesStats,
   updateExpenses,
 } from "../../controllers/outlet/expenses/expenseController";
+import {
+  acknowledgeAlert,
+  getAlerts,
+} from "../../controllers/outlet/alerts/alert-controleer";
+import { createReport } from "../../controllers/outlet/reports/reports-controller";
 
 const outletRoute: Router = Router();
 
@@ -578,6 +586,27 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(lastSixMonthsOrders)
 );
+outletRoute.get(
+  "/:outletId/get-expense-metrics",
+  isAuthMiddelware,
+  errorHandler(expenseMetrics)
+);
+outletRoute.get(
+  "/:outletId/get-hour-wise-order-metrics",
+  isAuthMiddelware,
+  errorHandler(getOrderHourWise)
+);
+
+outletRoute.get(
+  "/:outletId/get-category-order-contribution",
+  isAuthMiddelware,
+  errorHandler(getCategoryContributionStats)
+);
+outletRoute.post(
+  "/:outletId/create-report",
+  isAuthMiddelware,
+  errorHandler(createReport)
+);
 
 //domains
 outletRoute.get(
@@ -935,5 +964,18 @@ outletRoute.delete(
   errorHandler(deleteExpenses)
 );
 //EXPENSES GET,CREATE END
+
+//Alerts Start GET
+
+outletRoute.get(
+  "/:outletId/alerts/get-all-alerts",
+  isAuthMiddelware,
+  errorHandler(getAlerts)
+);
+outletRoute.patch(
+  "/:outletId/alerts/acknowledge",
+  isAuthMiddelware,
+  errorHandler(acknowledgeAlert)
+);
 
 export default outletRoute;

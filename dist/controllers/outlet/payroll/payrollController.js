@@ -15,6 +15,8 @@ const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
 const date_fns_1 = require("date-fns");
 const __1 = require("../../..");
+const ws_1 = require("../../../services/ws");
+const redis_1 = require("../../../services/redis");
 const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const { month } = req.query;
@@ -219,6 +221,33 @@ const updatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, func
             status: status,
         },
     });
+    // Update related alerts to resolved
+    yield __1.prismaDB.alert.deleteMany({
+        where: {
+            restaurantId: outlet.id,
+            payrollId: id,
+            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+        },
+    });
+    const alerts = yield __1.prismaDB.alert.findMany({
+        where: {
+            restaurantId: outletId,
+            status: {
+                in: ["PENDING"],
+            },
+        },
+        select: {
+            id: true,
+            type: true,
+            status: true,
+            priority: true,
+            href: true,
+            message: true,
+            createdAt: true,
+        },
+    });
+    ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
+    yield redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
     return res.json({
         success: true,
         message: "Updated Payroll Status",
@@ -249,6 +278,35 @@ const bulkUpdatePayrollStatus = (req, res) => __awaiter(void 0, void 0, void 0, 
             status: "COMPLETED",
         },
     });
+    // Update related alerts to resolved
+    yield __1.prismaDB.alert.deleteMany({
+        where: {
+            restaurantId: outlet.id,
+            payrollId: {
+                in: selectedId,
+            },
+            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+        },
+    });
+    const alerts = yield __1.prismaDB.alert.findMany({
+        where: {
+            restaurantId: outletId,
+            status: {
+                in: ["PENDING"],
+            },
+        },
+        select: {
+            id: true,
+            type: true,
+            status: true,
+            priority: true,
+            href: true,
+            message: true,
+            createdAt: true,
+        },
+    });
+    ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
+    yield redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
     return res.json({
         success: true,
         message: "Updated Payroll Status",

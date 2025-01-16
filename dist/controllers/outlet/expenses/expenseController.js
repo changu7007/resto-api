@@ -51,12 +51,13 @@ const expenseSchema = zod_1.z.object({
     description: zod_1.z.string().min(3, {
         message: "Description must be at least 3 characters.",
     }),
+    attachments: zod_1.z.string().optional(),
     paymentMethod: zod_1.z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
         required_error: " Payment Method Required.",
     }),
 });
 const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     const { outletId } = req.params;
     const { data: validateFields, error } = expenseSchema.safeParse(req.body);
     console.log("ValidateFields", validateFields);
@@ -114,6 +115,9 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
         data: {
             restaurantId: outlet.id,
             date: new Date(validateFields === null || validateFields === void 0 ? void 0 : validateFields.date),
+            // @ts-ignore
+            createdBy: `${(_e = req === null || req === void 0 ? void 0 : req.user) === null || _e === void 0 ? void 0 : _e.name} (${(_f = req === null || req === void 0 ? void 0 : req.user) === null || _f === void 0 ? void 0 : _f.role})`,
+            attachments: validateFields === null || validateFields === void 0 ? void 0 : validateFields.attachments,
             category: validateFields === null || validateFields === void 0 ? void 0 : validateFields.category,
             amount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amount,
             description: validateFields === null || validateFields === void 0 ? void 0 : validateFields.description,
@@ -130,7 +134,7 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.createExpenses = createExpenses;
 const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _e;
+    var _g;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = expenseSchema.safeParse(req.body);
     if (error) {
@@ -138,7 +142,7 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_e = req.user) === null || _e === void 0 ? void 0 : _e.id;
+    let userId = (_g = req.user) === null || _g === void 0 ? void 0 : _g.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -175,11 +179,11 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.updateExpenses = updateExpenses;
 const deleteExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _f;
+    var _h;
     const { outletId, id } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_f = req.user) === null || _f === void 0 ? void 0 : _f.id;
+    let userId = (_h = req.user) === null || _h === void 0 ? void 0 : _h.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -255,8 +259,12 @@ const getAllExpensesForTable = (req, res) => __awaiter(void 0, void 0, void 0, f
             id: true,
             date: true,
             category: true,
+            createdBy: true,
+            attachments: true,
             description: true,
             amount: true,
+            createdAt: true,
+            updatedAt: true,
         },
         orderBy,
     }));
@@ -279,11 +287,11 @@ const expenseCategoryColors = {
     Miscellaneous: "#64748b", // Gray
 };
 const getCategoryExpensesStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _g;
+    var _j;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_g = req.user) === null || _g === void 0 ? void 0 : _g.id;
+    let userId = (_j = req.user) === null || _j === void 0 ? void 0 : _j.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }

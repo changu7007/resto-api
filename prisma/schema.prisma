@@ -70,6 +70,8 @@ model Restaurant {
   Invite                Invite[]
   userAccess            UserRestaurantAccess[] @relation("RestaurantToAccess")
   Expenses              Expenses[]             @relation("RestaurantToExpenses")
+  Alert                 Alert[]                @relation("RestaurantToAlert")
+  Report                Report[]               @relation("RestaurantToReports")
 }
 
 model Invite {
@@ -1008,6 +1010,8 @@ model Expenses {
   purchaseId    String?         @db.ObjectId
   purchase      Purchase?       @relation(fields: [purchaseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   category      ExpenseCategory
+  createdBy     String?
+  attachments   String?
   date          DateTime
   paymentMethod PaymentMethod?
   amount        Float
@@ -1016,4 +1020,83 @@ model Expenses {
   updatedAt     DateTime        @updatedAt
 
   @@index([restaurantId])
+}
+
+enum AlertType {
+  LOW_STOCK
+  ORDER_DELAY
+  ORDER_NOTSERVED
+  PAYROLL_PENDING
+  PURCHASE_SETTLEMENT
+  PURCHASE_ACTION_REQUIRED
+}
+
+enum AlertStatus {
+  PENDING
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum AlertPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Alert {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String        @db.ObjectId
+  restaurant   Restaurant    @relation("RestaurantToAlert", fields: [restaurantId], references: [id], onDelete: Cascade)
+  type         AlertType
+  status       AlertStatus   @default(PENDING)
+  priority     AlertPriority
+  href         String?
+  message      String
+  metadata     Json? // Store related data (orderId, itemId, etc.)
+  orderId      String? // Add specific fields for frequent queries
+  itemId       String?
+  payrollId    String?
+  purchaseId   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([restaurantId])
+  @@index([type])
+  @@index([status])
+}
+
+model Report {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String       @db.ObjectId
+  restaurant   Restaurant   @relation("RestaurantToReports", fields: [restaurantId], references: [id], onDelete: Cascade)
+  userId       String
+  reportType   ReportType
+  format       ReportFormat
+  generatedBy  String?
+  fileUrl      String?
+  status       ReportStatus @default(PENDING)
+  error        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+enum ReportType {
+  SALES
+  INVENTORY
+  FINANCIAL
+  STAFF
+}
+
+enum ReportFormat {
+  PDF
+  EXCEL
+  CSV
+}
+
+enum ReportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFinancialMetrics = exports.totalInventory = exports.cashFlowStats = exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = exports.getRevenueAndExpenses = exports.getDashboardMetrics = void 0;
+exports.getCategoryContributionStats = exports.getOrderHourWise = exports.expenseMetrics = exports.getFinancialMetrics = exports.totalInventory = exports.cashFlowStats = exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = exports.getRevenueAndExpenses = exports.getDashboardMetrics = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -17,6 +17,8 @@ const __1 = require("../../..");
 const utils_1 = require("../../../lib/utils");
 const get_users_1 = require("../../../lib/get-users");
 const date_fns_1 = require("date-fns");
+const bad_request_1 = require("../../../exceptions/bad-request");
+const unauthorized_1 = require("../../../exceptions/unauthorized");
 const getPreviousPeriodDates = (period) => {
     const { startDate, endDate } = (0, utils_1.getPeriodDates)(period);
     switch (period) {
@@ -136,7 +138,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         __1.prismaDB.expenses.findMany({
             where: {
                 restaurantId: outlet.id,
-                date: { gte: startDate, lte: endDate },
+                createdAt: { gte: startDate, lte: endDate },
             },
             select: {
                 amount: true,
@@ -145,7 +147,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         __1.prismaDB.expenses.findMany({
             where: {
                 restaurantId: outlet.id,
-                date: { gte: startDate, lte: endDate },
+                createdAt: { gte: startDate, lte: endDate },
             },
             select: {
                 amount: true,
@@ -1002,6 +1004,10 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     const netProfit = totalGrossProfit - totalExpenses;
     // Calculate profit margin
     const profitMargin = (netProfit / totalRevenue) * 100;
+    // Calculate cash flow metrics
+    const cashIn = totalRevenue; // Revenue is the cash coming in
+    const cashOut = totalExpensesCost; // Total expenses are the cash going out
+    const netCashFlow = cashIn - cashOut; // Net cash flow is the difference
     // Return financial metrics
     return res.json({
         success: true,
@@ -1011,8 +1017,242 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
             totalExpenses: totalExpenses.toFixed(2),
             netProfit: netProfit.toFixed(2),
             profitMargin: `${profitMargin.toFixed(2)}%`,
+            cashIn: cashIn.toFixed(2),
+            cashOut: cashOut.toFixed(2),
+            netCashFlow: netCashFlow.toFixed(2),
         },
         message: "Financial metrics calculated successfully",
     });
 });
 exports.getFinancialMetrics = getFinancialMetrics;
+function formatDateForPrisma(dateString) {
+    const parsedDate = (0, date_fns_1.parse)(dateString, "dd-MM-yyyy", new Date());
+    if (isNaN(parsedDate.getTime())) {
+        throw new Error(`Invalid date format: ${dateString}`);
+    }
+    return parsedDate;
+}
+const expenseMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const { startDate, endDate, prevStartDate, prevEndDate } = req.query;
+    if (!startDate || !endDate || !prevStartDate || !prevEndDate) {
+        throw new bad_request_1.BadRequestsException("Missing required date parameters", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const formatDateRangeForPrisma = (dateString, isEnd = false) => {
+        const [day, month, year] = dateString.split("-").map(Number);
+        if (!day || !month || !year) {
+            throw new bad_request_1.BadRequestsException("Invalid date format", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        const date = new Date(year, month - 1, day);
+        if (isEnd) {
+            date.setHours(23, 59, 59, 999); // End of the day
+        }
+        else {
+            date.setHours(0, 0, 0, 0); // Start of the day
+        }
+        return date;
+    };
+    const parsedStartDate = formatDateRangeForPrisma(startDate);
+    const parsedEndDate = formatDateRangeForPrisma(endDate, true);
+    const parsedPrevStartDate = formatDateRangeForPrisma(prevStartDate);
+    const parsedPrevEndDate = formatDateRangeForPrisma(prevEndDate, true);
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const [currExpenses, prevExpenses, ordersCashIn, expensesCashOut] = yield Promise.all([
+        __1.prismaDB.expenses.findMany({
+            where: {
+                restaurantId: outletId,
+                createdAt: {
+                    gte: parsedStartDate,
+                    lte: parsedEndDate,
+                },
+            },
+            select: {
+                amount: true,
+            },
+        }),
+        __1.prismaDB.expenses.findMany({
+            where: {
+                restaurantId: outletId,
+                createdAt: {
+                    gte: parsedPrevStartDate,
+                    lte: parsedPrevEndDate,
+                },
+            },
+            select: {
+                amount: true,
+            },
+        }),
+        __1.prismaDB.order.findMany({
+            where: {
+                restaurantId: outletId,
+                createdAt: {
+                    gte: parsedStartDate,
+                    lte: parsedEndDate,
+                },
+                orderStatus: "COMPLETED",
+            },
+            select: {
+                totalAmount: true,
+            },
+        }),
+        __1.prismaDB.expenses.findMany({
+            where: {
+                restaurantId: outletId,
+                createdAt: {
+                    gte: parsedStartDate,
+                    lte: parsedEndDate,
+                },
+                category: {
+                    in: [
+                        "Ingredients",
+                        "Salaries",
+                        "Utilities",
+                        "Marketing",
+                        "Rent",
+                        "Miscellaneous",
+                    ],
+                },
+            },
+            select: {
+                amount: true,
+            },
+        }),
+    ]);
+    const totalCurrExpenses = currExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+    const totalPrevExpenses = prevExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+    const totalCashIn = ordersCashIn.reduce((sum, order) => sum + parseFloat(order === null || order === void 0 ? void 0 : order.totalAmount), 0);
+    const totalCashOut = expensesCashOut.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+    const percentageChange = totalPrevExpenses
+        ? ((totalCurrExpenses - totalPrevExpenses) / totalPrevExpenses) * 100
+        : 0;
+    const metrics = {
+        expenses: {
+            totalExpenses: totalCurrExpenses,
+            growth: `${percentageChange.toFixed(2)}% vs Previous Period`,
+        },
+        cashFlow: {
+            totalCashIn,
+            cashInPercentage: ((totalCashIn / (totalCashIn + totalCashOut)) *
+                100).toFixed(2),
+            totalCashOut,
+            cashOutPercentage: ((totalCashOut / (totalCashIn + totalCashOut)) *
+                100).toFixed(2),
+            netCash: totalCashIn - totalCashOut,
+        },
+    };
+    return res.json({ success: true, metrics });
+});
+exports.expenseMetrics = expenseMetrics;
+const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const orders = yield __1.prismaDB.order.groupBy({
+        by: ["createdAt"],
+        _count: {
+            id: true,
+        },
+        where: {
+            restaurantId: outletId,
+            createdAt: {
+                gte: today,
+            },
+        },
+    });
+    const orderStatuses = yield __1.prismaDB.order.groupBy({
+        by: ["createdAt", "orderStatus"],
+        _count: {
+            id: true,
+        },
+        where: {
+            restaurantId: outletId,
+            createdAt: {
+                gte: today,
+            },
+        },
+    });
+    // Generate data for all 24 hours
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+    const formattedData = hours.map((hour) => {
+        const ordersAtHour = orders.filter((order) => new Date(order.createdAt).getHours() === hour);
+        const count = ordersAtHour.reduce((sum, order) => sum + order._count.id, 0);
+        const statuses = orderStatuses
+            .filter((status) => new Date(status.createdAt).getHours() === hour)
+            .reduce((acc, status) => {
+            acc[status.orderStatus] = status._count.id;
+            return acc;
+        }, {});
+        return {
+            hour,
+            count,
+            status: statuses,
+        };
+    });
+    return res.json({
+        success: true,
+        data: formattedData,
+    });
+});
+exports.getOrderHourWise = getOrderHourWise;
+const generateVibrantColor = () => {
+    const randomColor = Math.floor(Math.random() * 16777215).toString(16);
+    return `#${randomColor.padStart(6, "0")}`;
+};
+const getCategoryContributionStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _e;
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    let userId = (_e = req.user) === null || _e === void 0 ? void 0 : _e.id;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    // Fetch orders and related category data
+    const orderItems = yield __1.prismaDB.orderItem.findMany({
+        where: {
+            order: {
+                orderStatus: {
+                    in: ["COMPLETED", "DELIVERED"],
+                },
+                restaurantId: outletId,
+            },
+        },
+        include: {
+            menuItem: {
+                include: {
+                    category: true,
+                },
+            },
+        },
+    });
+    // Aggregate amounts by category
+    const categoryTotals = orderItems.reduce((acc, item) => {
+        const categoryName = item.menuItem.category.name;
+        acc[categoryName] = (acc[categoryName] || 0) + item.totalPrice;
+        return acc;
+    }, {});
+    // Calculate total revenue from all categories
+    const totalRevenue = Object.values(categoryTotals).reduce((sum, amount) => sum + amount, 0);
+    // Map categories to stats with percentage contribution and vibrant colors
+    const stats = Object.entries(categoryTotals).map(([category, amount]) => ({
+        name: category,
+        amount: parseFloat(amount.toFixed(2)),
+        percentage: parseFloat(((amount / totalRevenue) * 100).toFixed(2)),
+        color: generateVibrantColor(), // Assign a random vibrant color
+    }));
+    return res.json({
+        success: true,
+        categoryContributionStats: stats,
+    });
+});
+exports.getCategoryContributionStats = getCategoryContributionStats;

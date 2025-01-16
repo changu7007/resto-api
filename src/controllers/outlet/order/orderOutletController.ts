@@ -735,8 +735,8 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
             active: true,
             orderStatus:
               isPaid === true && orderStatus === "COMPLETED"
-                ? orderStatus
-                : "FOODREADY",
+                ? "COMPLETED"
+                : orderStatus,
             totalNetPrice: totalNetPrice,
             gstPrice: gstPrice,
             totalAmount: totalAmount.toString(),
@@ -2120,6 +2120,37 @@ export const orderStatusPatch = async (req: Request, res: Response) => {
       orderStatus: orderStatus,
     },
   });
+
+  // Update related alerts to resolved
+  await prismaDB.alert.deleteMany({
+    where: {
+      restaurantId: outlet.id,
+      orderId: orderId,
+      status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+    },
+  });
+
+  const alerts = await prismaDB.alert.findMany({
+    where: {
+      restaurantId: outletId,
+      status: {
+        in: ["PENDING"],
+      },
+    },
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      priority: true,
+      href: true,
+      message: true,
+      createdAt: true,
+    },
+  });
+  websocketManager.notifyClients(outletId, "NEW_ALERT");
+
+  await redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
+
   await Promise.all([
     getFetchActiveOrderSessionToRedis(outletId),
     getFetchAllOrderSessionToRedis(outletId),

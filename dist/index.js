@@ -27,6 +27,7 @@ const prom_client_1 = __importDefault(require("prom-client"));
 const winston_loki_1 = __importDefault(require("winston-loki"));
 const winston_1 = require("winston");
 const monitoring_1 = require("./monitoring");
+const alert_service_1 = require("./lib/alert-service");
 const options = {
     transports: [
         new winston_loki_1.default({
@@ -46,6 +47,7 @@ app.use((0, cookie_parser_1.default)());
 app.use((0, morgan_1.default)("dev"));
 app.use("/api", routes_1.default);
 app.use(errors_1.errorMiddelware);
+(0, alert_service_1.initializeAlertCrons)();
 exports.prismaDB = new client_1.PrismaClient();
 app.get("/health", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.json({

@@ -20,6 +20,7 @@ import {
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { getOAllItems } from "../../../lib/outlet/get-items";
+import { websocketManager } from "../../../services/ws";
 
 const unitSchema = z.object({
   name: z.string().min(1),
@@ -1055,6 +1056,14 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
               purchasedStock: newStock,
             },
           });
+          // Update related alerts to resolved
+          await prismaDB.alert.deleteMany({
+            where: {
+              restaurantId: outlet.id,
+              itemId: rawMaterial?.id,
+              status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+            },
+          });
 
           const findRecipeIngredients = await prisma.recipeIngredient.findFirst(
             {
@@ -1210,8 +1219,29 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
       },
     });
 
+    const alerts = await prismaDB.alert.findMany({
+      where: {
+        restaurantId: outletId,
+        status: {
+          in: ["PENDING"],
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        priority: true,
+        href: true,
+        message: true,
+        createdAt: true,
+      },
+    });
+
+    websocketManager.notifyClients(outletId, "NEW_ALERT");
+
     await Promise.all([
       getfetchOutletStocksToRedis(outletId),
+      redis.set(`alerts-${outletId}`, JSON.stringify(alerts)),
       redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
       fetchOutletRawMaterialsToRedis(outlet?.id),
     ]);
@@ -2021,6 +2051,15 @@ export const restockPurchase = async (req: Request, res: Response) => {
             },
           });
 
+          // Update related alerts to resolved
+          await prismaDB.alert.deleteMany({
+            where: {
+              restaurantId: outlet.id,
+              itemId: rawMaterial?.id,
+              status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+            },
+          });
+
           const findRecipeIngredients = await prisma.recipeIngredient.findFirst(
             {
               where: {
@@ -2176,8 +2215,29 @@ export const restockPurchase = async (req: Request, res: Response) => {
       },
     });
 
+    const alerts = await prismaDB.alert.findMany({
+      where: {
+        restaurantId: outletId,
+        status: {
+          in: ["PENDING"],
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        priority: true,
+        href: true,
+        message: true,
+        createdAt: true,
+      },
+    });
+
+    websocketManager.notifyClients(outletId, "NEW_ALERT");
+
     await Promise.all([
       getfetchOutletStocksToRedis(outletId),
+      redis.set(`alerts-${outletId}`, JSON.stringify(alerts)),
       redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
       fetchOutletRawMaterialsToRedis(outlet?.id),
     ]);
@@ -2395,6 +2455,35 @@ export const updateStockRawMaterial = async (req: Request, res: Response) => {
       currentStock: stock ?? findRawMaterial?.currentStock,
     },
   });
+
+  // Update related alerts to resolved
+  await prismaDB.alert.deleteMany({
+    where: {
+      restaurantId: outlet.id,
+      itemId: findRawMaterial?.id,
+      status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+    },
+  });
+  const alerts = await prismaDB.alert.findMany({
+    where: {
+      restaurantId: outletId,
+      status: {
+        in: ["PENDING"],
+      },
+    },
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      priority: true,
+      href: true,
+      message: true,
+      createdAt: true,
+    },
+  });
+
+  websocketManager.notifyClients(outletId, "NEW_ALERT");
+  await redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
   await getfetchOutletStocksToRedis(outletId);
   return res.json({
     success: true,

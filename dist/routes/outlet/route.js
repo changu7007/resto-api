@@ -21,6 +21,8 @@ const planController_1 = require("../../controllers/outlet/plans/planController"
 const inventory_controller_1 = require("../../controllers/outlet/inventory/inventory-controller");
 const appAuthController_1 = require("../../controllers/auth/owner/appAuthController");
 const expenseController_1 = require("../../controllers/outlet/expenses/expenseController");
+const alert_controleer_1 = require("../../controllers/outlet/alerts/alert-controleer");
+const reports_controller_1 = require("../../controllers/outlet/reports/reports-controller");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getStaffOutlet));
 outletRoute.get("/:outletId/get-razorpay-config", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getrazorpayConfig));
@@ -117,6 +119,10 @@ outletRoute.get("/:outletId/get-cashflow-stats", auth_1.isAuthMiddelware, (0, er
 outletRoute.get("/:outletId/get-staff-outlet-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.orderStatsForOutletByStaff));
 outletRoute.get("/:outletId/get-outlet-top-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.outletTopSellingItems));
 outletRoute.get("/:outletId/get-last-six-orderstats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.lastSixMonthsOrders));
+outletRoute.get("/:outletId/get-expense-metrics", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.expenseMetrics));
+outletRoute.get("/:outletId/get-hour-wise-order-metrics", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getOrderHourWise));
+outletRoute.get("/:outletId/get-category-order-contribution", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getCategoryContributionStats));
+outletRoute.post("/:outletId/create-report", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(reports_controller_1.createReport));
 //domains
 outletRoute.get("/:outletId/get-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.getDomain));
 outletRoute.post("/:outletId/create-sub-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.createSubDomain));
@@ -201,4 +207,7 @@ outletRoute.post("/:outletId/expenses/create-expense", auth_1.isAuthMiddelware, 
 outletRoute.patch("/:outletId/expenses/update-expense/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.updateExpenses));
 outletRoute.delete("/:outletId/expenses/delete-expense/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.deleteExpenses));
 //EXPENSES GET,CREATE END
+//Alerts Start GET
+outletRoute.get("/:outletId/alerts/get-all-alerts", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(alert_controleer_1.getAlerts));
+outletRoute.patch("/:outletId/alerts/acknowledge", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(alert_controleer_1.acknowledgeAlert));
 exports.default = outletRoute;

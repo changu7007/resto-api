@@ -623,8 +623,8 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                         isPaid: isPaid,
                         active: true,
                         orderStatus: isPaid === true && orderStatus === "COMPLETED"
-                            ? orderStatus
-                            : "FOODREADY",
+                            ? "COMPLETED"
+                            : orderStatus,
                         totalNetPrice: totalNetPrice,
                         gstPrice: gstPrice,
                         totalAmount: totalAmount.toString(),
@@ -1645,6 +1645,33 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
             orderStatus: orderStatus,
         },
     });
+    // Update related alerts to resolved
+    yield __1.prismaDB.alert.deleteMany({
+        where: {
+            restaurantId: outlet.id,
+            orderId: orderId,
+            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+        },
+    });
+    const alerts = yield __1.prismaDB.alert.findMany({
+        where: {
+            restaurantId: outletId,
+            status: {
+                in: ["PENDING"],
+            },
+        },
+        select: {
+            id: true,
+            type: true,
+            status: true,
+            priority: true,
+            href: true,
+            message: true,
+            createdAt: true,
+        },
+    });
+    ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
+    yield redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
     yield Promise.all([
         (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
         (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),

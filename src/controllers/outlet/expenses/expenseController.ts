@@ -51,6 +51,7 @@ const expenseSchema = z.object({
   description: z.string().min(3, {
     message: "Description must be at least 3 characters.",
   }),
+  attachments: z.string().optional(),
   paymentMethod: z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
     required_error: " Payment Method Required.",
   }),
@@ -135,6 +136,9 @@ export const createExpenses = async (req: Request, res: Response) => {
     data: {
       restaurantId: outlet.id,
       date: new Date(validateFields?.date),
+      // @ts-ignore
+      createdBy: `${req?.user?.name} (${req?.user?.role})`,
+      attachments: validateFields?.attachments,
       category: validateFields?.category,
       amount: validateFields?.amount,
       description: validateFields?.description,
@@ -307,8 +311,12 @@ export const getAllExpensesForTable = async (req: Request, res: Response) => {
       id: true,
       date: true,
       category: true,
+      createdBy: true,
+      attachments: true,
       description: true,
       amount: true,
+      createdAt: true,
+      updatedAt: true,
     },
     orderBy,
   });

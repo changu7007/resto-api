@@ -9,6 +9,8 @@ import {
   ColumnSort,
   PaginationState,
 } from "../../../schema/staff";
+import { websocketManager } from "../../../services/ws";
+import { redis } from "../../../services/redis";
 
 export const getThisMonthPayroll = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -243,6 +245,34 @@ export const updatePayrollStatus = async (req: Request, res: Response) => {
       status: status,
     },
   });
+  // Update related alerts to resolved
+  await prismaDB.alert.deleteMany({
+    where: {
+      restaurantId: outlet.id,
+      payrollId: id,
+      status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+    },
+  });
+  const alerts = await prismaDB.alert.findMany({
+    where: {
+      restaurantId: outletId,
+      status: {
+        in: ["PENDING"],
+      },
+    },
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      priority: true,
+      href: true,
+      message: true,
+      createdAt: true,
+    },
+  });
+
+  websocketManager.notifyClients(outletId, "NEW_ALERT");
+  await redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
   return res.json({
     success: true,
     message: "Updated Payroll Status",
@@ -277,6 +307,37 @@ export const bulkUpdatePayrollStatus = async (req: Request, res: Response) => {
       status: "COMPLETED",
     },
   });
+
+  // Update related alerts to resolved
+  await prismaDB.alert.deleteMany({
+    where: {
+      restaurantId: outlet.id,
+      payrollId: {
+        in: selectedId,
+      },
+      status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+    },
+  });
+  const alerts = await prismaDB.alert.findMany({
+    where: {
+      restaurantId: outletId,
+      status: {
+        in: ["PENDING"],
+      },
+    },
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      priority: true,
+      href: true,
+      message: true,
+      createdAt: true,
+    },
+  });
+
+  websocketManager.notifyClients(outletId, "NEW_ALERT");
+  await redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
 
   return res.json({
     success: true,

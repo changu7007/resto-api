@@ -5,7 +5,9 @@ import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { getPeriodDates } from "../../../lib/utils";
 import { getStaffById } from "../../../lib/get-users";
-import { subMonths, format } from "date-fns";
+import { subMonths, format, parse } from "date-fns";
+import { BadRequestsException } from "../../../exceptions/bad-request";
+import { UnauthorizedException } from "../../../exceptions/unauthorized";
 
 interface Metrics {
   totalRevenue: number;
@@ -188,7 +190,7 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     prismaDB.expenses.findMany({
       where: {
         restaurantId: outlet.id,
-        date: { gte: startDate, lte: endDate },
+        createdAt: { gte: startDate, lte: endDate },
       },
       select: {
         amount: true,
@@ -197,7 +199,7 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     prismaDB.expenses.findMany({
       where: {
         restaurantId: outlet.id,
-        date: { gte: startDate, lte: endDate },
+        createdAt: { gte: startDate, lte: endDate },
       },
       select: {
         amount: true,
@@ -1237,6 +1239,11 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
   // Calculate profit margin
   const profitMargin = (netProfit / totalRevenue) * 100;
 
+  // Calculate cash flow metrics
+  const cashIn = totalRevenue; // Revenue is the cash coming in
+  const cashOut = totalExpensesCost; // Total expenses are the cash going out
+  const netCashFlow = cashIn - cashOut; // Net cash flow is the difference
+
   // Return financial metrics
   return res.json({
     success: true,
@@ -1246,7 +1253,305 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
       totalExpenses: totalExpenses.toFixed(2),
       netProfit: netProfit.toFixed(2),
       profitMargin: `${profitMargin.toFixed(2)}%`,
+      cashIn: cashIn.toFixed(2),
+      cashOut: cashOut.toFixed(2),
+      netCashFlow: netCashFlow.toFixed(2),
     },
     message: "Financial metrics calculated successfully",
+  });
+};
+
+function formatDateForPrisma(dateString: string): Date {
+  const parsedDate = parse(dateString, "dd-MM-yyyy", new Date());
+  if (isNaN(parsedDate.getTime())) {
+    throw new Error(`Invalid date format: ${dateString}`);
+  }
+  return parsedDate;
+}
+
+export const expenseMetrics = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { startDate, endDate, prevStartDate, prevEndDate } = req.query;
+
+  if (!startDate || !endDate || !prevStartDate || !prevEndDate) {
+    throw new BadRequestsException(
+      "Missing required date parameters",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const formatDateRangeForPrisma = (dateString: string, isEnd = false) => {
+    const [day, month, year] = dateString.split("-").map(Number);
+    if (!day || !month || !year) {
+      throw new BadRequestsException(
+        "Invalid date format",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    const date = new Date(year, month - 1, day);
+    if (isEnd) {
+      date.setHours(23, 59, 59, 999); // End of the day
+    } else {
+      date.setHours(0, 0, 0, 0); // Start of the day
+    }
+    return date;
+  };
+
+  const parsedStartDate = formatDateRangeForPrisma(startDate as string);
+  const parsedEndDate = formatDateRangeForPrisma(endDate as string, true);
+  const parsedPrevStartDate = formatDateRangeForPrisma(prevStartDate as string);
+  const parsedPrevEndDate = formatDateRangeForPrisma(
+    prevEndDate as string,
+    true
+  );
+
+  const outlet = await getOutletById(outletId);
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const [currExpenses, prevExpenses, ordersCashIn, expensesCashOut] =
+    await Promise.all([
+      prismaDB.expenses.findMany({
+        where: {
+          restaurantId: outletId,
+          createdAt: {
+            gte: parsedStartDate,
+            lte: parsedEndDate,
+          },
+        },
+        select: {
+          amount: true,
+        },
+      }),
+      prismaDB.expenses.findMany({
+        where: {
+          restaurantId: outletId,
+          createdAt: {
+            gte: parsedPrevStartDate,
+            lte: parsedPrevEndDate,
+          },
+        },
+        select: {
+          amount: true,
+        },
+      }),
+      prismaDB.order.findMany({
+        where: {
+          restaurantId: outletId,
+          createdAt: {
+            gte: parsedStartDate,
+            lte: parsedEndDate,
+          },
+          orderStatus: "COMPLETED",
+        },
+        select: {
+          totalAmount: true,
+        },
+      }),
+      prismaDB.expenses.findMany({
+        where: {
+          restaurantId: outletId,
+          createdAt: {
+            gte: parsedStartDate,
+            lte: parsedEndDate,
+          },
+          category: {
+            in: [
+              "Ingredients",
+              "Salaries",
+              "Utilities",
+              "Marketing",
+              "Rent",
+              "Miscellaneous",
+            ],
+          },
+        },
+        select: {
+          amount: true,
+        },
+      }),
+    ]);
+
+  const totalCurrExpenses = currExpenses.reduce(
+    (sum, expense) => sum + (expense.amount || 0),
+    0
+  );
+  const totalPrevExpenses = prevExpenses.reduce(
+    (sum, expense) => sum + (expense.amount || 0),
+    0
+  );
+  const totalCashIn = ordersCashIn.reduce(
+    (sum, order) => sum + parseFloat(order?.totalAmount),
+    0
+  );
+  const totalCashOut = expensesCashOut.reduce(
+    (sum, expense) => sum + (expense.amount || 0),
+    0
+  );
+
+  const percentageChange = totalPrevExpenses
+    ? ((totalCurrExpenses - totalPrevExpenses) / totalPrevExpenses) * 100
+    : 0;
+
+  const metrics = {
+    expenses: {
+      totalExpenses: totalCurrExpenses,
+      growth: `${percentageChange.toFixed(2)}% vs Previous Period`,
+    },
+    cashFlow: {
+      totalCashIn,
+      cashInPercentage: (
+        (totalCashIn / (totalCashIn + totalCashOut)) *
+        100
+      ).toFixed(2),
+      totalCashOut,
+      cashOutPercentage: (
+        (totalCashOut / (totalCashIn + totalCashOut)) *
+        100
+      ).toFixed(2),
+      netCash: totalCashIn - totalCashOut,
+    },
+  };
+
+  return res.json({ success: true, metrics });
+};
+
+export const getOrderHourWise = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const outlet = await getOutletById(outletId);
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
+  }
+  const orders = await prismaDB.order.groupBy({
+    by: ["createdAt"],
+    _count: {
+      id: true,
+    },
+    where: {
+      restaurantId: outletId,
+      createdAt: {
+        gte: today,
+      },
+    },
+  });
+
+  const orderStatuses = await prismaDB.order.groupBy({
+    by: ["createdAt", "orderStatus"],
+    _count: {
+      id: true,
+    },
+    where: {
+      restaurantId: outletId,
+      createdAt: {
+        gte: today,
+      },
+    },
+  });
+
+  // Generate data for all 24 hours
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const formattedData = hours.map((hour) => {
+    const ordersAtHour = orders.filter(
+      (order) => new Date(order.createdAt).getHours() === hour
+    );
+    const count = ordersAtHour.reduce((sum, order) => sum + order._count.id, 0);
+
+    const statuses = orderStatuses
+      .filter((status) => new Date(status.createdAt).getHours() === hour)
+      .reduce((acc, status) => {
+        acc[status.orderStatus] = status._count.id;
+        return acc;
+      }, {} as Record<string, number>);
+
+    return {
+      hour,
+      count,
+      status: statuses,
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: formattedData,
+  });
+};
+
+const generateVibrantColor = (): string => {
+  const randomColor = Math.floor(Math.random() * 16777215).toString(16);
+  return `#${randomColor.padStart(6, "0")}`;
+};
+
+export const getCategoryContributionStats = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  let userId = req.user?.id;
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  // Fetch orders and related category data
+  const orderItems = await prismaDB.orderItem.findMany({
+    where: {
+      order: {
+        orderStatus: {
+          in: ["COMPLETED", "DELIVERED"],
+        },
+        restaurantId: outletId,
+      },
+    },
+    include: {
+      menuItem: {
+        include: {
+          category: true,
+        },
+      },
+    },
+  });
+
+  // Aggregate amounts by category
+  const categoryTotals: Record<string, number> = orderItems.reduce(
+    (acc, item) => {
+      const categoryName = item.menuItem.category.name;
+      acc[categoryName] = (acc[categoryName] || 0) + item.totalPrice;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  // Calculate total revenue from all categories
+  const totalRevenue = Object.values(categoryTotals).reduce(
+    (sum, amount) => sum + amount,
+    0
+  );
+
+  // Map categories to stats with percentage contribution and vibrant colors
+  const stats = Object.entries(categoryTotals).map(([category, amount]) => ({
+    name: category,
+    amount: parseFloat(amount.toFixed(2)),
+    percentage: parseFloat(((amount / totalRevenue) * 100).toFixed(2)),
+    color: generateVibrantColor(), // Assign a random vibrant color
+  }));
+
+  return res.json({
+    success: true,
+    categoryContributionStats: stats,
   });
 };

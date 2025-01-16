@@ -113,8 +113,8 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
       validDate: billing.validDate,
       amount: billing.paidAmount,
       validityDays: differenceInDays(
-        new Date(billing.validDate),
-        new Date(billing.subscribedDate)
+        new Date(billing?.validDate),
+        new Date(billing?.subscribedDate)
       ),
       purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
       status: renewalDay === 0 ? "EXPIRED" : "VALID",

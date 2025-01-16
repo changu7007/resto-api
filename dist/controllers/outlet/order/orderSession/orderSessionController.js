@@ -23,7 +23,6 @@ const redis_1 = require("../../../../services/redis");
 const ws_1 = require("../../../../services/ws");
 const get_order_1 = require("../../../../lib/outlet/get-order");
 const get_tables_1 = require("../../../../lib/outlet/get-tables");
-const firebase_1 = require("../../../../services/firebase");
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
 const ejs_1 = __importDefault(require("ejs"));
@@ -164,9 +163,13 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
         redis_1.redis.del(`all-order-staff-${outletId}`),
     ]);
-    if (outlet === null || outlet === void 0 ? void 0 : outlet.fcmToken) {
-        yield firebase_1.NotificationService.sendNotification(outlet === null || outlet === void 0 ? void 0 : outlet.fcmToken, "Bill Recieved", `${subTotal}`);
-    }
+    // if (outlet?.fcmToken) {
+    //   await NotificationService.sendNotification(
+    //     outlet?.fcmToken!,
+    //     "Bill Recieved",
+    //     `${subTotal}`
+    //   );
+    // }
     ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "BILL_UPDATED");
     return res.json({
         success: true,

@@ -65,61 +65,86 @@ export async function CreateRazorPayOrderForOutlet(
   });
 }
 
-export async function CreateRazorPaySubscriptionForOutlet(
-  req: Request,
-  res: Response
-) {
-  const { outletId } = req.params;
+// export async function CreateRazorPaySubscriptionForOutlet(
+//   req: Request,
+//   res: Response
+// ) {
+//   const { outletId } = req.params;
 
-  // @ts-ignore
-  const userId = req.user.id;
+//   // @ts-ignore
+//   const userId = req.user.id;
 
-  const outlet = await getOutletById(outletId);
+//   const {razorpayPlanId,id}=req.body;
 
-  if (!outlet?.id) {
-    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
-  }
+//   if(!razorpayPlanId || !id) {
+//     throw new NotFoundException("Please select your plan",ErrorCode.NOT_FOUND)
+//   }
 
-  if (outlet.adminId !== userId) {
-    throw new NotFoundException(
-      "Only Restaurant Owner/manager Can Subscribe",
-      ErrorCode.UNAUTHORIZED
-    );
-  }
+//   const outlet = await getOutletById(outletId);
 
-  const user = await prismaDB.user.findFirst({
-    where: {
-      id: userId,
-    },
-  });
+//   if (!outlet?.id) {
+//     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+//   }
 
-  if (!user?.id) {
-    throw new NotFoundException("Admin Not Found", ErrorCode.UNAUTHORIZED);
-  }
+//   if (outlet.adminId !== userId) {
+//     throw new NotFoundException(
+//       "Only Restaurant Owner/manager Can Subscribe",
+//       ErrorCode.UNAUTHORIZED
+//     );
+//   }
 
-  const subs = await razorpay.subscriptions.create({
-    plan_id: "plan_PgvSrK72iPruyR",
-    customer_notify: 1,
-    total_count: 12,
-  });
+//   const user = await prismaDB.user.findFirst({
+//     where: {
+//       id: userId,
+//     },
+//   });
 
-  // const userUpdate = await prismaDB.user.update({
-  //   where:{
-  //     id: user.id
-  //   },
-  //   data:{
-  //     billings:{
-  //       create:{
+//   if (!user?.id) {
+//     throw new NotFoundException("Admin Not Found", ErrorCode.UNAUTHORIZED);
+//   }
 
-  //       }
-  //     }
-  //   }
-  // })
+//   const subs = await razorpay.subscriptions.create({
+//     plan_id: razorpayPlanId,
+//     customer_notify: 1,
+//     quantity: 1,
+//     total_count: 12,
+//   });
 
-  return res.json({
-    success: true,
-  });
-}
+//   const findSubscription = await prismaDB.subsciption.findFirst({
+//     where: {
+//       id: id,
+//     },
+//   });
+
+//   if (!findSubscription) {
+//     throw new BadRequestsException(
+//       "No Subscription Found",
+//       ErrorCode.NOT_FOUND
+//     );
+//   }
+
+//   const userUpdate = await prismaDB.user.update({
+//     where:{
+//       id: user.id
+//     },
+//     data:{
+//       billings:{
+//         create:{
+//           isSubscription: false,
+//           planType: findSubscription.planType,
+//           subscriptionPlan: findSubscription.subscriptionPlan,
+//           subscriptionLink: subs?.short_url,
+//           subscriptionStatus: subs?.status
+//         }
+//       }
+//     }
+//   })
+
+//   return res.json({
+//     success: true,
+//     shortUrl : subs?.short_url
+//   });
+// }
 
 export const paymentRazorpayVerification = async (
   req: Request,
@@ -139,6 +164,7 @@ export const paymentRazorpayVerification = async (
   } else {
     return res.json({
       success: false,
+      message: "Payment Failed",
     });
   }
 };
@@ -152,11 +178,7 @@ export const paymentWebhookVerification = async (
     .createHmac("sha256", secret)
     .update(JSON.stringify(req.body));
   const digest = shasum.digest("hex");
-  console.log(
-    `Digest:${digest}`,
-    req.headers["x-razorpay-signature"],
-    req.body
-  );
+
   if (digest === req.headers["x-razorpay-signature"]) {
     console.log("Request is legit");
     return res.json({
@@ -177,6 +199,7 @@ export const buyPlan = async (req: Request, res: Response) => {
   // @ts-ignore
   const userId = req.user?.id;
   console.log("Plan", req.body);
+
   if (!paymentId || !subscriptionId) {
     throw new BadRequestsException(
       "Payment ID not Verfied",

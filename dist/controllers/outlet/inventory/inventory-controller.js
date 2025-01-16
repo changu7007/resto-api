@@ -21,6 +21,7 @@ const get_inventory_1 = require("../../../lib/outlet/get-inventory");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const get_items_1 = require("../../../lib/outlet/get-items");
+const ws_1 = require("../../../services/ws");
 const unitSchema = zod_1.z.object({
     name: zod_1.z.string().min(1),
 });
@@ -824,6 +825,14 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                         purchasedStock: newStock,
                     },
                 });
+                // Update related alerts to resolved
+                yield __1.prismaDB.alert.deleteMany({
+                    where: {
+                        restaurantId: outlet.id,
+                        itemId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
+                        status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                    },
+                });
                 const findRecipeIngredients = yield prisma.recipeIngredient.findFirst({
                     where: {
                         rawMaterialId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
@@ -961,8 +970,27 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                 createdAt: "desc",
             },
         });
+        const alerts = yield __1.prismaDB.alert.findMany({
+            where: {
+                restaurantId: outletId,
+                status: {
+                    in: ["PENDING"],
+                },
+            },
+            select: {
+                id: true,
+                type: true,
+                status: true,
+                priority: true,
+                href: true,
+                message: true,
+                createdAt: true,
+            },
+        });
+        ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
         yield Promise.all([
             (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId),
+            redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts)),
             redis_1.redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
             (0, get_inventory_1.fetchOutletRawMaterialsToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id),
         ]);
@@ -1662,6 +1690,14 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                         purchasedStock: newStock,
                     },
                 });
+                // Update related alerts to resolved
+                yield __1.prismaDB.alert.deleteMany({
+                    where: {
+                        restaurantId: outlet.id,
+                        itemId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
+                        status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                    },
+                });
                 const findRecipeIngredients = yield prisma.recipeIngredient.findFirst({
                     where: {
                         rawMaterialId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
@@ -1800,8 +1836,27 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 createdAt: "desc",
             },
         });
+        const alerts = yield __1.prismaDB.alert.findMany({
+            where: {
+                restaurantId: outletId,
+                status: {
+                    in: ["PENDING"],
+                },
+            },
+            select: {
+                id: true,
+                type: true,
+                status: true,
+                priority: true,
+                href: true,
+                message: true,
+                createdAt: true,
+            },
+        });
+        ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
         yield Promise.all([
             (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId),
+            redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts)),
             redis_1.redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
             (0, get_inventory_1.fetchOutletRawMaterialsToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id),
         ]);
@@ -1967,6 +2022,33 @@ const updateStockRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, f
             currentStock: stock !== null && stock !== void 0 ? stock : findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.currentStock,
         },
     });
+    // Update related alerts to resolved
+    yield __1.prismaDB.alert.deleteMany({
+        where: {
+            restaurantId: outlet.id,
+            itemId: findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.id,
+            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+        },
+    });
+    const alerts = yield __1.prismaDB.alert.findMany({
+        where: {
+            restaurantId: outletId,
+            status: {
+                in: ["PENDING"],
+            },
+        },
+        select: {
+            id: true,
+            type: true,
+            status: true,
+            priority: true,
+            href: true,
+            message: true,
+            createdAt: true,
+        },
+    });
+    ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
+    yield redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
     yield (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId);
     return res.json({
         success: true,

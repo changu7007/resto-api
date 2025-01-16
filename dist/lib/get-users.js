@@ -106,7 +106,7 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
             startDate: billing.subscribedDate,
             validDate: billing.validDate,
             amount: billing.paidAmount,
-            validityDays: (0, date_fns_1.differenceInDays)(new Date(billing.validDate), new Date(billing.subscribedDate)),
+            validityDays: (0, date_fns_1.differenceInDays)(new Date(billing === null || billing === void 0 ? void 0 : billing.validDate), new Date(billing === null || billing === void 0 ? void 0 : billing.subscribedDate)),
             purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
             status: renewalDay === 0 ? "EXPIRED" : "VALID",
         })),
