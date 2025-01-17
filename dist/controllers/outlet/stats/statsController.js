@@ -19,6 +19,7 @@ const get_users_1 = require("../../../lib/get-users");
 const date_fns_1 = require("date-fns");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
+const luxon_1 = require("luxon");
 const getPreviousPeriodDates = (period) => {
     const { startDate, endDate } = (0, utils_1.getPeriodDates)(period);
     switch (period) {
@@ -184,10 +185,12 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
                 100,
         },
         profitMargin: {
-            totalProfitPercentage: (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+            totalProfitPercentage: ((parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+                currentExpMetrics.totalExpenses.toFixed(2)) /
                 parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
                 100 || 0,
-            percentage: (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+            percentage: ((parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+                currentExpMetrics.totalExpenses.toFixed(2)) /
                 parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
                 100 || 0,
         },
@@ -979,7 +982,7 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     const expenses = yield __1.prismaDB.expenses.findMany({
         where: {
             restaurantId: outlet.id,
-            date: { gte: startDate, lte: endDate },
+            createdAt: { gte: startDate, lte: endDate },
         },
         select: {
             amount: true,
@@ -1147,12 +1150,22 @@ const expenseMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.expenseMetrics = expenseMetrics;
 const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _e;
     const { outletId } = req.params;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const timeZone = "Asia/Kolkata"; // Default to a specific time zone
+    // Start and end of today in the restaurant's time zone
+    const todayStart = luxon_1.DateTime.now()
+        .setZone(timeZone)
+        .startOf("day")
+        .toUTC()
+        .toISO();
+    const todayEnd = (_e = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO()) !== null && _e !== void 0 ? _e : new Date().toISOString();
+    if (!todayStart || !todayEnd) {
+        throw new Error("Failed to calculate today's date range.");
     }
     const orders = yield __1.prismaDB.order.groupBy({
         by: ["createdAt"],
@@ -1162,7 +1175,8 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
         where: {
             restaurantId: outletId,
             createdAt: {
-                gte: today,
+                gte: new Date(todayStart),
+                lte: new Date(todayEnd),
             },
         },
     });
@@ -1174,17 +1188,28 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
         where: {
             restaurantId: outletId,
             createdAt: {
-                gte: today,
+                gte: new Date(todayStart),
+                lte: new Date(todayEnd),
             },
         },
     });
-    // Generate data for all 24 hours
+    // Generate data for all 24 hours in the outlet's time zone
     const hours = Array.from({ length: 24 }, (_, i) => i);
     const formattedData = hours.map((hour) => {
-        const ordersAtHour = orders.filter((order) => new Date(order.createdAt).getHours() === hour);
+        const ordersAtHour = orders.filter((order) => {
+            const orderHour = luxon_1.DateTime.fromJSDate(order.createdAt, {
+                zone: timeZone,
+            }).hour;
+            return orderHour === hour;
+        });
         const count = ordersAtHour.reduce((sum, order) => sum + order._count.id, 0);
         const statuses = orderStatuses
-            .filter((status) => new Date(status.createdAt).getHours() === hour)
+            .filter((status) => {
+            const statusHour = luxon_1.DateTime.fromJSDate(status.createdAt, {
+                zone: timeZone,
+            }).hour;
+            return statusHour === hour;
+        })
             .reduce((acc, status) => {
             acc[status.orderStatus] = status._count.id;
             return acc;
@@ -1206,11 +1231,11 @@ const generateVibrantColor = () => {
     return `#${randomColor.padStart(6, "0")}`;
 };
 const getCategoryContributionStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _e;
+    var _f;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_e = req.user) === null || _e === void 0 ? void 0 : _e.id;
+    let userId = (_f = req.user) === null || _f === void 0 ? void 0 : _f.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }

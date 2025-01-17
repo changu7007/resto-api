@@ -8,6 +8,7 @@ import { getStaffById } from "../../../lib/get-users";
 import { subMonths, format, parse } from "date-fns";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
+import { DateTime } from "luxon";
 
 interface Metrics {
   totalRevenue: number;
@@ -261,11 +262,13 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     },
     profitMargin: {
       totalProfitPercentage:
-        (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+        ((parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+          currentExpMetrics.totalExpenses.toFixed(2)) /
           parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
           100 || 0,
       percentage:
-        (parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) /
+        ((parseFloat(currentMetrics.totalGrossProfit.toFixed(2)) -
+          currentExpMetrics.totalExpenses.toFixed(2)) /
           parseFloat(currentMetrics.totalRevenue.toFixed(2))) *
           100 || 0,
     },
@@ -1201,7 +1204,7 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
   const expenses = await prismaDB.expenses.findMany({
     where: {
       restaurantId: outlet.id,
-      date: { gte: startDate, lte: endDate },
+      createdAt: { gte: startDate, lte: endDate },
     },
     select: {
       amount: true,
@@ -1420,13 +1423,28 @@ export const expenseMetrics = async (req: Request, res: Response) => {
 
 export const getOrderHourWise = async (req: Request, res: Response) => {
   const { outletId } = req.params;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   const outlet = await getOutletById(outletId);
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
   }
+
+  const timeZone = "Asia/Kolkata"; // Default to a specific time zone
+
+  // Start and end of today in the restaurant's time zone
+  const todayStart = DateTime.now()
+    .setZone(timeZone)
+    .startOf("day")
+    .toUTC()
+    .toISO();
+  const todayEnd =
+    DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO() ??
+    new Date().toISOString();
+
+  if (!todayStart || !todayEnd) {
+    throw new Error("Failed to calculate today's date range.");
+  }
+
   const orders = await prismaDB.order.groupBy({
     by: ["createdAt"],
     _count: {
@@ -1435,7 +1453,8 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
     where: {
       restaurantId: outletId,
       createdAt: {
-        gte: today,
+        gte: new Date(todayStart),
+        lte: new Date(todayEnd),
       },
     },
   });
@@ -1448,21 +1467,31 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
     where: {
       restaurantId: outletId,
       createdAt: {
-        gte: today,
+        gte: new Date(todayStart),
+        lte: new Date(todayEnd),
       },
     },
   });
 
-  // Generate data for all 24 hours
+  // Generate data for all 24 hours in the outlet's time zone
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const formattedData = hours.map((hour) => {
-    const ordersAtHour = orders.filter(
-      (order) => new Date(order.createdAt).getHours() === hour
-    );
+    const ordersAtHour = orders.filter((order) => {
+      const orderHour = DateTime.fromJSDate(order.createdAt, {
+        zone: timeZone,
+      }).hour;
+      return orderHour === hour;
+    });
+
     const count = ordersAtHour.reduce((sum, order) => sum + order._count.id, 0);
 
     const statuses = orderStatuses
-      .filter((status) => new Date(status.createdAt).getHours() === hour)
+      .filter((status) => {
+        const statusHour = DateTime.fromJSDate(status.createdAt, {
+          zone: timeZone,
+        }).hour;
+        return statusHour === hour;
+      })
       .reduce((acc, status) => {
         acc[status.orderStatus] = status._count.id;
         return acc;
