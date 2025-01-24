@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   addFMCTokenToOutlet,
   createInvoiceDetails,
+  createOutletFromOutletHub,
   deleteAllNotifications,
   deleteNotificationById,
   deleteOutlet,
@@ -49,6 +50,8 @@ import {
   getCategoriesForTable,
   getItemById,
   getItemForTable,
+  getItemsByCategory,
+  getItemsBySearch,
   getMenuVariants,
   getShortCodeStatus,
   getSingleAddons,
@@ -204,6 +207,11 @@ outletRoute.get(
   "/:outletId/get-razorpay-config",
   isAuthMiddelware,
   errorHandler(getrazorpayConfig)
+);
+outletRoute.post(
+  "/:outletId/create-outlet-from-copy",
+  isAuthMiddelware,
+  errorHandler(createOutletFromOutletHub)
 );
 outletRoute.get("/:outletId", isAuthMiddelware, errorHandler(getByOutletId));
 outletRoute.patch("/:outletId/add-fmc", errorHandler(addFMCTokenToOutlet));
@@ -391,6 +399,8 @@ outletRoute.post(
   errorHandler(postItem)
 );
 outletRoute.get("/:outletId/get-items", errorHandler(getAllItem));
+outletRoute.get("/:outletId/menu-items", errorHandler(getItemsByCategory));
+outletRoute.get("/:outletId/menu-items-search", errorHandler(getItemsBySearch));
 outletRoute.post(
   "/:outletId/get-table-items",
   isAuthMiddelware,

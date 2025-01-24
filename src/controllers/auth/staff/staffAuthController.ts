@@ -8,16 +8,22 @@ import { staffSchema } from "../../../schema/staff";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { sendToken } from "../../../services/jwt";
 import { redis } from "../../../services/redis";
-import { Staff } from "@prisma/client";
+
 import { FStaff, getFormatStaffAndSendToRedis } from "../../../lib/get-users";
 
 export const StaffLogin = async (req: Request, res: Response) => {
-  staffSchema.parse(req.body);
-  const { email, password } = req.body;
+  // staffSchema.parse(req.body);
+  // const { email, password } = req.body;
+
+  const { role, phone } = req.body;
+
+  console.log(req.body);
 
   const checkStaff = await prismaDB.staff.findFirst({
     where: {
-      email: email,
+      // email: email,
+      role: role,
+      phoneNo: phone,
     },
   });
 
@@ -25,12 +31,12 @@ export const StaffLogin = async (req: Request, res: Response) => {
     throw new NotFoundException("Staff Not Found", ErrorCode.NOT_FOUND);
   }
 
-  if (checkStaff.password !== password) {
-    throw new BadRequestsException(
-      "Incorrect Password",
-      ErrorCode.INCORRECT_PASSWORD
-    );
-  }
+  // if (checkStaff.password !== password) {
+  //   throw new BadRequestsException(
+  //     "Incorrect Password",
+  //     ErrorCode.INCORRECT_PASSWORD
+  //   );
+  // }
 
   const formattedStaff = await getFormatStaffAndSendToRedis(checkStaff.id);
 

@@ -139,7 +139,17 @@ export type FStaff = {
   isSubscribed: boolean;
   toRenewal: number | null;
   plan: "FREETRIAL" | "STANDARD" | "PREMIUM" | "ENTERPRISE";
-  restaurantId: string;
+  restaurant: {
+    id: string;
+    name: string;
+    image: string;
+    adminId: string;
+    address: string;
+    phoneNo: string;
+    email: string;
+    outletType: string;
+    restaurantName: string;
+  };
 };
 
 export const getFormatStaffAndSendToRedis = async (staffId: string) => {
@@ -205,7 +215,17 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
     // isTwoFA: findStaff?.isTwoFactorEnabled,
     toRenewal: renewalDay,
     plan: findSubscription?.subscriptionPlan,
-    restaurantId: findStaff?.restaurantId,
+    restaurant: {
+      id: getOutlet?.id,
+      name: getOutlet?.name,
+      image: getOutlet?.imageUrl,
+      adminId: getOutlet?.adminId,
+      address: getOutlet?.address,
+      phoneNo: getOutlet?.phoneNo,
+      email: getOutlet?.email,
+      outletType: getOutlet?.outletType,
+      restaurantName: getOutlet?.restaurantName,
+    },
   };
 
   await redis.set(findStaff?.id, JSON.stringify(formatToSend));

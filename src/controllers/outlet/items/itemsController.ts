@@ -9,7 +9,7 @@ import {
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
-import { FoodRole } from "@prisma/client";
+import { FoodRole, MenuItem, MenuItemVariant } from "@prisma/client";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import { getOAllItems } from "../../../lib/outlet/get-items";
@@ -21,6 +21,177 @@ import {
   ColumnSort,
   PaginationState,
 } from "../../../schema/staff";
+
+export const getItemsByCategory = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const categoryId: string = req.query.categoryId as string;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const redisItems = await redis.get(`${outletId}-all-items`);
+
+  if (redisItems) {
+    const items: MenuItem[] = JSON.parse(redisItems);
+    let sendItems: MenuItem[] = [];
+
+    if (categoryId) {
+      if (categoryId === "all") {
+        sendItems = items;
+      } else if (categoryId === "favourites") {
+        const users = await prismaDB.user.findFirst({
+          where: {
+            id: outlet?.adminId,
+          },
+        });
+        sendItems = items.filter((item) => users?.favItems?.includes(item.id));
+      } else {
+        sendItems = items.filter((item) => item.categoryId === categoryId);
+      }
+    }
+
+    const formattedItems = sendItems
+      ?.filter((i: any) => i.isDineIn === true)
+      ?.map((menuItem: any) => ({
+        id: menuItem.id,
+        shortCode: menuItem.shortCode,
+        categoryId: menuItem.categoryId,
+        categoryName: menuItem.category.name,
+        name: menuItem.name,
+        images: menuItem.images.map((image: any) => ({
+          id: image.id,
+          url: image.url,
+        })),
+        type: menuItem.type,
+        price: menuItem.price,
+        netPrice: menuItem?.netPrice,
+        itemRecipe: {
+          id: menuItem?.itemRecipe?.id,
+          menuId: menuItem?.itemRecipe?.menuId,
+          menuVariantId: menuItem?.itemRecipe?.menuVariantId,
+          addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId,
+        },
+        gst: menuItem?.gst,
+        grossProfit: menuItem?.grossProfit,
+        isVariants: menuItem.isVariants,
+        isAddOns: menuItem.isAddons,
+        menuItemVariants: menuItem.menuItemVariants.map((variant: any) => ({
+          id: variant.id,
+          variantName: variant.variant.name,
+          price: variant.price,
+          netPrice: variant?.netPrice,
+          gst: variant?.gst,
+          grossProfit: variant?.grossProfit,
+          type: variant.foodType,
+        })),
+        favourite: true,
+        menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns: any) => ({
+          id: addOns.id,
+          addOnGroupName: addOns.addOnGroups.title,
+          description: addOns.addOnGroups.description,
+          addonVariants: addOns.addOnGroups.addOnVariants.map(
+            (addOnVariant: any) => ({
+              id: addOnVariant.id,
+              name: addOnVariant.name,
+              price: addOnVariant.price,
+              type: addOnVariant.type,
+            })
+          ),
+        })),
+      }));
+
+    return res.json({
+      success: true,
+      data: formattedItems,
+    });
+  }
+};
+
+export const getItemsBySearch = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const search: string = req.query.search as string;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const redisItems = await redis.get(`${outletId}-all-items`);
+
+  if (redisItems) {
+    const items: MenuItem[] = JSON.parse(redisItems);
+    let sendItems: MenuItem[] = [];
+
+    if (search) {
+      sendItems = items.filter((item) => {
+        return (
+          item.name.toLowerCase().includes(search.toLowerCase()) ||
+          item.shortCode?.toLowerCase().includes(search.toLowerCase()) ||
+          item.description?.toLowerCase().includes(search.toLowerCase())
+        );
+      });
+    }
+
+    const formattedItems = sendItems
+      ?.filter((i: any) => i.isDineIn === true)
+      ?.map((menuItem: any) => ({
+        id: menuItem.id,
+        shortCode: menuItem.shortCode,
+        categoryId: menuItem.categoryId,
+        categoryName: menuItem.category.name,
+        name: menuItem.name,
+        images: menuItem.images.map((image: any) => ({
+          id: image.id,
+          url: image.url,
+        })),
+        type: menuItem.type,
+        price: menuItem.price,
+        netPrice: menuItem?.netPrice,
+        itemRecipe: {
+          id: menuItem?.itemRecipe?.id,
+          menuId: menuItem?.itemRecipe?.menuId,
+          menuVariantId: menuItem?.itemRecipe?.menuVariantId,
+          addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId,
+        },
+        gst: menuItem?.gst,
+        grossProfit: menuItem?.grossProfit,
+        isVariants: menuItem.isVariants,
+        isAddOns: menuItem.isAddons,
+        menuItemVariants: menuItem.menuItemVariants.map((variant: any) => ({
+          id: variant.id,
+          variantName: variant.variant.name,
+          price: variant.price,
+          netPrice: variant?.netPrice,
+          gst: variant?.gst,
+          grossProfit: variant?.grossProfit,
+          type: variant.foodType,
+        })),
+        favourite: true,
+        menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns: any) => ({
+          id: addOns.id,
+          addOnGroupName: addOns.addOnGroups.title,
+          description: addOns.addOnGroups.description,
+          addonVariants: addOns.addOnGroups.addOnVariants.map(
+            (addOnVariant: any) => ({
+              id: addOnVariant.id,
+              name: addOnVariant.name,
+              price: addOnVariant.price,
+              type: addOnVariant.type,
+            })
+          ),
+        })),
+      }));
+
+    return res.json({
+      success: true,
+      data: formattedItems,
+    });
+  }
+};
 
 export const getItemForTable = async (req: Request, res: Response) => {
   const { outletId } = req.params;
