@@ -167,7 +167,17 @@ const getFormatStaffAndSendToRedis = (staffId) => __awaiter(void 0, void 0, void
         // isTwoFA: findStaff?.isTwoFactorEnabled,
         toRenewal: renewalDay,
         plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
-        restaurantId: findStaff === null || findStaff === void 0 ? void 0 : findStaff.restaurantId,
+        restaurant: {
+            id: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id,
+            name: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.name,
+            image: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.imageUrl,
+            adminId: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.adminId,
+            address: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.address,
+            phoneNo: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.phoneNo,
+            email: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.email,
+            outletType: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.outletType,
+            restaurantName: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.restaurantName,
+        },
     };
     yield redis_1.redis.set(findStaff === null || findStaff === void 0 ? void 0 : findStaff.id, JSON.stringify(formatToSend));
     return formatToSend;

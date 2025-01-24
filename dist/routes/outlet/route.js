@@ -26,6 +26,7 @@ const reports_controller_1 = require("../../controllers/outlet/reports/reports-c
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getStaffOutlet));
 outletRoute.get("/:outletId/get-razorpay-config", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getrazorpayConfig));
+outletRoute.post("/:outletId/create-outlet-from-copy", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.createOutletFromOutletHub));
 outletRoute.get("/:outletId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getByOutletId));
 outletRoute.patch("/:outletId/add-fmc", (0, error_handler_1.errorHandler)(outletController_1.addFMCTokenToOutlet));
 outletRoute.get("/:outletId/notifications", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getAllNotifications));
@@ -70,6 +71,8 @@ outletRoute.get("/:outletId/table/:tableId/customer/:customerId", auth_1.isAuthM
 //Items Route
 outletRoute.post("/:outletId/create-item", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.postItem));
 outletRoute.get("/:outletId/get-items", (0, error_handler_1.errorHandler)(itemsController_1.getAllItem));
+outletRoute.get("/:outletId/menu-items", (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategory));
+outletRoute.get("/:outletId/menu-items-search", (0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearch));
 outletRoute.post("/:outletId/get-table-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemForTable));
 outletRoute.post("/:outletId/get-table-categories", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getCategoriesForTable));
 outletRoute.post("/:outletId/get-table-variants", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getVariantsForTable));

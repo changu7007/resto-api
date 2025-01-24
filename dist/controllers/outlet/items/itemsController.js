@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = void 0;
+exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -21,6 +21,164 @@ const get_items_1 = require("../../../lib/outlet/get-items");
 const zod_1 = require("zod");
 const get_users_1 = require("../../../lib/get-users");
 const date_fns_1 = require("date-fns");
+const getItemsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const { outletId } = req.params;
+    const categoryId = req.query.categoryId;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const redisItems = yield redis_1.redis.get(`${outletId}-all-items`);
+    if (redisItems) {
+        const items = JSON.parse(redisItems);
+        let sendItems = [];
+        if (categoryId) {
+            if (categoryId === "all") {
+                sendItems = items;
+            }
+            else if (categoryId === "favourites") {
+                const users = yield __1.prismaDB.user.findFirst({
+                    where: {
+                        id: outlet === null || outlet === void 0 ? void 0 : outlet.adminId,
+                    },
+                });
+                sendItems = items.filter((item) => { var _a; return (_a = users === null || users === void 0 ? void 0 : users.favItems) === null || _a === void 0 ? void 0 : _a.includes(item.id); });
+            }
+            else {
+                sendItems = items.filter((item) => item.categoryId === categoryId);
+            }
+        }
+        const formattedItems = (_a = sendItems === null || sendItems === void 0 ? void 0 : sendItems.filter((i) => i.isDineIn === true)) === null || _a === void 0 ? void 0 : _a.map((menuItem) => {
+            var _a, _b, _c, _d;
+            return ({
+                id: menuItem.id,
+                shortCode: menuItem.shortCode,
+                categoryId: menuItem.categoryId,
+                categoryName: menuItem.category.name,
+                name: menuItem.name,
+                images: menuItem.images.map((image) => ({
+                    id: image.id,
+                    url: image.url,
+                })),
+                type: menuItem.type,
+                price: menuItem.price,
+                netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
+                itemRecipe: {
+                    id: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _a === void 0 ? void 0 : _a.id,
+                    menuId: (_b = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _b === void 0 ? void 0 : _b.menuId,
+                    menuVariantId: (_c = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _c === void 0 ? void 0 : _c.menuVariantId,
+                    addonItemVariantId: (_d = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _d === void 0 ? void 0 : _d.addonItemVariantId,
+                },
+                gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
+                grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
+                isVariants: menuItem.isVariants,
+                isAddOns: menuItem.isAddons,
+                menuItemVariants: menuItem.menuItemVariants.map((variant) => ({
+                    id: variant.id,
+                    variantName: variant.variant.name,
+                    price: variant.price,
+                    netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
+                    gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                    grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
+                    type: variant.foodType,
+                })),
+                favourite: true,
+                menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns) => ({
+                    id: addOns.id,
+                    addOnGroupName: addOns.addOnGroups.title,
+                    description: addOns.addOnGroups.description,
+                    addonVariants: addOns.addOnGroups.addOnVariants.map((addOnVariant) => ({
+                        id: addOnVariant.id,
+                        name: addOnVariant.name,
+                        price: addOnVariant.price,
+                        type: addOnVariant.type,
+                    })),
+                })),
+            });
+        });
+        return res.json({
+            success: true,
+            data: formattedItems,
+        });
+    }
+});
+exports.getItemsByCategory = getItemsByCategory;
+const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _b;
+    const { outletId } = req.params;
+    const search = req.query.search;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const redisItems = yield redis_1.redis.get(`${outletId}-all-items`);
+    if (redisItems) {
+        const items = JSON.parse(redisItems);
+        let sendItems = [];
+        if (search) {
+            sendItems = items.filter((item) => {
+                var _a, _b;
+                return (item.name.toLowerCase().includes(search.toLowerCase()) ||
+                    ((_a = item.shortCode) === null || _a === void 0 ? void 0 : _a.toLowerCase().includes(search.toLowerCase())) ||
+                    ((_b = item.description) === null || _b === void 0 ? void 0 : _b.toLowerCase().includes(search.toLowerCase())));
+            });
+        }
+        const formattedItems = (_b = sendItems === null || sendItems === void 0 ? void 0 : sendItems.filter((i) => i.isDineIn === true)) === null || _b === void 0 ? void 0 : _b.map((menuItem) => {
+            var _a, _b, _c, _d;
+            return ({
+                id: menuItem.id,
+                shortCode: menuItem.shortCode,
+                categoryId: menuItem.categoryId,
+                categoryName: menuItem.category.name,
+                name: menuItem.name,
+                images: menuItem.images.map((image) => ({
+                    id: image.id,
+                    url: image.url,
+                })),
+                type: menuItem.type,
+                price: menuItem.price,
+                netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
+                itemRecipe: {
+                    id: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _a === void 0 ? void 0 : _a.id,
+                    menuId: (_b = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _b === void 0 ? void 0 : _b.menuId,
+                    menuVariantId: (_c = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _c === void 0 ? void 0 : _c.menuVariantId,
+                    addonItemVariantId: (_d = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _d === void 0 ? void 0 : _d.addonItemVariantId,
+                },
+                gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
+                grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
+                isVariants: menuItem.isVariants,
+                isAddOns: menuItem.isAddons,
+                menuItemVariants: menuItem.menuItemVariants.map((variant) => ({
+                    id: variant.id,
+                    variantName: variant.variant.name,
+                    price: variant.price,
+                    netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
+                    gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                    grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
+                    type: variant.foodType,
+                })),
+                favourite: true,
+                menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns) => ({
+                    id: addOns.id,
+                    addOnGroupName: addOns.addOnGroups.title,
+                    description: addOns.addOnGroups.description,
+                    addonVariants: addOns.addOnGroups.addOnVariants.map((addOnVariant) => ({
+                        id: addOnVariant.id,
+                        name: addOnVariant.name,
+                        price: addOnVariant.price,
+                        type: addOnVariant.type,
+                    })),
+                })),
+            });
+        });
+        return res.json({
+            success: true,
+            data: formattedItems,
+        });
+    }
+});
+exports.getItemsBySearch = getItemsBySearch;
 const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -440,7 +598,7 @@ const menuSchema = zod_1.z.object({
     isOnline: zod_1.z.boolean().optional(),
 });
 const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _c;
     const { itemId, outletId } = req.params;
     const validateFields = menuSchema.parse(req.body);
     const validFoodTypes = Object.values(client_1.FoodRole);
@@ -559,7 +717,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
         : [];
     const addonsToDelete = menuItem.menuGroupAddOns.filter((ea) => !addonIdsToKeep.includes(ea.id));
     // Prepare updates for images
-    const imageUpdates = (_a = validateFields === null || validateFields === void 0 ? void 0 : validateFields.images) === null || _a === void 0 ? void 0 : _a.map((image) => {
+    const imageUpdates = (_c = validateFields === null || validateFields === void 0 ? void 0 : validateFields.images) === null || _c === void 0 ? void 0 : _c.map((image) => {
         const existingImage = menuItem.images.find((ei) => ei.url === (image === null || image === void 0 ? void 0 : image.url));
         if (existingImage) {
             return __1.prismaDB.image.update({
@@ -831,11 +989,11 @@ const getMenuVariants = (req, res) => __awaiter(void 0, void 0, void 0, function
 });
 exports.getMenuVariants = getMenuVariants;
 const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b;
+    var _d;
     const { id } = req.body;
     const { outletId } = req.params;
     // @ts-ignore
-    const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
+    const userId = (_d = req === null || req === void 0 ? void 0 : req.user) === null || _d === void 0 ? void 0 : _d.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);

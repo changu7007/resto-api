@@ -36,27 +36,32 @@ exports.StaffUpdateAccessToken = exports.StaffLogout = exports.GetStaff = export
 const __1 = require("../../..");
 const jwt = __importStar(require("jsonwebtoken"));
 const secrets_1 = require("../../../secrets");
-const bad_request_1 = require("../../../exceptions/bad-request");
 const root_1 = require("../../../exceptions/root");
-const staff_1 = require("../../../schema/staff");
 const not_found_1 = require("../../../exceptions/not-found");
 const jwt_1 = require("../../../services/jwt");
 const redis_1 = require("../../../services/redis");
 const get_users_1 = require("../../../lib/get-users");
 const StaffLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    staff_1.staffSchema.parse(req.body);
-    const { email, password } = req.body;
+    // staffSchema.parse(req.body);
+    // const { email, password } = req.body;
+    const { role, phone } = req.body;
+    console.log(req.body);
     const checkStaff = yield __1.prismaDB.staff.findFirst({
         where: {
-            email: email,
+            // email: email,
+            role: role,
+            phoneNo: phone,
         },
     });
     if (!(checkStaff === null || checkStaff === void 0 ? void 0 : checkStaff.id)) {
         throw new not_found_1.NotFoundException("Staff Not Found", root_1.ErrorCode.NOT_FOUND);
     }
-    if (checkStaff.password !== password) {
-        throw new bad_request_1.BadRequestsException("Incorrect Password", root_1.ErrorCode.INCORRECT_PASSWORD);
-    }
+    // if (checkStaff.password !== password) {
+    //   throw new BadRequestsException(
+    //     "Incorrect Password",
+    //     ErrorCode.INCORRECT_PASSWORD
+    //   );
+    // }
     const formattedStaff = yield (0, get_users_1.getFormatStaffAndSendToRedis)(checkStaff.id);
     (0, jwt_1.sendToken)(formattedStaff, 200, res);
 });

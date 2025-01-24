@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getrazorpayConfig = exports.deleteOutlet = exports.fetchInvoiceDetails = exports.updateInvoiceDetails = exports.createInvoiceDetails = exports.getIntegration = exports.patchOutletOnlinePOrtalDetails = exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.deleteNotificationById = exports.deleteAllNotifications = exports.getAllNotifications = exports.getByOutletId = exports.getStaffOutlet = void 0;
+exports.createOutletFromOutletHub = exports.getrazorpayConfig = exports.deleteOutlet = exports.fetchInvoiceDetails = exports.updateInvoiceDetails = exports.createInvoiceDetails = exports.getIntegration = exports.patchOutletOnlinePOrtalDetails = exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.deleteNotificationById = exports.deleteAllNotifications = exports.getAllNotifications = exports.getByOutletId = exports.getStaffOutlet = void 0;
 const outlet_1 = require("../../lib/outlet");
 const not_found_1 = require("../../exceptions/not-found");
 const root_1 = require("../../exceptions/root");
@@ -20,6 +20,7 @@ const staff_1 = require("../../schema/staff");
 const get_items_1 = require("../../lib/outlet/get-items");
 const unauthorized_1 = require("../../exceptions/unauthorized");
 const get_users_1 = require("../../lib/get-users");
+const zod_1 = require("zod");
 const getStaffOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     //@ts-ignore
@@ -392,3 +393,151 @@ const getrazorpayConfig = (req, res) => __awaiter(void 0, void 0, void 0, functi
     });
 });
 exports.getrazorpayConfig = getrazorpayConfig;
+const formSchema = zod_1.z.object({
+    name: zod_1.z.string().min(1, "Restaurant Legal Name is Required"),
+    outletType: zod_1.z.enum([
+        "RESTAURANT",
+        "HYBRIDKITCHEN",
+        "EXPRESS",
+        "BAKERY",
+        "CAFE",
+        "FOODTRUCK",
+        "NONE",
+    ]),
+    shortName: zod_1.z.string().min(1, "Restaurant Short Name is Required"),
+    address: zod_1.z.string().min(1, "Restaurant Address is Required"),
+    city: zod_1.z.string().min(1, "Restaurant City is Required"),
+    pincode: zod_1.z.string().min(1, "Restaurant Pincode is Required"),
+    gst: zod_1.z.string().optional(),
+    fssai: zod_1.z.string().optional(),
+    copy: zod_1.z.boolean(),
+});
+const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const validateFields = formSchema.safeParse(req.body);
+    if (!validateFields.success) {
+        throw new bad_request_1.BadRequestsException(validateFields.error.message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const { name, outletType, shortName, address, city, pincode, gst, fssai, copy, } = validateFields.data;
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        const createOutlet = yield tx.restaurant.create({
+            data: {
+                adminId: outlet.adminId,
+                restaurantName: name,
+                outletType: outletType,
+                name: shortName,
+                address,
+                city,
+                pincode,
+                GSTIN: gst,
+                fssai,
+            },
+        });
+        if (copy) {
+            const categories = yield tx.category.findMany({
+                where: { restaurantId: outlet.id },
+                include: {
+                    menuItems: {
+                        include: {
+                            menuItemVariants: true,
+                            menuGroupAddOns: {
+                                include: {
+                                    addOnGroups: {
+                                        include: {
+                                            addOnVariants: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+            for (const category of categories) {
+                const newCategory = yield tx.category.create({
+                    data: {
+                        name: category.name,
+                        description: category.description,
+                        restaurantId: createOutlet.id,
+                    },
+                });
+                // Copy menu items with variants and addons
+                for (const menuItem of category.menuItems) {
+                    const newMenuItem = yield tx.menuItem.create({
+                        data: {
+                            restaurantId: createOutlet.id,
+                            categoryId: newCategory.id,
+                            name: menuItem.name,
+                            description: menuItem.description,
+                            isVariants: menuItem.isVariants,
+                            isAddons: menuItem.isAddons,
+                            price: menuItem.price,
+                            type: menuItem.type,
+                            isDelivery: menuItem.isDelivery,
+                            isPickUp: menuItem.isPickUp,
+                            isDineIn: menuItem.isDineIn,
+                            isOnline: menuItem.isOnline,
+                        },
+                    });
+                    // Copy menu item variants
+                    if (menuItem.menuItemVariants.length > 0) {
+                        yield tx.menuItemVariant.createMany({
+                            data: menuItem.menuItemVariants.map((variant) => ({
+                                menuItemId: newMenuItem.id,
+                                restaurantId: createOutlet.id,
+                                variantId: variant.variantId,
+                                price: variant.price,
+                                foodType: variant.foodType,
+                            })),
+                        });
+                    }
+                    // Copy addons and their variants
+                    if (menuItem.menuGroupAddOns.length > 0) {
+                        for (const groupAddon of menuItem.menuGroupAddOns) {
+                            const newAddOnGroup = yield tx.addOns.create({
+                                data: {
+                                    restaurantId: createOutlet.id,
+                                    title: groupAddon.addOnGroups.title,
+                                    description: groupAddon.addOnGroups.description,
+                                    status: groupAddon.addOnGroups.status,
+                                    minSelect: groupAddon.addOnGroups.minSelect,
+                                    maxSelectString: groupAddon.addOnGroups.maxSelectString,
+                                },
+                            });
+                            // Create menu group addon relation
+                            yield tx.menuGroupAddOns.create({
+                                data: {
+                                    menuItemId: newMenuItem.id,
+                                    addOnGroupId: newAddOnGroup.id,
+                                    minSelect: groupAddon.minSelect,
+                                    maxSelectString: groupAddon.maxSelectString,
+                                },
+                            });
+                            // Copy addon variants
+                            if (groupAddon.addOnGroups.addOnVariants.length > 0) {
+                                yield tx.addOnVariants.createMany({
+                                    data: groupAddon.addOnGroups.addOnVariants.map((variant) => ({
+                                        addonId: newAddOnGroup.id,
+                                        restaurantId: createOutlet.id,
+                                        name: variant.name,
+                                        price: variant.price,
+                                        type: variant.type,
+                                    })),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }));
+    return res.json({
+        success: true,
+        message: "Outlet Added Successfully",
+    });
+});
+exports.createOutletFromOutletHub = createOutletFromOutletHub;
