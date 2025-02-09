@@ -125,6 +125,12 @@ const getFormatStaffAndSendToRedis = (staffId) => __awaiter(void 0, void 0, void
         },
         include: {
             restaurant: true,
+            payroll: true,
+            checkIns: {
+                orderBy: {
+                    createdAt: "desc",
+                },
+            },
         },
     });
     if (!(findStaff === null || findStaff === void 0 ? void 0 : findStaff.id)) {
@@ -144,7 +150,11 @@ const getFormatStaffAndSendToRedis = (staffId) => __awaiter(void 0, void 0, void
         },
         include: {
             restaurant: true,
-            billings: true,
+            billings: {
+                orderBy: {
+                    createdAt: "desc",
+                },
+            },
         },
     });
     if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
@@ -160,13 +170,16 @@ const getFormatStaffAndSendToRedis = (staffId) => __awaiter(void 0, void 0, void
         email: findStaff === null || findStaff === void 0 ? void 0 : findStaff.email,
         emailVerified: findStaff === null || findStaff === void 0 ? void 0 : findStaff.emailVerified,
         phoneNo: findStaff === null || findStaff === void 0 ? void 0 : findStaff.phoneNo,
-        // image: findStaff?.image,
+        image: findStaff === null || findStaff === void 0 ? void 0 : findStaff.image,
         role: findStaff === null || findStaff === void 0 ? void 0 : findStaff.role,
         // onboardingStatus: findStaff?.onboardingStatus,
         isSubscribed: renewalDay > 0 ? true : false,
         // isTwoFA: findStaff?.isTwoFactorEnabled,
         toRenewal: renewalDay,
+        expiryDate: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.validDate,
         plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
+        checkIns: findStaff === null || findStaff === void 0 ? void 0 : findStaff.checkIns[0],
+        payroll: findStaff === null || findStaff === void 0 ? void 0 : findStaff.payroll,
         restaurant: {
             id: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id,
             name: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.name,
@@ -184,9 +197,9 @@ const getFormatStaffAndSendToRedis = (staffId) => __awaiter(void 0, void 0, void
 });
 exports.getFormatStaffAndSendToRedis = getFormatStaffAndSendToRedis;
 const getCustomerById = (id, outletId) => __awaiter(void 0, void 0, void 0, function* () {
-    const customer = yield __1.prismaDB.customer.findFirst({
+    const customer = yield __1.prismaDB.customerRestaurantAccess.findFirst({
         where: {
-            id: id,
+            customerId: id,
             restaurantId: outletId,
         },
         include: {

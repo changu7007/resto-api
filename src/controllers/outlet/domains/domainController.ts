@@ -166,3 +166,43 @@ export const deleteSite = async (req: Request, res: Response) => {
     message: "Domain Settings Deleted Success",
   });
 };
+
+export const checkDomain = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { subdomain } = req.query as { subdomain: string };
+
+  if (subdomain === undefined || subdomain === "") {
+    return res.json({ success: false, message: "Subdomain is required" });
+  }
+
+  if (subdomain.match(/[^a-zA-Z0-9-]/)) {
+    return res.json({
+      success: false,
+      message: "Subdomain cannot contain spaces, dashes, or underscores",
+    });
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const site = await prismaDB.site.findFirst({
+    where: {
+      subdomain: subdomain,
+    },
+  });
+
+  if (site?.id) {
+    return res.json({
+      success: false,
+      message: "This subdomain is already taken",
+    });
+  }
+
+  return res.json({
+    success: true,
+    message: "Domain is available",
+  });
+};

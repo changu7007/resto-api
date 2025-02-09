@@ -3,7 +3,10 @@ import { Router } from "express";
 import { errorHandler } from "../error-handler";
 import { isAuthMiddelware } from "../middlewares/auth";
 import {
+  getLatestRecordByStaffId,
   GetStaff,
+  staffCheckIn,
+  staffCheckOut,
   StaffLogin,
   StaffLogout,
   StaffUpdateAccessToken,
@@ -54,11 +57,26 @@ authRoute.post("/register-app-user", errorHandler(registerOwner));
 authRoute.post("/app-logout", isAuthMiddelware, errorHandler(AppLogout));
 authRoute.get("/app-user", isAuthMiddelware, errorHandler(OwnerUser));
 authRoute.get("/app-refresh-token", errorHandler(AppUpdateAccessToken));
+
+//staff
+authRoute.get(
+  "/staff-user/:id/latest",
+  isAuthMiddelware,
+  errorHandler(getLatestRecordByStaffId)
+);
+authRoute.post("/staff-check-in", isAuthMiddelware, errorHandler(staffCheckIn));
+authRoute.post(
+  "/staff-check-out",
+  isAuthMiddelware,
+  errorHandler(staffCheckOut)
+);
+
 authRoute.post("/staff-login", errorHandler(StaffLogin));
 authRoute.post("/staff-logout", isAuthMiddelware, errorHandler(StaffLogout));
 authRoute.get("/staff-user", isAuthMiddelware, errorHandler(GetStaff));
 authRoute.get("/staff-refresh-token", errorHandler(StaffUpdateAccessToken));
 authRoute.post("/social-auth", errorHandler(socialAuthLogin));
+
 authRoute.get("/outlet/:userId", isAuthMiddelware, errorHandler(getMainOutlet));
 
 authRoute.get("/get-user/:id", errorHandler(getUserById));

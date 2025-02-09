@@ -5,6 +5,7 @@ import { prismaDB } from "../../..";
 import { ErrorCode } from "../../../exceptions/root";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
+import { generateSlug } from "../../../lib/utils";
 
 export const getAddon = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -65,10 +66,12 @@ export const createAddOn = async (req: Request, res: Response) => {
   await prismaDB.addOns.create({
     data: {
       title,
+      slug: generateSlug(title),
       description,
       addOnVariants: {
         create: addOnVariants.map((addOn: any) => ({
           name: addOn.name,
+          slug: generateSlug(addOn.name),
           price: addOn.price,
           type: addOn.type,
         })),
@@ -176,6 +179,7 @@ export const updateAddon = async (req: Request, res: Response) => {
         data: {
           restaurantId: outlet?.id,
           name: variant.name,
+          slug: generateSlug(variant.name),
           price: variant.price,
           type: variant.type,
           addonId: addOn.id,

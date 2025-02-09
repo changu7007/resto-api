@@ -10,16 +10,28 @@ export const userSchema = z.object({
   password: z.string(),
 });
 
+const timeSchema = z.object({
+  time: z
+    .string()
+    .min(1, "Time is required")
+    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format"),
+});
+
 export const outletOnlinePortalSchema = z.object({
   subdomain: z.string().min(1, "SubDomain is Required"),
-  openTime: z.string().min(1, "Open Time is Required"),
-  closeTime: z.string().min(1, "Close Time is Required"),
+  openTime: timeSchema, // Changed from nested timings
+  closeTime: timeSchema, // Changed from nested timings
   areaLat: z.string().min(1, "Area Latitude is required"),
   areaLong: z.string().min(1, "Area Longitude is required"),
   orderRadius: z.number().min(1, "Order Radius in KM for Customer is Required"),
   isDelivery: z.boolean().optional(),
   isPickUp: z.boolean().optional(),
   isDineIn: z.boolean().optional(),
+});
+
+export const operatingHoursSchema = z.object({
+  openTime: timeSchema, // Changed from nested timings
+  closeTime: timeSchema, // Changed from nested timings
 });
 
 export const rawMaterialSchema = z.object({

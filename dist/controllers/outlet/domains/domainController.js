@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSite = exports.createSubDomain = exports.getPrimeDomain = exports.getDomain = void 0;
+exports.checkDomain = exports.deleteSite = exports.createSubDomain = exports.getPrimeDomain = exports.getDomain = void 0;
 const __1 = require("../../..");
 const outlet_1 = require("../../../lib/outlet");
 const redis_1 = require("../../../services/redis");
@@ -142,3 +142,36 @@ const deleteSite = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     });
 });
 exports.deleteSite = deleteSite;
+const checkDomain = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const { subdomain } = req.query;
+    if (subdomain === undefined || subdomain === "") {
+        return res.json({ success: false, message: "Subdomain is required" });
+    }
+    if (subdomain.match(/[^a-zA-Z0-9-]/)) {
+        return res.json({
+            success: false,
+            message: "Subdomain cannot contain spaces, dashes, or underscores",
+        });
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (outlet === undefined || !outlet.id) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const site = yield __1.prismaDB.site.findFirst({
+        where: {
+            subdomain: subdomain,
+        },
+    });
+    if (site === null || site === void 0 ? void 0 : site.id) {
+        return res.json({
+            success: false,
+            message: "This subdomain is already taken",
+        });
+    }
+    return res.json({
+        success: true,
+        message: "Domain is available",
+    });
+});
+exports.checkDomain = checkDomain;

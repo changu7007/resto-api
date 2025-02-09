@@ -9,6 +9,11 @@ import {
   getOutletCustomerAndFetchToRedis,
 } from "../../../lib/outlet";
 import { getCustomerById } from "../../../lib/get-users";
+import { ACCESS_TOKEN } from "../../../secrets";
+import { REFRESH_TOKEN } from "../../../secrets";
+import * as jwt from "jsonwebtoken";
+import { redis } from "../../../services/redis";
+import { WhatsAppService } from "../../../services/whatsapp";
 
 export interface Customer {
   id: string;
@@ -19,6 +24,13 @@ export interface Customer {
   role: "CUSTOMER";
   restaurantId: string;
 }
+
+const whatsappService = new WhatsAppService({
+  accessToken: process.env.META_ACCESS_TOKEN!,
+  phoneNumberId: process.env.META_PHONE_NUMBER_ID!,
+  businessAccountId: process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID!,
+  version: "v21.0",
+});
 
 export const otpCheck = async (req: Request, res: Response) => {
   const { mobile } = req.body;
@@ -53,6 +65,14 @@ export const updateOtp = async (req: Request, res: Response) => {
       where: { mobile: mobile.toString() },
       data: { otp: newOtp, expires: newExpiry },
     });
+
+    // await whatsappService.sendAuthenticationOTP({
+    //   phoneNumber: mobile.toString(),
+    //   otp: newOtp,
+    //   expiryMinutes: 5,
+    //   businessName: "Your Restaurant",
+    // });
+
     return res.json({ success: true, otp: update.otp });
   } else {
     const createdOTP = await prismaDB.otp.create({
@@ -62,6 +82,12 @@ export const updateOtp = async (req: Request, res: Response) => {
         expires: newExpiry,
       }, // expires in 5 minutes
     });
+    // await whatsappService.sendAuthenticationOTP({
+    //   phoneNumber: mobile.toString(),
+    //   otp: newOtp,
+    //   expiryMinutes: 5,
+    //   businessName: "Your Restaurant",
+    // });
     return res.json({ success: true, otp: createdOTP.otp });
   }
 };
@@ -73,19 +99,21 @@ export function generateOtp() {
 export const CustomerLogin = async (req: Request, res: Response) => {
   const { phoneNo, name, restaurantId } = req.body;
 
-  const customer = await prismaDB.customer.findFirst({
+  const findCustomer = await prismaDB.customer.findFirst({
     where: {
       phoneNo: phoneNo,
-      restaurantId: restaurantId,
+      restaurantAccess: {
+        some: {
+          restaurantId: restaurantId,
+        },
+      },
     },
   });
 
-  if (customer) {
+  if (findCustomer?.id) {
     const updateCustomer = await prismaDB.customer.update({
       where: {
-        id: customer.id,
-        phoneNo: phoneNo,
-        restaurantId: restaurantId,
+        id: findCustomer.id,
       },
       data: {
         name: name,
@@ -99,7 +127,7 @@ export const CustomerLogin = async (req: Request, res: Response) => {
       phoneNo: updateCustomer?.phoneNo,
       image: updateCustomer?.image,
       role: updateCustomer?.role,
-      restaurantId: updateCustomer.restaurantId,
+      restaurantId: restaurantId,
     };
     await getOutletCustomerAndFetchToRedis(restaurantId);
     sendToken(customerData as Customer, 200, res);
@@ -108,7 +136,11 @@ export const CustomerLogin = async (req: Request, res: Response) => {
       data: {
         name,
         phoneNo,
-        restaurantId,
+        restaurantAccess: {
+          create: {
+            restaurantId: restaurantId,
+          },
+        },
       },
     });
 
@@ -119,7 +151,7 @@ export const CustomerLogin = async (req: Request, res: Response) => {
       phoneNo: createCustomer?.phoneNo,
       image: createCustomer?.image,
       role: createCustomer?.role,
-      restaurantId: createCustomer.restaurantId,
+      restaurantId: restaurantId,
     };
     await getOutletCustomerAndFetchToRedis(restaurantId);
     sendToken(customerData as Customer, 200, res);
@@ -145,9 +177,9 @@ export const customerUpdateSession = async (req: Request, res: Response) => {
     throw new BadRequestsException("UserType Required", ErrorCode.NOT_FOUND);
   }
 
-  const getCustomer = await prismaDB.customer.findUnique({
+  const getCustomer = await prismaDB.customerRestaurantAccess.findFirst({
     where: {
-      id: customerId,
+      customerId: customerId,
       restaurantId: outletId,
     },
   });
@@ -156,9 +188,10 @@ export const customerUpdateSession = async (req: Request, res: Response) => {
     throw new NotFoundException("No User Found", ErrorCode.NOT_FOUND);
   }
 
-  const updateCustomerDetails = await prismaDB.customer.updateMany({
+  await prismaDB.customerRestaurantAccess.update({
     where: {
       id: getCustomer.id,
+      customerId: getCustomer.customerId,
       restaurantId: outletId,
     },
     data: {
@@ -178,8 +211,6 @@ export const customerUpdateSession = async (req: Request, res: Response) => {
       },
     });
   }
-
-  await getOutletCustomerAndFetchToRedis(outletId);
 
   return res.json({
     success: true,
@@ -266,6 +297,7 @@ export const getCurrentOrderForCustomer = async (
         id: order?.generatedOrderId,
         orderStatus: order?.orderStatus,
         totalAmount: order?.totalAmount,
+        createdAt: order?.createdAt,
         orderItems: order?.orderItems.map((item) => ({
           id: item?.id,
           name: item?.name,
@@ -279,5 +311,44 @@ export const getCurrentOrderForCustomer = async (
   return res.json({
     success: true,
     orders: formattedOrder,
+  });
+};
+
+export const CustomerUpdateAccessToken = async (
+  req: Request,
+  res: Response
+) => {
+  const authHeader = req.headers.authorization as string;
+  const refresh_token = authHeader && authHeader.split(" ")[1];
+  const payload = jwt.verify(refresh_token, REFRESH_TOKEN) as jwt.JwtPayload;
+  if (!payload) {
+    throw new NotFoundException(
+      "Could Not refresh token",
+      ErrorCode.TOKENS_NOT_VALID
+    );
+  }
+
+  const session = await redis.get(payload.id);
+
+  if (!session) {
+    throw new NotFoundException("User Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const user = JSON.parse(session);
+
+  const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+    expiresIn: "5m",
+  });
+
+  const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+    expiresIn: "7d",
+  });
+
+  res.status(200).json({
+    success: true,
+    tokens: {
+      accessToken,
+      refreshToken,
+    },
   });
 };

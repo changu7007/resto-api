@@ -34,7 +34,7 @@ class WebSocketManager {
             });
         });
     }
-    notifyClients(restaurantId, message) {
+    notifyClients(restaurantId, message, data) {
         if (!this.wss) {
             console.error("WebSocket server not initialized");
             return;
@@ -42,7 +42,13 @@ class WebSocketManager {
         this.clients.forEach((clientData) => {
             if (clientData.restaurantId === restaurantId &&
                 clientData.ws.readyState === ws_1.default.OPEN) {
-                clientData.ws.send(message);
+                console.log(`Data from server ${data}`, `Message ${message}`);
+                if (data) {
+                    clientData.ws.send(JSON.stringify({ message, data }));
+                }
+                else {
+                    clientData.ws.send(message);
+                }
             }
         });
     }

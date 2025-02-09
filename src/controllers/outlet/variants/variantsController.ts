@@ -4,6 +4,7 @@ import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { BadRequestsException } from "../../../exceptions/bad-request";
+import { generateSlug } from "../../../lib/utils";
 
 export const getVariants = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -54,6 +55,7 @@ export const createVariant = async (req: Request, res: Response) => {
   await prismaDB.variants.create({
     data: {
       name,
+      slug: generateSlug(name),
       variantCategory,
       restaurantId: outlet.id,
     },

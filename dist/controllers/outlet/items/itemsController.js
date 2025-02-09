@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = void 0;
+exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = exports.getItemsBySearchForOnlineAndDelivery = exports.getItemsByCategoryForOnlineAndDelivery = exports.getItemsForOnlineAndDelivery = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -21,8 +21,173 @@ const get_items_1 = require("../../../lib/outlet/get-items");
 const zod_1 = require("zod");
 const get_users_1 = require("../../../lib/get-users");
 const date_fns_1 = require("date-fns");
+const algorithms_1 = require("../../../lib/algorithms");
+const utils_1 = require("../../../lib/utils");
+const getItemsForOnlineAndDelivery = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const allItems = yield redis_1.redis.get(`${outletId}-all-items-online-and-delivery`);
+    if (allItems) {
+        return res.json({
+            success: true,
+            items: JSON.parse(allItems),
+            message: "Fetched Items By Redis ✅",
+        });
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const items = yield (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId);
+    return res.json({
+        success: true,
+        items: items,
+    });
+});
+exports.getItemsForOnlineAndDelivery = getItemsForOnlineAndDelivery;
+const getItemsByCategoryForOnlineAndDelivery = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const categoryId = req.query.categoryId;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const redisItems = yield redis_1.redis.get(`${outletId}-all-items-online-and-delivery`);
+    if (redisItems) {
+        const items = JSON.parse(redisItems);
+        let sendItems = [];
+        if (categoryId) {
+            if (categoryId === "all") {
+                sendItems = items;
+            }
+            else if (categoryId === "mostloved") {
+                // get most loved items for online and delivery where more than 100 orders
+                const getItems = yield __1.prismaDB.orderItem.findMany({
+                    where: {
+                        menuId: { in: items.map((item) => item.id) },
+                    },
+                });
+                sendItems = items.filter((item) => getItems.filter((i) => i.menuId === item.id).length > 40);
+            }
+            else {
+                sendItems = items.filter((item) => item.categoryId === categoryId);
+            }
+        }
+        return res.json({
+            success: true,
+            data: sendItems,
+        });
+    }
+    else {
+        const items = yield (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId);
+        let sendItems = [];
+        if (categoryId) {
+            if (categoryId === "all") {
+                sendItems = items;
+            }
+            else if (categoryId === "mostloved") {
+                // get most loved items for online and delivery where more than 100 orders
+                const getItems = yield __1.prismaDB.orderItem.findMany({
+                    where: {
+                        menuId: { in: items.map((item) => item.id) },
+                    },
+                });
+                sendItems = items.filter((item) => getItems.filter((i) => i.menuId === item.id).length > 40);
+            }
+            else {
+                sendItems = items.filter((item) => item.categoryId === categoryId);
+            }
+        }
+        return res.json({
+            success: true,
+            data: sendItems,
+        });
+    }
+});
+exports.getItemsByCategoryForOnlineAndDelivery = getItemsByCategoryForOnlineAndDelivery;
+const getItemsBySearchForOnlineAndDelivery = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const search = req.query.search;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const redisItems = yield redis_1.redis.get(`${outletId}-all-items-online-and-delivery`);
+    if (redisItems) {
+        const items = JSON.parse(redisItems);
+        let sendItems = [];
+        if (search) {
+            sendItems = items.filter((item) => {
+                var _a;
+                return (
+                // Fuzzy search on name
+                (0, algorithms_1.fuzzySearch)(item.name, search) ||
+                    // Fuzzy search on shortCode
+                    (item.shortCode && (0, algorithms_1.fuzzySearch)(item.shortCode, search)) ||
+                    // Fuzzy search on description
+                    (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
+                    // Search in category name
+                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    // Match price range (if search term is a number)
+                    (!isNaN(Number(search)) &&
+                        Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
+                );
+            });
+        }
+        // Sort results by relevance
+        sendItems.sort((a, b) => {
+            const aScore = (0, algorithms_1.fuzzySearch)(a.name, search)
+                ? 2
+                : a.shortCode && (0, algorithms_1.fuzzySearch)(a.shortCode, search)
+                    ? 1.5
+                    : 1;
+            const bScore = (0, algorithms_1.fuzzySearch)(b.name, search)
+                ? 2
+                : b.shortCode && (0, algorithms_1.fuzzySearch)(b.shortCode, search)
+                    ? 1.5
+                    : 1;
+            return bScore - aScore;
+        });
+        return res.json({
+            success: true,
+            data: sendItems,
+        });
+    }
+    else {
+        const items = yield (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId);
+        let sendItems = [];
+        if (search) {
+            sendItems = items.filter((item) => {
+                var _a;
+                return ((0, algorithms_1.fuzzySearch)(item.name, search) ||
+                    (item.shortCode && (0, algorithms_1.fuzzySearch)(item.shortCode, search)) ||
+                    (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
+                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    (!isNaN(Number(search)) &&
+                        Math.abs(Number(item.price) - Number(search)) <= 50));
+            });
+            // Sort results by relevance
+            sendItems.sort((a, b) => {
+                const aScore = (0, algorithms_1.fuzzySearch)(a.name, search)
+                    ? 2
+                    : a.shortCode && (0, algorithms_1.fuzzySearch)(a.shortCode, search)
+                        ? 1.5
+                        : 1;
+                const bScore = (0, algorithms_1.fuzzySearch)(b.name, search)
+                    ? 2
+                    : b.shortCode && (0, algorithms_1.fuzzySearch)(b.shortCode, search)
+                        ? 1.5
+                        : 1;
+                return bScore - aScore;
+            });
+        }
+        return res.json({
+            success: true,
+            data: sendItems,
+        });
+    }
+});
+exports.getItemsBySearchForOnlineAndDelivery = getItemsBySearchForOnlineAndDelivery;
 const getItemsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     const { outletId } = req.params;
     const categoryId = req.query.categoryId;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -49,63 +214,38 @@ const getItemsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 sendItems = items.filter((item) => item.categoryId === categoryId);
             }
         }
-        const formattedItems = (_a = sendItems === null || sendItems === void 0 ? void 0 : sendItems.filter((i) => i.isDineIn === true)) === null || _a === void 0 ? void 0 : _a.map((menuItem) => {
-            var _a, _b, _c, _d;
-            return ({
-                id: menuItem.id,
-                shortCode: menuItem.shortCode,
-                categoryId: menuItem.categoryId,
-                categoryName: menuItem.category.name,
-                name: menuItem.name,
-                images: menuItem.images.map((image) => ({
-                    id: image.id,
-                    url: image.url,
-                })),
-                type: menuItem.type,
-                price: menuItem.price,
-                netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
-                itemRecipe: {
-                    id: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _a === void 0 ? void 0 : _a.id,
-                    menuId: (_b = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _b === void 0 ? void 0 : _b.menuId,
-                    menuVariantId: (_c = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _c === void 0 ? void 0 : _c.menuVariantId,
-                    addonItemVariantId: (_d = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _d === void 0 ? void 0 : _d.addonItemVariantId,
-                },
-                gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
-                grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
-                isVariants: menuItem.isVariants,
-                isAddOns: menuItem.isAddons,
-                menuItemVariants: menuItem.menuItemVariants.map((variant) => ({
-                    id: variant.id,
-                    variantName: variant.variant.name,
-                    price: variant.price,
-                    netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
-                    gst: variant === null || variant === void 0 ? void 0 : variant.gst,
-                    grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
-                    type: variant.foodType,
-                })),
-                favourite: true,
-                menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns) => ({
-                    id: addOns.id,
-                    addOnGroupName: addOns.addOnGroups.title,
-                    description: addOns.addOnGroups.description,
-                    addonVariants: addOns.addOnGroups.addOnVariants.map((addOnVariant) => ({
-                        id: addOnVariant.id,
-                        name: addOnVariant.name,
-                        price: addOnVariant.price,
-                        type: addOnVariant.type,
-                    })),
-                })),
-            });
-        });
         return res.json({
             success: true,
-            data: formattedItems,
+            data: sendItems,
+        });
+    }
+    else {
+        const items = yield (0, get_items_1.getOAllItems)(outletId);
+        let sendItems = [];
+        if (categoryId) {
+            if (categoryId === "all") {
+                sendItems = items;
+            }
+            else if (categoryId === "favourites") {
+                const users = yield __1.prismaDB.user.findFirst({
+                    where: {
+                        id: outlet === null || outlet === void 0 ? void 0 : outlet.adminId,
+                    },
+                });
+                sendItems = items.filter((item) => { var _a; return (_a = users === null || users === void 0 ? void 0 : users.favItems) === null || _a === void 0 ? void 0 : _a.includes(item.id); });
+            }
+            else {
+                sendItems = items.filter((item) => item.categoryId === categoryId);
+            }
+        }
+        return res.json({
+            success: true,
+            data: sendItems,
         });
     }
 });
 exports.getItemsByCategory = getItemsByCategory;
 const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b;
     const { outletId } = req.params;
     const search = req.query.search;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -118,63 +258,72 @@ const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, functio
         let sendItems = [];
         if (search) {
             sendItems = items.filter((item) => {
-                var _a, _b;
-                return (item.name.toLowerCase().includes(search.toLowerCase()) ||
-                    ((_a = item.shortCode) === null || _a === void 0 ? void 0 : _a.toLowerCase().includes(search.toLowerCase())) ||
-                    ((_b = item.description) === null || _b === void 0 ? void 0 : _b.toLowerCase().includes(search.toLowerCase())));
+                var _a;
+                return (
+                // Fuzzy search on name
+                (0, algorithms_1.fuzzySearch)(item.name, search) ||
+                    // Fuzzy search on shortCode
+                    (item.shortCode && (0, algorithms_1.fuzzySearch)(item.shortCode, search)) ||
+                    // Fuzzy search on description
+                    (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
+                    // Search in category name
+                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    // Match price range (if search term is a number)
+                    (!isNaN(Number(search)) &&
+                        Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
+                );
             });
         }
-        const formattedItems = (_b = sendItems === null || sendItems === void 0 ? void 0 : sendItems.filter((i) => i.isDineIn === true)) === null || _b === void 0 ? void 0 : _b.map((menuItem) => {
-            var _a, _b, _c, _d;
-            return ({
-                id: menuItem.id,
-                shortCode: menuItem.shortCode,
-                categoryId: menuItem.categoryId,
-                categoryName: menuItem.category.name,
-                name: menuItem.name,
-                images: menuItem.images.map((image) => ({
-                    id: image.id,
-                    url: image.url,
-                })),
-                type: menuItem.type,
-                price: menuItem.price,
-                netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
-                itemRecipe: {
-                    id: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _a === void 0 ? void 0 : _a.id,
-                    menuId: (_b = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _b === void 0 ? void 0 : _b.menuId,
-                    menuVariantId: (_c = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _c === void 0 ? void 0 : _c.menuVariantId,
-                    addonItemVariantId: (_d = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _d === void 0 ? void 0 : _d.addonItemVariantId,
-                },
-                gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
-                grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
-                isVariants: menuItem.isVariants,
-                isAddOns: menuItem.isAddons,
-                menuItemVariants: menuItem.menuItemVariants.map((variant) => ({
-                    id: variant.id,
-                    variantName: variant.variant.name,
-                    price: variant.price,
-                    netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
-                    gst: variant === null || variant === void 0 ? void 0 : variant.gst,
-                    grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
-                    type: variant.foodType,
-                })),
-                favourite: true,
-                menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns) => ({
-                    id: addOns.id,
-                    addOnGroupName: addOns.addOnGroups.title,
-                    description: addOns.addOnGroups.description,
-                    addonVariants: addOns.addOnGroups.addOnVariants.map((addOnVariant) => ({
-                        id: addOnVariant.id,
-                        name: addOnVariant.name,
-                        price: addOnVariant.price,
-                        type: addOnVariant.type,
-                    })),
-                })),
-            });
+        // Sort results by relevance
+        sendItems.sort((a, b) => {
+            const aScore = (0, algorithms_1.fuzzySearch)(a.name, search)
+                ? 2
+                : a.shortCode && (0, algorithms_1.fuzzySearch)(a.shortCode, search)
+                    ? 1.5
+                    : 1;
+            const bScore = (0, algorithms_1.fuzzySearch)(b.name, search)
+                ? 2
+                : b.shortCode && (0, algorithms_1.fuzzySearch)(b.shortCode, search)
+                    ? 1.5
+                    : 1;
+            return bScore - aScore;
         });
         return res.json({
             success: true,
-            data: formattedItems,
+            data: sendItems,
+        });
+    }
+    else {
+        const items = yield (0, get_items_1.getOAllItems)(outletId);
+        let sendItems = [];
+        if (search) {
+            sendItems = items.filter((item) => {
+                var _a;
+                return ((0, algorithms_1.fuzzySearch)(item.name, search) ||
+                    (item.shortCode && (0, algorithms_1.fuzzySearch)(item.shortCode, search)) ||
+                    (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
+                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    (!isNaN(Number(search)) &&
+                        Math.abs(Number(item.price) - Number(search)) <= 50));
+            });
+            // Sort results by relevance
+            sendItems.sort((a, b) => {
+                const aScore = (0, algorithms_1.fuzzySearch)(a.name, search)
+                    ? 2
+                    : a.shortCode && (0, algorithms_1.fuzzySearch)(a.shortCode, search)
+                        ? 1.5
+                        : 1;
+                const bScore = (0, algorithms_1.fuzzySearch)(b.name, search)
+                    ? 2
+                    : b.shortCode && (0, algorithms_1.fuzzySearch)(b.shortCode, search)
+                        ? 1.5
+                        : 1;
+                return bScore - aScore;
+            });
+        }
+        return res.json({
+            success: true,
+            data: sendItems,
         });
     }
 });
@@ -209,7 +358,12 @@ const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function
     const totalCount = yield __1.prismaDB.menuItem.count({
         where: {
             restaurantId: outletId,
-            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { shortCode: { contains: search, mode: "insensitive" } },
+                { description: { contains: search, mode: "insensitive" } },
+                { category: { name: { contains: search, mode: "insensitive" } } },
+            ],
             AND: filterConditions,
         },
     });
@@ -218,7 +372,12 @@ const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function
         take,
         where: {
             restaurantId: outletId,
-            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { shortCode: { contains: search, mode: "insensitive" } },
+                { description: { contains: search, mode: "insensitive" } },
+                { category: { name: { contains: search, mode: "insensitive" } } },
+            ],
             AND: filterConditions,
         },
         include: {
@@ -248,17 +407,19 @@ const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function
         },
         orderBy,
     });
+    console.log(`Get Items: ${getItems.length}`);
     const formattedMenuItems = getItems === null || getItems === void 0 ? void 0 : getItems.map((item) => {
-        var _a, _b;
+        var _a, _b, _c;
         return ({
             id: item === null || item === void 0 ? void 0 : item.id,
             name: item === null || item === void 0 ? void 0 : item.name,
             shortCode: item === null || item === void 0 ? void 0 : item.shortCode,
             category: (_a = item === null || item === void 0 ? void 0 : item.category) === null || _a === void 0 ? void 0 : _a.name,
+            categoryId: (_b = item === null || item === void 0 ? void 0 : item.category) === null || _b === void 0 ? void 0 : _b.id,
             isPos: item === null || item === void 0 ? void 0 : item.isDineIn,
             isOnline: item === null || item === void 0 ? void 0 : item.isOnline,
             isVariants: item === null || item === void 0 ? void 0 : item.isVariants,
-            variants: (_b = item === null || item === void 0 ? void 0 : item.menuItemVariants) === null || _b === void 0 ? void 0 : _b.map((variant) => {
+            variants: (_c = item === null || item === void 0 ? void 0 : item.menuItemVariants) === null || _c === void 0 ? void 0 : _c.map((variant) => {
                 var _a;
                 return ({
                     name: (_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.name,
@@ -598,7 +759,7 @@ const menuSchema = zod_1.z.object({
     isOnline: zod_1.z.boolean().optional(),
 });
 const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _c;
+    var _a;
     const { itemId, outletId } = req.params;
     const validateFields = menuSchema.parse(req.body);
     const validFoodTypes = Object.values(client_1.FoodRole);
@@ -717,7 +878,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
         : [];
     const addonsToDelete = menuItem.menuGroupAddOns.filter((ea) => !addonIdsToKeep.includes(ea.id));
     // Prepare updates for images
-    const imageUpdates = (_c = validateFields === null || validateFields === void 0 ? void 0 : validateFields.images) === null || _c === void 0 ? void 0 : _c.map((image) => {
+    const imageUpdates = (_a = validateFields === null || validateFields === void 0 ? void 0 : validateFields.images) === null || _a === void 0 ? void 0 : _a.map((image) => {
         const existingImage = menuItem.images.find((ei) => ei.url === (image === null || image === void 0 ? void 0 : image.url));
         if (existingImage) {
             return __1.prismaDB.image.update({
@@ -795,7 +956,11 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
             });
         }
     }));
-    yield (0, get_items_1.getOAllItems)(outlet.id);
+    yield Promise.all([
+        (0, get_items_1.getOAllItems)(outlet.id),
+        (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id),
+        (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId),
+    ]);
     return res.json({
         success: true,
         message: "Update Success ✅",
@@ -850,6 +1015,7 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const menuItem = yield __1.prismaDB.menuItem.create({
         data: {
             name: validateFields === null || validateFields === void 0 ? void 0 : validateFields.name,
+            slug: (0, utils_1.generateSlug)(validateFields === null || validateFields === void 0 ? void 0 : validateFields.name),
             shortCode: validateFields === null || validateFields === void 0 ? void 0 : validateFields.shortCode,
             description: validateFields === null || validateFields === void 0 ? void 0 : validateFields.description,
             categoryId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.categoryId,
@@ -907,6 +1073,8 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         },
     });
     yield (0, get_items_1.getOAllItems)(outlet.id);
+    yield (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id);
+    yield (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId);
     return res.json({
         success: true,
         item: menuItem,
@@ -931,6 +1099,8 @@ const deleteItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         },
     });
     yield (0, get_items_1.getOAllItems)(outlet.id);
+    yield (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id);
+    yield (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId);
     return res.json({
         success: true,
         message: "Item Deleted ",
@@ -989,11 +1159,11 @@ const getMenuVariants = (req, res) => __awaiter(void 0, void 0, void 0, function
 });
 exports.getMenuVariants = getMenuVariants;
 const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _d;
+    var _b;
     const { id } = req.body;
     const { outletId } = req.params;
     // @ts-ignore
-    const userId = (_d = req === null || req === void 0 ? void 0 : req.user) === null || _d === void 0 ? void 0 : _d.id;
+    const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);

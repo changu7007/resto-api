@@ -21,11 +21,7 @@ export const getFetchAllTablesToRedis = async (outletId: string) => {
     },
   });
 
-  if (tables?.length > 0) {
-    await redis.set(`tables-${outletId}`, JSON.stringify(tables));
-  } else {
-    await redis.del(`tables-${outletId}`);
-  }
+  await redis.set(`tables-${outletId}`, JSON.stringify(tables));
 
   return tables;
 };
@@ -123,11 +119,7 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
     })),
   }));
 
-  if (allAreas?.length > 0) {
-    await redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
-  } else {
-    await redis.del(`a-${outletId}`);
-  }
+  await redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
 
   return allAreas;
 };

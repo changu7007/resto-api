@@ -9,10 +9,20 @@ import {
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
-import { FoodRole, MenuItem, MenuItemVariant } from "@prisma/client";
+import {
+  Category,
+  FoodRole,
+  MenuItem,
+  MenuItemVariant,
+  Variants,
+} from "@prisma/client";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
-import { getOAllItems } from "../../../lib/outlet/get-items";
+import {
+  getOAllItems,
+  getOAllItemsForOnlineAndDelivery,
+  getOAllMenuCategoriesToRedis,
+} from "../../../lib/outlet/get-items";
 import { z } from "zod";
 import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
 import { format } from "date-fns";
@@ -21,8 +31,41 @@ import {
   ColumnSort,
   PaginationState,
 } from "../../../schema/staff";
+import { fuzzySearch } from "../../../lib/algorithms";
+import { generateSlug } from "../../../lib/utils";
 
-export const getItemsByCategory = async (req: Request, res: Response) => {
+export const getItemsForOnlineAndDelivery = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  const allItems = await redis.get(`${outletId}-all-items-online-and-delivery`);
+
+  if (allItems) {
+    return res.json({
+      success: true,
+      items: JSON.parse(allItems),
+      message: "Fetched Items By Redis ✅",
+    });
+  }
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const items = await getOAllItemsForOnlineAndDelivery(outletId);
+  return res.json({
+    success: true,
+    items: items,
+  });
+};
+
+export const getItemsByCategoryForOnlineAndDelivery = async (
+  req: Request,
+  res: Response
+) => {
   const { outletId } = req.params;
   const categoryId: string = req.query.categoryId as string;
 
@@ -32,7 +75,9 @@ export const getItemsByCategory = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const redisItems = await redis.get(`${outletId}-all-items`);
+  const redisItems = await redis.get(
+    `${outletId}-all-items-online-and-delivery`
+  );
 
   if (redisItems) {
     const items: MenuItem[] = JSON.parse(redisItems);
@@ -41,73 +86,219 @@ export const getItemsByCategory = async (req: Request, res: Response) => {
     if (categoryId) {
       if (categoryId === "all") {
         sendItems = items;
-      } else if (categoryId === "favourites") {
-        const users = await prismaDB.user.findFirst({
+      } else if (categoryId === "mostloved") {
+        // get most loved items for online and delivery where more than 100 orders
+        const getItems = await prismaDB.orderItem.findMany({
           where: {
-            id: outlet?.adminId,
+            menuId: { in: items.map((item) => item.id) },
           },
         });
-        sendItems = items.filter((item) => users?.favItems?.includes(item.id));
+        sendItems = items.filter(
+          (item) => getItems.filter((i) => i.menuId === item.id).length > 40
+        );
+      } else {
+        sendItems = items.filter((item) => item.categoryId === categoryId);
+      }
+    }
+    return res.json({
+      success: true,
+      data: sendItems,
+    });
+  } else {
+    const items = await getOAllItemsForOnlineAndDelivery(outletId);
+    let sendItems: MenuItem[] = [];
+    if (categoryId) {
+      if (categoryId === "all") {
+        sendItems = items;
+      } else if (categoryId === "mostloved") {
+        // get most loved items for online and delivery where more than 100 orders
+        const getItems = await prismaDB.orderItem.findMany({
+          where: {
+            menuId: { in: items.map((item) => item.id) },
+          },
+        });
+        sendItems = items.filter(
+          (item) => getItems.filter((i) => i.menuId === item.id).length > 40
+        );
       } else {
         sendItems = items.filter((item) => item.categoryId === categoryId);
       }
     }
 
-    const formattedItems = sendItems
-      ?.filter((i: any) => i.isDineIn === true)
-      ?.map((menuItem: any) => ({
-        id: menuItem.id,
-        shortCode: menuItem.shortCode,
-        categoryId: menuItem.categoryId,
-        categoryName: menuItem.category.name,
-        name: menuItem.name,
-        images: menuItem.images.map((image: any) => ({
-          id: image.id,
-          url: image.url,
-        })),
-        type: menuItem.type,
-        price: menuItem.price,
-        netPrice: menuItem?.netPrice,
-        itemRecipe: {
-          id: menuItem?.itemRecipe?.id,
-          menuId: menuItem?.itemRecipe?.menuId,
-          menuVariantId: menuItem?.itemRecipe?.menuVariantId,
-          addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId,
-        },
-        gst: menuItem?.gst,
-        grossProfit: menuItem?.grossProfit,
-        isVariants: menuItem.isVariants,
-        isAddOns: menuItem.isAddons,
-        menuItemVariants: menuItem.menuItemVariants.map((variant: any) => ({
-          id: variant.id,
-          variantName: variant.variant.name,
-          price: variant.price,
-          netPrice: variant?.netPrice,
-          gst: variant?.gst,
-          grossProfit: variant?.grossProfit,
-          type: variant.foodType,
-        })),
-        favourite: true,
-        menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns: any) => ({
-          id: addOns.id,
-          addOnGroupName: addOns.addOnGroups.title,
-          description: addOns.addOnGroups.description,
-          addonVariants: addOns.addOnGroups.addOnVariants.map(
-            (addOnVariant: any) => ({
-              id: addOnVariant.id,
-              name: addOnVariant.name,
-              price: addOnVariant.price,
-              type: addOnVariant.type,
-            })
-          ),
-        })),
-      }));
+    return res.json({
+      success: true,
+      data: sendItems,
+    });
+  }
+};
+
+export const getItemsBySearchForOnlineAndDelivery = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+  const search: string = req.query.search as string;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const redisItems = await redis.get(
+    `${outletId}-all-items-online-and-delivery`
+  );
+
+  if (redisItems) {
+    const items: (MenuItem & { category: Category })[] = JSON.parse(redisItems);
+    let sendItems: (MenuItem & { category: Category })[] = [];
+
+    if (search) {
+      sendItems = items.filter((item) => {
+        return (
+          // Fuzzy search on name
+          fuzzySearch(item.name, search) ||
+          // Fuzzy search on shortCode
+          (item.shortCode && fuzzySearch(item.shortCode, search)) ||
+          // Fuzzy search on description
+          (item.description && fuzzySearch(item.description, search)) ||
+          // Search in category name
+          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          // Match price range (if search term is a number)
+          (!isNaN(Number(search)) &&
+            Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
+        );
+      });
+    }
+
+    // Sort results by relevance
+    sendItems.sort((a, b) => {
+      const aScore = fuzzySearch(a.name, search)
+        ? 2
+        : a.shortCode && fuzzySearch(a.shortCode, search)
+        ? 1.5
+        : 1;
+      const bScore = fuzzySearch(b.name, search)
+        ? 2
+        : b.shortCode && fuzzySearch(b.shortCode, search)
+        ? 1.5
+        : 1;
+      return bScore - aScore;
+    });
 
     return res.json({
       success: true,
-      data: formattedItems,
+      data: sendItems,
+    });
+  } else {
+    const items = await getOAllItemsForOnlineAndDelivery(outletId);
+    let sendItems: MenuItem[] = [];
+
+    if (search) {
+      sendItems = items.filter((item) => {
+        return (
+          fuzzySearch(item.name, search) ||
+          (item.shortCode && fuzzySearch(item.shortCode, search)) ||
+          (item.description && fuzzySearch(item.description, search)) ||
+          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          (!isNaN(Number(search)) &&
+            Math.abs(Number(item.price) - Number(search)) <= 50)
+        );
+      });
+
+      // Sort results by relevance
+      sendItems.sort((a, b) => {
+        const aScore = fuzzySearch(a.name, search)
+          ? 2
+          : a.shortCode && fuzzySearch(a.shortCode, search)
+          ? 1.5
+          : 1;
+        const bScore = fuzzySearch(b.name, search)
+          ? 2
+          : b.shortCode && fuzzySearch(b.shortCode, search)
+          ? 1.5
+          : 1;
+        return bScore - aScore;
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: sendItems,
     });
   }
+};
+
+export const getItemsByCategory = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const categoryId: string = req.query.categoryId as string;
+
+  // Use Promise.all to parallelize independent operations
+  const [outlet, redisItems] = await Promise.all([
+    getOutletById(outletId),
+    redis.get(`${outletId}-all-items`),
+  ]);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  let sendItems: MenuItem[] = [];
+  let items: MenuItem[];
+
+  if (redisItems) {
+    items = JSON.parse(redisItems);
+  } else {
+    items = await getOAllItems(outletId);
+    // Cache the items in Redis with a reasonable TTL
+    await redis.set(`${outletId}-all-items`, JSON.stringify(items), "EX", 300); // 5 minutes TTL
+  }
+
+  // Early return for "all" category to avoid unnecessary processing
+  if (categoryId === "all") {
+    return res.json({
+      success: true,
+      data: items,
+    });
+  }
+
+  // For favorites, cache the user's favItems to avoid repeated DB calls
+  if (categoryId === "favourites") {
+    const userCacheKey = `user-favitems-${outlet.adminId}`;
+    let favItems = await redis.get(userCacheKey);
+
+    if (!favItems) {
+      const user = await prismaDB.user.findUnique({
+        where: { id: outlet.adminId },
+        select: { favItems: true },
+      });
+      favItems = JSON.stringify(user?.favItems || []);
+      await redis.set(userCacheKey, favItems, "EX", 300); // 5 minutes TTL
+    }
+
+    const userFavItems = JSON.parse(favItems);
+    sendItems = items.filter((item) => userFavItems.includes(item.id));
+  } else {
+    // For specific category, use direct array filtering
+    const categoryIdCacheKey = `${outletId}-category-${categoryId}`;
+    const categoryIdCache = await redis.get(categoryIdCacheKey);
+    if (categoryIdCache) {
+      sendItems = JSON.parse(categoryIdCache);
+    } else {
+      sendItems = items.filter((item) => item.categoryId === categoryId);
+      await redis.set(
+        `${outletId}-category-${categoryId}`,
+        JSON.stringify(sendItems),
+        "EX",
+        300
+      );
+    }
+  }
+
+  return res.json({
+    success: true,
+    data: sendItems,
+  });
 };
 
 export const getItemsBySearch = async (req: Request, res: Response) => {
@@ -123,72 +314,81 @@ export const getItemsBySearch = async (req: Request, res: Response) => {
   const redisItems = await redis.get(`${outletId}-all-items`);
 
   if (redisItems) {
-    const items: MenuItem[] = JSON.parse(redisItems);
+    const items: (MenuItem & { category: Category })[] = JSON.parse(redisItems);
+    let sendItems: (MenuItem & { category: Category })[] = [];
+
+    if (search) {
+      sendItems = items.filter((item) => {
+        return (
+          // Fuzzy search on name
+          fuzzySearch(item.name, search) ||
+          // Fuzzy search on shortCode
+          (item.shortCode && fuzzySearch(item.shortCode, search)) ||
+          // Fuzzy search on description
+          (item.description && fuzzySearch(item.description, search)) ||
+          // Search in category name
+          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          // Match price range (if search term is a number)
+          (!isNaN(Number(search)) &&
+            Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
+        );
+      });
+    }
+
+    // Sort results by relevance
+    sendItems.sort((a, b) => {
+      const aScore = fuzzySearch(a.name, search)
+        ? 2
+        : a.shortCode && fuzzySearch(a.shortCode, search)
+        ? 1.5
+        : 1;
+      const bScore = fuzzySearch(b.name, search)
+        ? 2
+        : b.shortCode && fuzzySearch(b.shortCode, search)
+        ? 1.5
+        : 1;
+      return bScore - aScore;
+    });
+
+    return res.json({
+      success: true,
+      data: sendItems,
+    });
+  } else {
+    const items = await getOAllItems(outletId);
     let sendItems: MenuItem[] = [];
 
     if (search) {
       sendItems = items.filter((item) => {
         return (
-          item.name.toLowerCase().includes(search.toLowerCase()) ||
-          item.shortCode?.toLowerCase().includes(search.toLowerCase()) ||
-          item.description?.toLowerCase().includes(search.toLowerCase())
+          fuzzySearch(item.name, search) ||
+          (item.shortCode && fuzzySearch(item.shortCode, search)) ||
+          (item.description && fuzzySearch(item.description, search)) ||
+          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          (!isNaN(Number(search)) &&
+            Math.abs(Number(item.price) - Number(search)) <= 50)
         );
+      });
+
+      // Sort results by relevance
+      sendItems.sort((a, b) => {
+        const aScore = fuzzySearch(a.name, search)
+          ? 2
+          : a.shortCode && fuzzySearch(a.shortCode, search)
+          ? 1.5
+          : 1;
+        const bScore = fuzzySearch(b.name, search)
+          ? 2
+          : b.shortCode && fuzzySearch(b.shortCode, search)
+          ? 1.5
+          : 1;
+        return bScore - aScore;
       });
     }
 
-    const formattedItems = sendItems
-      ?.filter((i: any) => i.isDineIn === true)
-      ?.map((menuItem: any) => ({
-        id: menuItem.id,
-        shortCode: menuItem.shortCode,
-        categoryId: menuItem.categoryId,
-        categoryName: menuItem.category.name,
-        name: menuItem.name,
-        images: menuItem.images.map((image: any) => ({
-          id: image.id,
-          url: image.url,
-        })),
-        type: menuItem.type,
-        price: menuItem.price,
-        netPrice: menuItem?.netPrice,
-        itemRecipe: {
-          id: menuItem?.itemRecipe?.id,
-          menuId: menuItem?.itemRecipe?.menuId,
-          menuVariantId: menuItem?.itemRecipe?.menuVariantId,
-          addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId,
-        },
-        gst: menuItem?.gst,
-        grossProfit: menuItem?.grossProfit,
-        isVariants: menuItem.isVariants,
-        isAddOns: menuItem.isAddons,
-        menuItemVariants: menuItem.menuItemVariants.map((variant: any) => ({
-          id: variant.id,
-          variantName: variant.variant.name,
-          price: variant.price,
-          netPrice: variant?.netPrice,
-          gst: variant?.gst,
-          grossProfit: variant?.grossProfit,
-          type: variant.foodType,
-        })),
-        favourite: true,
-        menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns: any) => ({
-          id: addOns.id,
-          addOnGroupName: addOns.addOnGroups.title,
-          description: addOns.addOnGroups.description,
-          addonVariants: addOns.addOnGroups.addOnVariants.map(
-            (addOnVariant: any) => ({
-              id: addOnVariant.id,
-              name: addOnVariant.name,
-              price: addOnVariant.price,
-              type: addOnVariant.type,
-            })
-          ),
-        })),
-      }));
-
     return res.json({
       success: true,
-      data: formattedItems,
+      data: sendItems,
     });
   }
 };
@@ -229,10 +429,16 @@ export const getItemForTable = async (req: Request, res: Response) => {
   }));
 
   // Fetch total count for the given query
+
   const totalCount = await prismaDB.menuItem.count({
     where: {
       restaurantId: outletId,
-      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      OR: [
+        { name: { contains: search, mode: "insensitive" } },
+        { shortCode: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { category: { name: { contains: search, mode: "insensitive" } } },
+      ],
       AND: filterConditions,
     },
   });
@@ -242,7 +448,12 @@ export const getItemForTable = async (req: Request, res: Response) => {
     take,
     where: {
       restaurantId: outletId,
-      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      OR: [
+        { name: { contains: search, mode: "insensitive" } },
+        { shortCode: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { category: { name: { contains: search, mode: "insensitive" } } },
+      ],
       AND: filterConditions,
     },
     include: {
@@ -273,11 +484,14 @@ export const getItemForTable = async (req: Request, res: Response) => {
     orderBy,
   });
 
+  console.log(`Get Items: ${getItems.length}`);
+
   const formattedMenuItems = getItems?.map((item) => ({
     id: item?.id,
     name: item?.name,
     shortCode: item?.shortCode,
     category: item?.category?.name,
+    categoryId: item?.category?.id,
     isPos: item?.isDineIn,
     isOnline: item?.isOnline,
     isVariants: item?.isVariants,
@@ -942,7 +1156,11 @@ export const updateItembyId = async (req: Request, res: Response) => {
     }
   });
 
-  await getOAllItems(outlet.id);
+  await Promise.all([
+    getOAllItems(outlet.id),
+    getOAllMenuCategoriesToRedis(outlet.id),
+    getOAllItemsForOnlineAndDelivery(outletId),
+  ]);
 
   return res.json({
     success: true,
@@ -1033,6 +1251,7 @@ export const postItem = async (req: Request, res: Response) => {
   const menuItem = await prismaDB.menuItem.create({
     data: {
       name: validateFields?.name,
+      slug: generateSlug(validateFields?.name),
       shortCode: validateFields?.shortCode,
       description: validateFields?.description,
       categoryId: validateFields?.categoryId,
@@ -1095,6 +1314,8 @@ export const postItem = async (req: Request, res: Response) => {
   });
 
   await getOAllItems(outlet.id);
+  await getOAllMenuCategoriesToRedis(outlet.id);
+  await getOAllItemsForOnlineAndDelivery(outletId);
 
   return res.json({
     success: true,
@@ -1126,6 +1347,8 @@ export const deleteItem = async (req: Request, res: Response) => {
   });
 
   await getOAllItems(outlet.id);
+  await getOAllMenuCategoriesToRedis(outlet.id);
+  await getOAllItemsForOnlineAndDelivery(outletId);
 
   return res.json({
     success: true,
@@ -1190,6 +1413,8 @@ export const addItemToUserFav = async (req: Request, res: Response) => {
   const { outletId } = req.params;
   // @ts-ignore
   const userId = req?.user?.id;
+
+  await redis.del(`user-favitems-${userId}`);
 
   const outlet = await getOutletById(outletId);
 

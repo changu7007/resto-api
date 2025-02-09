@@ -49,23 +49,24 @@ export const getCustomersForTable = async (req: Request, res: Response) => {
   }));
 
   // Fetch total count for the given query
-  const totalCount = await prismaDB.customer.count({
+  const totalCount = await prismaDB.customerRestaurantAccess.count({
     where: {
       restaurantId: outletId,
-      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      OR: [{ customer: { name: { contains: search, mode: "insensitive" } } }],
       AND: filterConditions,
     },
   });
 
-  const getCustomers = await prismaDB.customer.findMany({
+  const getCustomers = await prismaDB.customerRestaurantAccess.findMany({
     skip,
     take,
     where: {
       restaurantId: outletId,
-      OR: [{ name: { contains: search, mode: "insensitive" } }],
+      OR: [{ customer: { name: { contains: search, mode: "insensitive" } } }],
       AND: filterConditions,
     },
     include: {
+      customer: true,
       orderSession: true,
     },
     orderBy,
@@ -73,9 +74,9 @@ export const getCustomersForTable = async (req: Request, res: Response) => {
 
   const formattedCustomers = getCustomers?.map((staff) => ({
     id: staff?.id,
-    name: staff?.name,
-    email: staff?.email,
-    phoneNo: staff?.phoneNo,
+    name: staff?.customer?.name,
+    email: staff?.customer?.email,
+    phoneNo: staff?.customer?.phoneNo,
     orders: staff?.orderSession?.length,
     createdAt: staff?.createdAt,
   }));

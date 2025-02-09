@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createOutletFromOutletHub = exports.getrazorpayConfig = exports.deleteOutlet = exports.fetchInvoiceDetails = exports.updateInvoiceDetails = exports.createInvoiceDetails = exports.getIntegration = exports.patchOutletOnlinePOrtalDetails = exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.deleteNotificationById = exports.deleteAllNotifications = exports.getAllNotifications = exports.getByOutletId = exports.getStaffOutlet = void 0;
+exports.updateOnlinePortalStatus = exports.updateOutletType = exports.createOutletFromOutletHub = exports.getrazorpayConfig = exports.deleteOutlet = exports.fetchInvoiceDetails = exports.updateInvoiceDetails = exports.createInvoiceDetails = exports.getIntegration = exports.patchOutletOnlinePOrtalDetails = exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.deleteNotificationById = exports.deleteAllNotifications = exports.getAllNotifications = exports.getByOutletId = exports.getStaffOutlet = void 0;
 const outlet_1 = require("../../lib/outlet");
 const not_found_1 = require("../../exceptions/not-found");
 const root_1 = require("../../exceptions/root");
@@ -21,6 +21,7 @@ const get_items_1 = require("../../lib/outlet/get-items");
 const unauthorized_1 = require("../../exceptions/unauthorized");
 const get_users_1 = require("../../lib/get-users");
 const zod_1 = require("zod");
+const utils_1 = require("../../lib/utils");
 const getStaffOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     //@ts-ignore
@@ -173,7 +174,7 @@ const getMainOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.getMainOutlet = getMainOutlet;
 const patchOutletDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _h;
+    var _h, _j, _k, _l;
     const { outletId } = req.params;
     const { name, imageurl, restaurantName, phoneNo, email, address, city, pincode, } = req.body;
     const getOutlet = yield __1.prismaDB.restaurant.findFirst({
@@ -181,6 +182,13 @@ const patchOutletDetails = (req, res) => __awaiter(void 0, void 0, void 0, funct
             // @ts-ignore
             adminId: (_h = req.user) === null || _h === void 0 ? void 0 : _h.id,
             id: outletId,
+        },
+        include: {
+            users: {
+                select: {
+                    sites: true,
+                },
+            },
         },
     });
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
@@ -202,6 +210,13 @@ const patchOutletDetails = (req, res) => __awaiter(void 0, void 0, void 0, funct
         },
     });
     yield (0, outlet_1.fetchOutletByIdToRedis)(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id);
+    if (((_k = (_j = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.users) === null || _j === void 0 ? void 0 : _j.sites) === null || _k === void 0 ? void 0 : _k.length) > 0) {
+        for (const site of (_l = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.users) === null || _l === void 0 ? void 0 : _l.sites) {
+            if (site === null || site === void 0 ? void 0 : site.subdomain) {
+                yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
+            }
+        }
+    }
     return res.json({ success: true, message: "Updated Success" });
 });
 exports.patchOutletDetails = patchOutletDetails;
@@ -225,7 +240,11 @@ const addFMCTokenToOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.addFMCTokenToOutlet = addFMCTokenToOutlet;
 const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const validateFields = staff_1.outletOnlinePortalSchema.parse(req.body);
+    var _m, _o, _p;
+    const validateFields = staff_1.outletOnlinePortalSchema.safeParse(req.body);
+    if (!validateFields.success) {
+        throw new bad_request_1.BadRequestsException(validateFields.error.message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
@@ -237,14 +256,14 @@ const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, v
         },
         data: {
             onlinePortal: true,
-            openTime: validateFields.openTime,
-            closeTime: validateFields.closeTime,
-            areaLat: validateFields.areaLat,
-            areaLong: validateFields.areaLong,
-            orderRadius: Number(validateFields.orderRadius),
-            isDelivery: validateFields.isDelivery,
-            isDineIn: validateFields.isDineIn,
-            isPickUp: validateFields.isPickUp,
+            openTime: validateFields.data.openTime.time,
+            closeTime: validateFields.data.closeTime.time,
+            areaLat: validateFields.data.areaLat,
+            areaLong: validateFields.data.areaLong,
+            orderRadius: Number(validateFields.data.orderRadius),
+            isDelivery: validateFields.data.isDelivery,
+            isDineIn: validateFields.data.isDineIn,
+            isPickUp: validateFields.data.isPickUp,
         },
     });
     if (!outlet.integrations.find((outlet) => (outlet === null || outlet === void 0 ? void 0 : outlet.name) === "ONLINEHUB")) {
@@ -254,11 +273,17 @@ const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, v
                 name: "ONLINEHUB",
                 connected: true,
                 status: true,
-                link: validateFields.subdomain,
+                link: validateFields.data.subdomain,
             },
         });
     }
     yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.adminId);
+    if (((_o = (_m = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _m === void 0 ? void 0 : _m.sites) === null || _o === void 0 ? void 0 : _o.length) > 0) {
+        for (const site of (_p = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _p === void 0 ? void 0 : _p.sites) {
+            yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
+        }
+    }
     return res.json({
         success: true,
         message: "Online Hub Integrated Success",
@@ -349,16 +374,16 @@ const fetchInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.fetchInvoiceDetails = fetchInvoiceDetails;
 const deleteOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _j;
+    var _q;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_j = req === null || req === void 0 ? void 0 : req.user) === null || _j === void 0 ? void 0 : _j.id;
+    const userId = (_q = req === null || req === void 0 ? void 0 : req.user) === null || _q === void 0 ? void 0 : _q.id;
     if (outlet === undefined || !outlet.id) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     if (outlet.adminId !== userId) {
-        throw new unauthorized_1.UnauthorizedException("Your Unauthorized To delete this Settings", root_1.ErrorCode.UNAUTHORIZED);
+        throw new unauthorized_1.UnauthorizedException("Your Unauthorized To delete this Outlet", root_1.ErrorCode.UNAUTHORIZED);
     }
     yield __1.prismaDB.restaurant.delete({
         where: {
@@ -411,6 +436,8 @@ const formSchema = zod_1.z.object({
     gst: zod_1.z.string().optional(),
     fssai: zod_1.z.string().optional(),
     copy: zod_1.z.boolean(),
+    // copyInventory: z.boolean(),
+    // copyRecipes: z.boolean(),
 });
 const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
@@ -418,12 +445,14 @@ const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const validateFields = formSchema.safeParse(req.body);
-    if (!validateFields.success) {
-        throw new bad_request_1.BadRequestsException(validateFields.error.message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    // Validate request body (using Zod or your chosen library)
+    const parsedBody = formSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+        throw new bad_request_1.BadRequestsException(parsedBody.error.message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    const { name, outletType, shortName, address, city, pincode, gst, fssai, copy, } = validateFields.data;
-    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+    const { name, outletType, shortName, address, city, pincode, gst, fssai, copy: copyMenu, } = parsedBody.data;
+    const firstTxResult = yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        // STEP 0: Create the new outlet (restaurant)
         const createOutlet = yield tx.restaurant.create({
             data: {
                 adminId: outlet.adminId,
@@ -437,107 +466,286 @@ const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0
                 fssai,
             },
         });
-        if (copy) {
-            const categories = yield tx.category.findMany({
-                where: { restaurantId: outlet.id },
-                include: {
-                    menuItems: {
-                        include: {
-                            menuItemVariants: true,
-                            menuGroupAddOns: {
-                                include: {
-                                    addOnGroups: {
-                                        include: {
-                                            addOnVariants: true,
-                                        },
-                                    },
-                                },
+        // If copyMenu is false, we skip copying menu data.
+        if (!copyMenu) {
+            return {
+                createOutlet,
+                categoryMap: new Map(),
+                variantMap: new Map(),
+                addonGroupMap: new Map(),
+                categories: [],
+            };
+        }
+        // STEP 1: Fetch source outlet's categories (with menu items, variants, add-on groups)
+        const categories = yield tx.category.findMany({
+            where: { restaurantId: outlet.id },
+            include: {
+                menuItems: {
+                    include: {
+                        menuItemVariants: { include: { variant: true } },
+                        menuGroupAddOns: {
+                            include: {
+                                addOnGroups: { include: { addOnVariants: true } },
                             },
                         },
                     },
                 },
+            },
+        });
+        // STEP 2: Create new categories for the new outlet and build a map.
+        const categoryMap = new Map();
+        for (const cat of categories) {
+            const newCat = yield tx.category.create({
+                data: {
+                    name: cat.name,
+                    slug: (0, utils_1.generateSlug)(cat.name),
+                    description: cat.description,
+                    restaurantId: createOutlet.id,
+                },
             });
-            for (const category of categories) {
-                const newCategory = yield tx.category.create({
-                    data: {
-                        name: category.name,
-                        description: category.description,
-                        restaurantId: createOutlet.id,
-                    },
-                });
-                // Copy menu items with variants and addons
-                for (const menuItem of category.menuItems) {
-                    const newMenuItem = yield tx.menuItem.create({
-                        data: {
-                            restaurantId: createOutlet.id,
-                            categoryId: newCategory.id,
-                            name: menuItem.name,
-                            description: menuItem.description,
-                            isVariants: menuItem.isVariants,
-                            isAddons: menuItem.isAddons,
-                            price: menuItem.price,
-                            type: menuItem.type,
-                            isDelivery: menuItem.isDelivery,
-                            isPickUp: menuItem.isPickUp,
-                            isDineIn: menuItem.isDineIn,
-                            isOnline: menuItem.isOnline,
-                        },
-                    });
-                    // Copy menu item variants
-                    if (menuItem.menuItemVariants.length > 0) {
-                        yield tx.menuItemVariant.createMany({
-                            data: menuItem.menuItemVariants.map((variant) => ({
-                                menuItemId: newMenuItem.id,
-                                restaurantId: createOutlet.id,
-                                variantId: variant.variantId,
-                                price: variant.price,
-                                foodType: variant.foodType,
+            categoryMap.set((0, utils_1.generateSlug)(cat.name), newCat);
+        }
+        // STEP 3: Collect unique variants across all menu items.
+        const variantDataMap = new Map();
+        for (const cat of categories) {
+            for (const menuItem of cat.menuItems) {
+                for (const miv of menuItem.menuItemVariants) {
+                    const variantSlug = (0, utils_1.generateSlug)(miv.variant.name);
+                    if (!variantDataMap.has(variantSlug)) {
+                        variantDataMap.set(variantSlug, miv.variant);
+                    }
+                }
+            }
+        }
+        // Create variants and build a variant map.
+        const variantMap = new Map();
+        for (const [slug, variant] of variantDataMap.entries()) {
+            const newVariant = yield tx.variants.create({
+                data: {
+                    restaurantId: createOutlet.id,
+                    name: variant.name,
+                    slug,
+                    variantCategory: variant.variantCategory,
+                    status: variant.status,
+                },
+            });
+            variantMap.set(slug, newVariant);
+        }
+        const addonGroupData = new Map();
+        for (const cat of categories) {
+            for (const menuItem of cat.menuItems) {
+                for (const groupAddon of menuItem.menuGroupAddOns) {
+                    const groupSlug = (0, utils_1.generateSlug)(groupAddon.addOnGroups.title);
+                    if (!addonGroupData.has(groupSlug)) {
+                        addonGroupData.set(groupSlug, {
+                            title: groupAddon.addOnGroups.title,
+                            description: groupAddon.addOnGroups.description || "",
+                            status: groupAddon.addOnGroups.status ? "true" : "false",
+                            minSelect: Number(groupAddon.addOnGroups.minSelect) || 0,
+                            maxSelectString: groupAddon.addOnGroups.maxSelectString || "",
+                            variants: groupAddon.addOnGroups.addOnVariants.map((variant) => ({
+                                name: variant.name,
+                                price: Number(variant.price),
+                                type: variant.type,
                             })),
                         });
                     }
-                    // Copy addons and their variants
-                    if (menuItem.menuGroupAddOns.length > 0) {
-                        for (const groupAddon of menuItem.menuGroupAddOns) {
-                            const newAddOnGroup = yield tx.addOns.create({
-                                data: {
-                                    restaurantId: createOutlet.id,
-                                    title: groupAddon.addOnGroups.title,
-                                    description: groupAddon.addOnGroups.description,
-                                    status: groupAddon.addOnGroups.status,
-                                    minSelect: groupAddon.addOnGroups.minSelect,
-                                    maxSelectString: groupAddon.addOnGroups.maxSelectString,
-                                },
-                            });
-                            // Create menu group addon relation
-                            yield tx.menuGroupAddOns.create({
-                                data: {
-                                    menuItemId: newMenuItem.id,
-                                    addOnGroupId: newAddOnGroup.id,
-                                    minSelect: groupAddon.minSelect,
-                                    maxSelectString: groupAddon.maxSelectString,
-                                },
-                            });
-                            // Copy addon variants
-                            if (groupAddon.addOnGroups.addOnVariants.length > 0) {
-                                yield tx.addOnVariants.createMany({
-                                    data: groupAddon.addOnGroups.addOnVariants.map((variant) => ({
-                                        addonId: newAddOnGroup.id,
-                                        restaurantId: createOutlet.id,
-                                        name: variant.name,
-                                        price: variant.price,
-                                        type: variant.type,
-                                    })),
-                                });
-                            }
-                        }
+                }
+            }
+        }
+        // Create add-on groups and their variants.
+        const addonGroupMap = new Map();
+        for (const [slug, groupData] of addonGroupData.entries()) {
+            const newGroup = yield tx.addOns.create({
+                data: {
+                    restaurantId: createOutlet.id,
+                    title: groupData.title,
+                    slug: (0, utils_1.generateSlug)(groupData.title),
+                    description: groupData.description,
+                    status: groupData.status === "true" ? true : false,
+                    minSelect: groupData.minSelect.toString(),
+                    maxSelectString: groupData.maxSelectString,
+                },
+            });
+            const newVariants = [];
+            for (const variant of groupData.variants) {
+                const newAddonVariant = yield tx.addOnVariants.create({
+                    data: {
+                        addonId: newGroup.id,
+                        restaurantId: createOutlet.id,
+                        name: variant.name,
+                        slug: (0, utils_1.generateSlug)(variant.name),
+                        price: variant.price.toString(),
+                        type: variant.type,
+                    },
+                });
+                newVariants.push(newAddonVariant);
+            }
+            addonGroupMap.set(slug, { group: newGroup, variants: newVariants });
+        }
+        return {
+            createOutlet,
+            categoryMap,
+            variantMap,
+            addonGroupMap,
+            categories,
+        };
+    }));
+    // If we aren't copying menu data, update cache and return.
+    if (!copyMenu) {
+        yield (0, get_users_1.getFormatUserAndSendToRedis)(outlet.adminId);
+        return res.json({
+            success: true,
+            message: "Outlet Added Successfully",
+        });
+    }
+    //
+    // ---------------------------
+    // SECOND TRANSACTION
+    // Use the previously built maps and original categories data
+    // to create menu items (and their related variants and add-on links).
+    // ---------------------------
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        // Loop over each category from the source data.
+        for (const cat of firstTxResult.categories) {
+            const newCategory = firstTxResult.categoryMap.get((0, utils_1.generateSlug)(cat.name));
+            if (!newCategory) {
+                throw new Error(`New category not found for: ${cat.name}`);
+            }
+            // For each menu item in this category:
+            for (const menuItem of cat.menuItems) {
+                const newMenuItem = yield tx.menuItem.create({
+                    data: {
+                        restaurantId: firstTxResult.createOutlet.id,
+                        categoryId: newCategory.id,
+                        name: menuItem.name,
+                        shortCode: menuItem.shortCode,
+                        slug: (0, utils_1.generateSlug)(menuItem.name),
+                        description: menuItem.description,
+                        isVariants: menuItem.isVariants,
+                        isAddons: menuItem.isAddons,
+                        netPrice: menuItem.netPrice,
+                        gst: menuItem.gst,
+                        price: menuItem.price,
+                        chooseProfit: menuItem.chooseProfit,
+                        grossProfitType: menuItem.grossProfitType,
+                        grossProfitPer: menuItem.grossProfitPer,
+                        grossProfit: menuItem.grossProfit,
+                        type: menuItem.type,
+                        isDelivery: menuItem.isDelivery,
+                        isPickUp: menuItem.isPickUp,
+                        isDineIn: menuItem.isDineIn,
+                        isOnline: menuItem.isOnline,
+                    },
+                });
+                // Create menu item variants.
+                for (const miv of menuItem.menuItemVariants) {
+                    const variantSlug = (0, utils_1.generateSlug)(miv.variant.name);
+                    const newVariant = firstTxResult.variantMap.get(variantSlug);
+                    if (!newVariant) {
+                        throw new Error(`Variant not found for slug: ${variantSlug}`);
+                    }
+                    yield tx.menuItemVariant.create({
+                        data: {
+                            menuItemId: newMenuItem.id,
+                            restaurantId: firstTxResult.createOutlet.id,
+                            variantId: newVariant.id,
+                            netPrice: miv.netPrice,
+                            gst: miv.gst,
+                            price: miv.price,
+                            chooseProfit: miv.chooseProfit,
+                            grossProfitType: miv.grossProfitType,
+                            grossProfitPer: miv.grossProfitPer,
+                            grossProfit: miv.grossProfit,
+                            foodType: miv.foodType,
+                        },
+                    });
+                }
+                // Create menu group add-on links.
+                for (const groupAddon of menuItem.menuGroupAddOns) {
+                    const groupSlug = (0, utils_1.generateSlug)(groupAddon.addOnGroups.title);
+                    const addonGroupInfo = firstTxResult.addonGroupMap.get(groupSlug);
+                    if (addonGroupInfo) {
+                        yield tx.menuGroupAddOns.create({
+                            data: {
+                                menuItemId: newMenuItem.id,
+                                addOnGroupId: addonGroupInfo.group.id,
+                                minSelect: groupAddon.minSelect,
+                                maxSelectString: groupAddon.maxSelectString,
+                            },
+                        });
                     }
                 }
             }
         }
     }));
+    // Update the Redis cache (outside of any transaction)
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(outlet.adminId);
     return res.json({
         success: true,
         message: "Outlet Added Successfully",
     });
 });
 exports.createOutletFromOutletHub = createOutletFromOutletHub;
+const updateOutletType = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _r, _s, _t, _u;
+    const { outletId } = req.params;
+    const { outletType } = req.body;
+    // @ts-ignore
+    const userId = (_r = req === null || req === void 0 ? void 0 : req.user) === null || _r === void 0 ? void 0 : _r.id;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (outlet.adminId !== userId) {
+        throw new unauthorized_1.UnauthorizedException("You are not authorized to update this outlet type", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    yield __1.prismaDB.restaurant.update({
+        where: { id: outlet.id },
+        data: { outletType },
+    });
+    yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    yield (0, get_users_1.getFormatUserAndSendToRedis)(userId);
+    if (((_t = (_s = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _s === void 0 ? void 0 : _s.sites) === null || _t === void 0 ? void 0 : _t.length) > 0) {
+        for (const site of (_u = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _u === void 0 ? void 0 : _u.sites) {
+            yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
+        }
+    }
+    return res.json({
+        success: true,
+        message: "Outlet Type Updated Successfully",
+    });
+});
+exports.updateOutletType = updateOutletType;
+const updateOnlinePortalStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _v, _w, _x, _y;
+    const { outletId } = req.params;
+    const { status } = req.body;
+    // @ts-ignore
+    const userId = (_v = req === null || req === void 0 ? void 0 : req.user) === null || _v === void 0 ? void 0 : _v.id;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (outlet.adminId !== userId) {
+        throw new unauthorized_1.UnauthorizedException("You are not authorized to update this outlet type", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    yield __1.prismaDB.restaurant.update({
+        where: { id: outlet.id },
+        data: { onlinePortal: status },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`O-${outletId}`),
+        (0, get_users_1.getFormatUserAndSendToRedis)(userId),
+    ]);
+    if (((_x = (_w = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _w === void 0 ? void 0 : _w.sites) === null || _x === void 0 ? void 0 : _x.length) > 0) {
+        for (const site of (_y = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _y === void 0 ? void 0 : _y.sites) {
+            yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
+        }
+    }
+    return res.json({
+        success: true,
+        message: "Online Portal Status Updated Successfully",
+    });
+});
+exports.updateOnlinePortalStatus = updateOnlinePortalStatus;

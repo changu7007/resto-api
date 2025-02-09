@@ -7,17 +7,6 @@ import { BadRequestsException } from "../../../../exceptions/bad-request";
 import { prismaDB } from "../../../..";
 import { redis } from "../../../../services/redis";
 import { websocketManager } from "../../../../services/ws";
-import {
-  getFetchActiveOrderSessionToRedis,
-  getFetchAllOrderSessionToRedis,
-  getFetchAllOrdersToRedis,
-  getFetchLiveOrderToRedis,
-} from "../../../../lib/outlet/get-order";
-import {
-  getFetchAllAreastoRedis,
-  getFetchAllTablesToRedis,
-} from "../../../../lib/outlet/get-tables";
-import { NotificationService } from "../../../../services/firebase";
 import fs from "fs/promises";
 import path from "path";
 import ejs from "ejs";
@@ -26,6 +15,7 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import axios from "axios";
 import { PUPPETEER_EXECUTABLE_PATH } from "../../../../secrets";
+import { billQueueProducer } from "../../../../services/bullmq/producer";
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION!,
@@ -177,15 +167,44 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     total: roundedTotal,
   };
 
-  generatePdfInvoiceInBackground(invoiceData, outlet?.id);
+  await billQueueProducer.addJob(
+    {
+      invoiceData,
+      outletId: outlet.id,
+      phoneNumber: result?.phoneNo ?? undefined,
+      whatsappData: {
+        billId: result?.billId!,
+        items: invoiceData.orderItems.map((item) => ({
+          id: item.id.toString(),
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price!,
+        })),
+        subtotal: invoiceData.subtotal,
+        tax: invoiceData.sgst + invoiceData.cgst,
+        discount: 0,
+        totalAmount: invoiceData.total,
+        paymentStatus: "PAID",
+        restaurantName: outlet?.restaurantName!,
+        orderType: orderSession?.orderType,
+      },
+      ownerPhone: outlet?.users?.phoneNo!,
+      paymentData: {
+        amount: invoiceData.total,
+        billId: result?.billId!,
+        paymentMode: paymentMethod,
+      },
+    },
+    `bill-${result.id}`
+  );
 
   await Promise.all([
-    getFetchActiveOrderSessionToRedis(outletId),
-    getFetchAllOrderSessionToRedis(outletId),
-    getFetchAllOrdersToRedis(outletId),
-    getFetchLiveOrderToRedis(outletId),
-    getFetchAllTablesToRedis(outletId),
-    getFetchAllAreastoRedis(outletId),
+    redis.del(`active-os-${outletId}`),
+    redis.del(`liv-o-${outletId}`),
+    redis.del(`tables-${outletId}`),
+    redis.del(`a-${outletId}`),
+    redis.del(`o-n-${outletId}`),
+    redis.del(`${outletId}-stocks`),
     redis.del(`all-order-staff-${outletId}`),
   ]);
 
@@ -196,7 +215,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
   //     `${subTotal}`
   //   );
   // }
-
+  await redis.publish("orderUpdated", JSON.stringify({ outletId }));
   websocketManager.notifyClients(outlet?.id, "BILL_UPDATED");
 
   return res.json({
@@ -223,7 +242,6 @@ export const generatePdfInvoiceInBackground = async (
     });
 
     console.log("Invoice Generated");
-    await getFetchAllOrderSessionToRedis(outletId);
     // Notify WebSocket clients about the updated invoice
     // websocketManager.notifyClients(invoiceData.restaurantName, "INVOICE_GENERATED");
   } catch (error) {
@@ -233,6 +251,7 @@ export const generatePdfInvoiceInBackground = async (
 
 export const generatePdfInvoice = async (invoiceData: any) => {
   // Read the EJS template
+  const isDevelopment = process.env.NODE_ENV === "development";
   const templatePath = path.join(process.cwd(), "templates/invoice.ejs");
   const template = await fs.readFile(templatePath, "utf-8");
 
@@ -241,11 +260,21 @@ export const generatePdfInvoice = async (invoiceData: any) => {
       invoiceData,
     });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath: PUPPETEER_EXECUTABLE_PATH,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    // Configure Puppeteer based on environment
+    const puppeteerConfig = isDevelopment
+      ? {
+          // Development (Windows) configuration
+          headless: "new", // Use new headless mode
+          product: "chrome",
+        }
+      : {
+          // Production (Linux) configuration
+          headless: true,
+          executablePath: PUPPETEER_EXECUTABLE_PATH,
+          args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        };
+
+    const browser = await puppeteer.launch(puppeteerConfig as any);
 
     const page = await browser.newPage();
     await page.setContent(renderedHtml, { waitUntil: "networkidle0" });

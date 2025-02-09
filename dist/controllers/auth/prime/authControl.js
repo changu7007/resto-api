@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -9,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCurrentOrderForCustomer = exports.getCustomerOrdersById = exports.customerUpdateSession = exports.CustomerLogin = exports.generateOtp = exports.updateOtp = exports.checkCustomer = exports.otpCheck = void 0;
+exports.CustomerUpdateAccessToken = exports.getCurrentOrderForCustomer = exports.getCustomerOrdersById = exports.customerUpdateSession = exports.CustomerLogin = exports.generateOtp = exports.updateOtp = exports.checkCustomer = exports.otpCheck = void 0;
 const __1 = require("../../..");
 const jwt_1 = require("../../../services/jwt");
 const bad_request_1 = require("../../../exceptions/bad-request");
@@ -17,6 +40,17 @@ const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
 const outlet_1 = require("../../../lib/outlet");
 const get_users_1 = require("../../../lib/get-users");
+const secrets_1 = require("../../../secrets");
+const secrets_2 = require("../../../secrets");
+const jwt = __importStar(require("jsonwebtoken"));
+const redis_1 = require("../../../services/redis");
+const whatsapp_1 = require("../../../services/whatsapp");
+const whatsappService = new whatsapp_1.WhatsAppService({
+    accessToken: process.env.META_ACCESS_TOKEN,
+    phoneNumberId: process.env.META_PHONE_NUMBER_ID,
+    businessAccountId: process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID,
+    version: "v21.0",
+});
 const otpCheck = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { mobile } = req.body;
     const otpRecord = yield __1.prismaDB.otp.findUnique({
@@ -45,6 +79,12 @@ const updateOtp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             where: { mobile: mobile.toString() },
             data: { otp: newOtp, expires: newExpiry },
         });
+        yield whatsappService.sendAuthenticationOTP({
+            phoneNumber: mobile.toString(),
+            otp: newOtp,
+            expiryMinutes: 5,
+            businessName: "Your Restaurant",
+        });
         return res.json({ success: true, otp: update.otp });
     }
     else {
@@ -54,6 +94,12 @@ const updateOtp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 otp: newOtp,
                 expires: newExpiry,
             }, // expires in 5 minutes
+        });
+        yield whatsappService.sendAuthenticationOTP({
+            phoneNumber: mobile.toString(),
+            otp: newOtp,
+            expiryMinutes: 5,
+            businessName: "Your Restaurant",
         });
         return res.json({ success: true, otp: createdOTP.otp });
     }
@@ -65,18 +111,20 @@ function generateOtp() {
 exports.generateOtp = generateOtp;
 const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { phoneNo, name, restaurantId } = req.body;
-    const customer = yield __1.prismaDB.customer.findFirst({
+    const findCustomer = yield __1.prismaDB.customer.findFirst({
         where: {
             phoneNo: phoneNo,
-            restaurantId: restaurantId,
+            restaurantAccess: {
+                some: {
+                    restaurantId: restaurantId,
+                },
+            },
         },
     });
-    if (customer) {
+    if (findCustomer === null || findCustomer === void 0 ? void 0 : findCustomer.id) {
         const updateCustomer = yield __1.prismaDB.customer.update({
             where: {
-                id: customer.id,
-                phoneNo: phoneNo,
-                restaurantId: restaurantId,
+                id: findCustomer.id,
             },
             data: {
                 name: name,
@@ -89,7 +137,7 @@ const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             phoneNo: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.phoneNo,
             image: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.image,
             role: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.role,
-            restaurantId: updateCustomer.restaurantId,
+            restaurantId: restaurantId,
         };
         yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(restaurantId);
         (0, jwt_1.sendToken)(customerData, 200, res);
@@ -99,7 +147,11 @@ const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             data: {
                 name,
                 phoneNo,
-                restaurantId,
+                restaurantAccess: {
+                    create: {
+                        restaurantId: restaurantId,
+                    },
+                },
             },
         });
         const customerData = {
@@ -109,7 +161,7 @@ const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             phoneNo: createCustomer === null || createCustomer === void 0 ? void 0 : createCustomer.phoneNo,
             image: createCustomer === null || createCustomer === void 0 ? void 0 : createCustomer.image,
             role: createCustomer === null || createCustomer === void 0 ? void 0 : createCustomer.role,
-            restaurantId: createCustomer.restaurantId,
+            restaurantId: restaurantId,
         };
         yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(restaurantId);
         (0, jwt_1.sendToken)(customerData, 200, res);
@@ -128,18 +180,19 @@ const customerUpdateSession = (req, res) => __awaiter(void 0, void 0, void 0, fu
     if (!userType) {
         throw new bad_request_1.BadRequestsException("UserType Required", root_1.ErrorCode.NOT_FOUND);
     }
-    const getCustomer = yield __1.prismaDB.customer.findUnique({
+    const getCustomer = yield __1.prismaDB.customerRestaurantAccess.findFirst({
         where: {
-            id: customerId,
+            customerId: customerId,
             restaurantId: outletId,
         },
     });
     if (!(getCustomer === null || getCustomer === void 0 ? void 0 : getCustomer.id)) {
         throw new not_found_1.NotFoundException("No User Found", root_1.ErrorCode.NOT_FOUND);
     }
-    const updateCustomerDetails = yield __1.prismaDB.customer.updateMany({
+    yield __1.prismaDB.customerRestaurantAccess.update({
         where: {
             id: getCustomer.id,
+            customerId: getCustomer.customerId,
             restaurantId: outletId,
         },
         data: {
@@ -158,7 +211,6 @@ const customerUpdateSession = (req, res) => __awaiter(void 0, void 0, void 0, fu
             },
         });
     }
-    yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(outletId);
     return res.json({
         success: true,
         message: "Profile Session ot updated",
@@ -233,6 +285,7 @@ const getCurrentOrderForCustomer = (req, res) => __awaiter(void 0, void 0, void 
                 id: order === null || order === void 0 ? void 0 : order.generatedOrderId,
                 orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus,
                 totalAmount: order === null || order === void 0 ? void 0 : order.totalAmount,
+                createdAt: order === null || order === void 0 ? void 0 : order.createdAt,
                 orderItems: order === null || order === void 0 ? void 0 : order.orderItems.map((item) => ({
                     id: item === null || item === void 0 ? void 0 : item.id,
                     name: item === null || item === void 0 ? void 0 : item.name,
@@ -249,3 +302,30 @@ const getCurrentOrderForCustomer = (req, res) => __awaiter(void 0, void 0, void 
     });
 });
 exports.getCurrentOrderForCustomer = getCurrentOrderForCustomer;
+const CustomerUpdateAccessToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const authHeader = req.headers.authorization;
+    const refresh_token = authHeader && authHeader.split(" ")[1];
+    const payload = jwt.verify(refresh_token, secrets_2.REFRESH_TOKEN);
+    if (!payload) {
+        throw new not_found_1.NotFoundException("Could Not refresh token", root_1.ErrorCode.TOKENS_NOT_VALID);
+    }
+    const session = yield redis_1.redis.get(payload.id);
+    if (!session) {
+        throw new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const user = JSON.parse(session);
+    const accessToken = jwt.sign({ id: user.id }, secrets_1.ACCESS_TOKEN, {
+        expiresIn: "5m",
+    });
+    const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_2.REFRESH_TOKEN, {
+        expiresIn: "7d",
+    });
+    res.status(200).json({
+        success: true,
+        tokens: {
+            accessToken,
+            refreshToken,
+        },
+    });
+});
+exports.CustomerUpdateAccessToken = CustomerUpdateAccessToken;

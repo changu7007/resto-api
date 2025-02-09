@@ -2,6 +2,6 @@ global:
   scrape_interval: 15s # How frequently to scrape targets
 
 scrape_configs:
-  - job_name: "API-PROM"
+  - job_name: "Local-API"
     static_configs:
-      - targets: ["api.restobytes.in"]
+      - targets: ["192.168.1.8:8080"]

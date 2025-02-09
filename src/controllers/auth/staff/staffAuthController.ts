@@ -10,6 +10,8 @@ import { sendToken } from "../../../services/jwt";
 import { redis } from "../../../services/redis";
 
 import { FStaff, getFormatStaffAndSendToRedis } from "../../../lib/get-users";
+import { UnauthorizedException } from "../../../exceptions/unauthorized";
+import { format } from "date-fns";
 
 export const StaffLogin = async (req: Request, res: Response) => {
   // staffSchema.parse(req.body);
@@ -45,7 +47,14 @@ export const StaffLogin = async (req: Request, res: Response) => {
 
 export const GetStaff = async (req: Request, res: Response) => {
   // @ts-ignore
-  return res.json(req.user);
+  const staffId = req?.user?.id;
+  const formattedStaff = await getFormatStaffAndSendToRedis(staffId);
+
+  return res.json({
+    success: true,
+    message: "Staff Fetched Successfully",
+    staff: formattedStaff,
+  });
 };
 
 export const StaffLogout = async (req: Request, res: Response) => {
@@ -91,5 +100,142 @@ export const StaffUpdateAccessToken = async (req: Request, res: Response) => {
       accessToken,
       refreshToken,
     },
+  });
+};
+
+export const staffCheckIn = async (req: Request, res: Response) => {
+  // @ts-ignore
+  const id = req.user?.id;
+
+  const { staffId } = req.body;
+
+  if (id !== staffId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findStaff = await prismaDB.staff.findFirst({
+    where: {
+      id: staffId,
+    },
+  });
+
+  if (!findStaff) {
+    throw new NotFoundException("Staff Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const staffCheckIn = await prismaDB.checkInRecord.create({
+    data: {
+      staffId: id,
+      checkInTime: new Date(),
+    },
+  });
+
+  const formattedStaff = await getFormatStaffAndSendToRedis(findStaff.id);
+
+  return res.json({
+    success: true,
+    message: "Check In Successfully",
+    staffCheckIn,
+    staff: formattedStaff,
+  });
+};
+
+export const staffCheckOut = async (req: Request, res: Response) => {
+  // @ts-ignore
+  const id = req.user?.id;
+
+  const { staffId } = req.body;
+
+  if (id !== staffId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findStaff = await prismaDB.staff.findFirst({
+    where: {
+      id: staffId,
+    },
+    include: {
+      checkIns: {
+        orderBy: {
+          checkInTime: "desc",
+        },
+      },
+    },
+  });
+
+  if (!findStaff) {
+    throw new NotFoundException("Staff Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const staffCheckOut = await prismaDB.checkInRecord.update({
+    where: {
+      id: findStaff.checkIns[0].id,
+    },
+    data: {
+      checkOutTime: new Date(),
+    },
+  });
+  const formattedStaff = await getFormatStaffAndSendToRedis(findStaff.id);
+
+  return res.json({
+    success: true,
+    message: "Check Out Successfully",
+    staffCheckOut,
+    staff: formattedStaff,
+  });
+};
+
+export const getLatestRecordByStaffId = async (req: Request, res: Response) => {
+  // @ts-ignore
+  const staffId = req.user?.id;
+
+  const { id } = req.params;
+
+  if (id !== staffId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  if (!id) {
+    throw new BadRequestsException(
+      "Staff Id is required",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+
+  const findCheckIns = await prismaDB.checkInRecord.findFirst({
+    where: {
+      staffId: id,
+    },
+    orderBy: {
+      checkInTime: "desc",
+    },
+  });
+
+  if (!findCheckIns) {
+    throw new NotFoundException(
+      "Check In Record Not Found",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  const formattedCheckInTime = findCheckIns?.checkInTime
+    ? format(findCheckIns?.checkInTime, "hh:mm a")
+    : undefined;
+  await getFormatStaffAndSendToRedis(id);
+
+  return res.json({
+    success: true,
+    message: "Latest Check In",
+    ...findCheckIns,
+    checkInTime: formattedCheckInTime,
   });
 };

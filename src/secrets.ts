@@ -15,3 +15,4 @@ export const CHROMIUM_EXECUTABLE_PATH =
   "https://github.com/Sparticuz/chromium/releases/download/v122.0.0/chromium-v122.0.0-pack.tar";
 export const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID as string;
 export const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET as string;
+export const REDIS_QUEUE_URL = process.env.REDIS_QUEUE_URL;

@@ -1,6 +1,10 @@
 import { prismaDB } from "..";
 import { v4 as uuidv4 } from "uuid";
 
+export function generateSlug(name: string) {
+  return name.toLowerCase().replace(/\s+/g, "-");
+}
+
 export function getPeriodDates(period: string): {
   startDate: Date;
   endDate: Date;

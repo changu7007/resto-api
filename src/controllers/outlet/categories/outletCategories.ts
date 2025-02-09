@@ -5,6 +5,8 @@ import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
+import { getOAllMenuCategoriesToRedis } from "../../../lib/outlet/get-items";
+import { generateSlug } from "../../../lib/utils";
 
 export const getAllCategories = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -23,15 +25,7 @@ export const getAllCategories = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const getCategories = await prismaDB.category.findMany({
-    where: {
-      restaurantId: outlet.id,
-    },
-    include: {
-      menuItems: true,
-    },
-  });
-  await redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
+  const getCategories = await getOAllMenuCategoriesToRedis(outlet.id);
   return res.json({
     success: true,
     categories: getCategories,
@@ -60,20 +54,12 @@ export const createCategory = async (req: Request, res: Response) => {
   await prismaDB.category.create({
     data: {
       name,
+      slug: generateSlug(name),
       restaurantId: outlet.id,
     },
   });
 
-  const getCategories = await prismaDB.category.findMany({
-    where: {
-      restaurantId: outlet.id,
-    },
-    include: {
-      menuItems: true,
-    },
-  });
-
-  await redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
+  await getOAllMenuCategoriesToRedis(outlet.id);
 
   return res.json({
     success: true,
@@ -149,16 +135,7 @@ export const deleteCategory = async (req: Request, res: Response) => {
       id: category?.id,
     },
   });
-  const getCategories = await prismaDB.category.findMany({
-    where: {
-      restaurantId: outlet.id,
-    },
-    include: {
-      menuItems: true,
-    },
-  });
-
-  await redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
+  await getOAllMenuCategoriesToRedis(outlet.id);
   return res.json({
     success: true,
     message: "Category Deleted ",

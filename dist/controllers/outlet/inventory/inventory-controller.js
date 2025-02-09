@@ -22,6 +22,7 @@ const unauthorized_1 = require("../../../exceptions/unauthorized");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const get_items_1 = require("../../../lib/outlet/get-items");
 const ws_1 = require("../../../services/ws");
+const utils_1 = require("../../../lib/utils");
 const unitSchema = zod_1.z.object({
     name: zod_1.z.string().min(1),
 });
@@ -59,6 +60,7 @@ const createRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, functi
         data: {
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
             name: validateFields.name,
+            slug: (0, utils_1.generateSlug)(validateFields.name),
             shortcode: validateFields.barcode,
             categoryId: validateFields.categoryId,
             consumptionUnitId: validateFields.consumptionUnitId,
@@ -194,6 +196,7 @@ const createUnit = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         data: {
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
             name: validateFields.name,
+            slug: (0, utils_1.generateSlug)(validateFields.name),
         },
     });
     const rawMaterialsUnit = yield __1.prismaDB.unit.findMany({
@@ -301,6 +304,7 @@ const createRawMaterialCategory = (req, res) => __awaiter(void 0, void 0, void 0
         data: {
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
             name: validateFields.name,
+            slug: (0, utils_1.generateSlug)(validateFields.name),
         },
     });
     yield (0, get_inventory_1.fetchOutletRawMaterialCAtegoryToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
@@ -1044,6 +1048,7 @@ const createVendor = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         data: {
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
             name: validateFields.name,
+            slug: (0, utils_1.generateSlug)(validateFields.name),
         },
     });
     const vendors = yield __1.prismaDB.vendor.findMany({
@@ -1293,7 +1298,7 @@ const recipeSchema = zod_1.z.object({
     }),
 });
 const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _l, _m;
+    var _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
@@ -1310,6 +1315,42 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     const validateFields = recipeSchema.parse(req.body);
+    const menuItems = yield __1.prismaDB.menuItem.findMany({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+        select: {
+            id: true,
+            name: true,
+        },
+    });
+    const menuVariants = yield __1.prismaDB.menuItemVariant.findMany({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+        select: {
+            variant: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
+        },
+    });
+    const addOns = yield __1.prismaDB.addOnVariants.findMany({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+        select: {
+            id: true,
+            name: true,
+        },
+    });
+    const slugName = (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_ITEMS"
+        ? (_m = menuItems === null || menuItems === void 0 ? void 0 : menuItems.find((item) => (item === null || item === void 0 ? void 0 : item.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _m === void 0 ? void 0 : _m.name
+        : (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_VARIANTS"
+            ? (_p = (_o = menuVariants === null || menuVariants === void 0 ? void 0 : menuVariants.find((variant) => { var _a; return ((_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId); })) === null || _o === void 0 ? void 0 : _o.variant) === null || _p === void 0 ? void 0 : _p.name
+            : (_q = addOns === null || addOns === void 0 ? void 0 : addOns.find((addOn) => (addOn === null || addOn === void 0 ? void 0 : addOn.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _q === void 0 ? void 0 : _q.name;
     const itemRecipe = yield __1.prismaDB.itemRecipe.create({
         data: {
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
@@ -1317,6 +1358,12 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
             recipeType: validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeType,
             createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
             lastModifiedBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
+            name: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_ITEMS"
+                ? (_r = menuItems === null || menuItems === void 0 ? void 0 : menuItems.find((item) => (item === null || item === void 0 ? void 0 : item.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _r === void 0 ? void 0 : _r.name
+                : (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_VARIANTS"
+                    ? (_t = (_s = menuVariants === null || menuVariants === void 0 ? void 0 : menuVariants.find((variant) => { var _a; return ((_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId); })) === null || _s === void 0 ? void 0 : _s.variant) === null || _t === void 0 ? void 0 : _t.name
+                    : (_u = addOns === null || addOns === void 0 ? void 0 : addOns.find((addOn) => (addOn === null || addOn === void 0 ? void 0 : addOn.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _u === void 0 ? void 0 : _u.name,
+            slug: (0, utils_1.generateSlug)(slugName),
             menuId: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_ITEMS"
                 ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId
                 : undefined,
@@ -1327,7 +1374,7 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId
                 : undefined,
             ingredients: {
-                create: (_m = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _m === void 0 ? void 0 : _m.map((ingredient) => ({
+                create: (_v = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _v === void 0 ? void 0 : _v.map((ingredient) => ({
                     rawMaterialId: ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterialId,
                     quantity: ingredient === null || ingredient === void 0 ? void 0 : ingredient.quantity,
                     cost: ingredient === null || ingredient === void 0 ? void 0 : ingredient.cost,
@@ -1392,11 +1439,11 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.createItemRecipe = createItemRecipe;
 const updateItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _o;
+    var _w;
     const { outletId, id } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_o = req === null || req === void 0 ? void 0 : req.user) === null || _o === void 0 ? void 0 : _o.id;
+    const userId = (_w = req === null || req === void 0 ? void 0 : req.user) === null || _w === void 0 ? void 0 : _w.id;
     if (userId !== outlet.adminId) {
         throw new unauthorized_1.UnauthorizedException("Unauthorized", root_1.ErrorCode.UNAUTHORIZED);
     }
@@ -1430,7 +1477,7 @@ const updateItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
     const ingredientsToDelete = existingIngredientIds.filter((id) => !incomingIngredientIds.includes(id));
     // Prepare transaction for atomic update
     yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _p;
+        var _x;
         // Main recipe update
         yield prisma.itemRecipe.update({
             where: {
@@ -1487,7 +1534,7 @@ const updateItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
             });
         }
         // Handle ingredient updates in a single operation
-        if (((_p = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _p === void 0 ? void 0 : _p.length) > 0) {
+        if (((_x = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _x === void 0 ? void 0 : _x.length) > 0) {
             // Perform upsert operations for ingredients
             const ingredientUpserts = validateFields.ingredients.map((ingredient) => {
                 // If ingredientId exists, it's an update. Otherwise, it's a create
@@ -1624,7 +1671,7 @@ const getRecipeById = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.getRecipeById = getRecipeById;
 const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _q;
+    var _y;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = validatePurchaseSchema.safeParse(req.body);
     if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.total) === undefined || (validateFields === null || validateFields === void 0 ? void 0 : validateFields.total) < 1) {
@@ -1635,7 +1682,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_q = req.user) === null || _q === void 0 ? void 0 : _q.id;
+    let userId = (_y = req.user) === null || _y === void 0 ? void 0 : _y.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -1661,10 +1708,10 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
         throw new not_found_1.NotFoundException("Vendor Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const transaction = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _r, _s;
+        var _z, _0;
         // Step 1: Restock raw materials and update `RecipeIngredient` costs
-        yield Promise.all((_r = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _r === void 0 ? void 0 : _r.map((item) => __awaiter(void 0, void 0, void 0, function* () {
-            var _t, _u;
+        yield Promise.all((_z = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _z === void 0 ? void 0 : _z.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            var _1, _2;
             const rawMaterial = yield prisma.rawMaterial.findFirst({
                 where: {
                     id: item.rawMaterialId,
@@ -1675,7 +1722,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 },
             });
             if (rawMaterial) {
-                const newStock = Number((_t = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _t !== void 0 ? _t : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                const newStock = Number((_1 = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _1 !== void 0 ? _1 : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
                 const newPricePerItem = Number(item.total) / Number(item.requestQuantity);
                 yield prisma.rawMaterial.update({
                     where: {
@@ -1686,7 +1733,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                         purchasedPrice: item.total,
                         purchasedPricePerItem: newPricePerItem,
                         purchasedUnit: item.unitName,
-                        lastPurchasedPrice: (_u = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _u !== void 0 ? _u : 0,
+                        lastPurchasedPrice: (_2 = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _2 !== void 0 ? _2 : 0,
                         purchasedStock: newStock,
                     },
                 });
@@ -1802,7 +1849,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 totalAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amountToBePaid,
                 purchaseStatus: "SETTLEMENT",
                 purchaseItems: {
-                    update: (_s = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _s === void 0 ? void 0 : _s.map((item) => ({
+                    update: (_0 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _0 === void 0 ? void 0 : _0.map((item) => ({
                         where: {
                             id: item === null || item === void 0 ? void 0 : item.id,
                             purchaseId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.id,
@@ -1903,7 +1950,7 @@ const settleFormSchema = zod_1.z.object({
     }),
 });
 const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _v;
+    var _3;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = settleFormSchema.safeParse(req.body);
     console.log("Amount to be paid", validateFields);
@@ -1919,7 +1966,7 @@ const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_v = req.user) === null || _v === void 0 ? void 0 : _v.id;
+    let userId = (_3 = req.user) === null || _3 === void 0 ? void 0 : _3.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -1993,11 +2040,11 @@ const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 
 });
 exports.settlePayForRaisedPurchase = settlePayForRaisedPurchase;
 const updateStockRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _w;
+    var _4;
     const { outletId, id } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_w = req.user) === null || _w === void 0 ? void 0 : _w.id;
+    let userId = (_4 = req.user) === null || _4 === void 0 ? void 0 : _4.id;
     const { stock } = req === null || req === void 0 ? void 0 : req.body;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);

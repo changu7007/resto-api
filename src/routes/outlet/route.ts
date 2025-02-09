@@ -15,17 +15,17 @@ import {
   patchOutletDetails,
   patchOutletOnlinePOrtalDetails,
   updateInvoiceDetails,
+  updateOnlinePortalStatus,
+  updateOrCreateOperatingHours,
+  updateOutletType,
 } from "../../controllers/outlet/outletController";
 import { errorHandler } from "../../error-handler";
 import { isAuthMiddelware } from "../../middlewares/auth";
 import {
   deleteOrderItem,
-  existingOrderPatch,
   existingOrderPatchApp,
   getAllActiveSessionOrders,
   getAllOrderByStaff,
-  getAllOrders,
-  getAllSessionOrders,
   getLiveOrders,
   getTableAllOrders,
   getTableAllSessionOrders,
@@ -38,7 +38,6 @@ import {
   orderItemModification,
   orderStatusPatch,
   postOrderForOwner,
-  postOrderForStaf,
   postOrderForUser,
 } from "../../controllers/outlet/order/orderOutletController";
 import {
@@ -51,7 +50,10 @@ import {
   getItemById,
   getItemForTable,
   getItemsByCategory,
+  getItemsByCategoryForOnlineAndDelivery,
   getItemsBySearch,
+  getItemsBySearchForOnlineAndDelivery,
+  getItemsForOnlineAndDelivery,
   getMenuVariants,
   getShortCodeStatus,
   getSingleAddons,
@@ -111,6 +113,7 @@ import {
   totalInventory,
 } from "../../controllers/outlet/stats/statsController";
 import {
+  checkDomain,
   createSubDomain,
   deleteSite,
   getDomain,
@@ -119,7 +122,9 @@ import {
   createStaff,
   deleteStaff,
   getAllStaffs,
+  getStaffAttendance,
   getStaffId,
+  getStaffIds,
   getStaffsForTable,
   updateStaff,
 } from "../../controllers/outlet/staffs/staffController";
@@ -194,9 +199,34 @@ import {
   acknowledgeAlert,
   getAlerts,
 } from "../../controllers/outlet/alerts/alert-controleer";
-import { createReport } from "../../controllers/outlet/reports/reports-controller";
+import {
+  createReport,
+  getReportsForTable,
+} from "../../controllers/outlet/reports/reports-controller";
+import {
+  existingOrderPatchForStaff,
+  getByStaffAllOrders,
+  getByStaffLiveOrders,
+  getStaffOrdersRecentTenOrders,
+  getStaffOrderStats,
+  orderItemModificationByStaff,
+  orderStatusPatchByStaff,
+  postOrderForStaf,
+  acceptOrderFromPrime,
+} from "../../controllers/outlet/order/staff-order-controller";
+import {
+  addStaffFavoriteMenu,
+  getStaffFavoriteMenu,
+  removeStaffFavoriteMenu,
+} from "../../controllers/outlet/items/staffs-items-controller";
 
 const outletRoute: Router = Router();
+
+outletRoute.patch(
+  "/:outletId/update-outlet-type",
+  isAuthMiddelware,
+  errorHandler(updateOutletType)
+);
 
 outletRoute.get(
   "/staff-outlet",
@@ -247,8 +277,27 @@ outletRoute.post(
   errorHandler(patchOutletOnlinePOrtalDetails)
 );
 
+outletRoute.post(
+  "/:outletId/update-operating-hours",
+  isAuthMiddelware,
+  errorHandler(updateOrCreateOperatingHours)
+);
+
+outletRoute.patch(
+  "/:outletId/online-portal-status",
+  isAuthMiddelware,
+  errorHandler(updateOnlinePortalStatus)
+);
+
 //staff
+outletRoute.post(
+  "/:outletId/accept-order-from-prime",
+  isAuthMiddelware,
+  errorHandler(acceptOrderFromPrime)
+);
+
 outletRoute.get("/:outletId/get-staffs", errorHandler(getAllStaffs));
+
 outletRoute.get(
   "/:outletId/get-staff/:staffId",
   isAuthMiddelware,
@@ -286,6 +335,85 @@ outletRoute.delete(
   errorHandler(deleteStaff)
 );
 
+//staff order
+outletRoute.get(
+  "/:outletId/staff-live-orders",
+  isAuthMiddelware,
+  errorHandler(getByStaffLiveOrders)
+);
+
+outletRoute.get(
+  "/:outletId/staff-order-stats",
+  isAuthMiddelware,
+  errorHandler(getStaffOrderStats)
+);
+
+outletRoute.get(
+  "/:outletId/staff-recent-ten-orders",
+  isAuthMiddelware,
+  errorHandler(getStaffOrdersRecentTenOrders)
+);
+
+outletRoute.get(
+  "/:outletId/staff-all-orders",
+  isAuthMiddelware,
+  errorHandler(getByStaffAllOrders)
+);
+
+outletRoute.patch(
+  "/:outletId/staff-order-item-patch/:orderId",
+  isAuthMiddelware,
+  errorHandler(orderItemModificationByStaff)
+);
+
+outletRoute.patch(
+  "/:outletId/staff-order-status-patch/:orderId",
+  isAuthMiddelware,
+  errorHandler(orderStatusPatchByStaff)
+);
+
+outletRoute.post(
+  "/:outletId/get-staff-attendance",
+  isAuthMiddelware,
+  errorHandler(getStaffAttendance)
+);
+
+//online and delivery
+outletRoute.get(
+  "/:outletId/online-and-delivery-items",
+  isAuthMiddelware,
+  errorHandler(getItemsByCategoryForOnlineAndDelivery)
+);
+
+outletRoute.get(
+  "/:outletId/online-and-delivery-items-search",
+  isAuthMiddelware,
+  errorHandler(getItemsBySearchForOnlineAndDelivery)
+);
+
+outletRoute.get(
+  "/:outletId/online-and-delivery-all-items",
+  // isAuthMiddelware,
+  errorHandler(getItemsForOnlineAndDelivery)
+);
+
+//staff items
+outletRoute.get(
+  "/:outletId/staff-favorite-menu",
+  isAuthMiddelware,
+  errorHandler(getStaffFavoriteMenu)
+);
+outletRoute.post(
+  "/:outletId/staff-favorite-menu",
+  isAuthMiddelware,
+  errorHandler(addStaffFavoriteMenu)
+);
+outletRoute.delete(
+  "/:outletId/staff-favorite-menu/:itemId",
+  isAuthMiddelware,
+  errorHandler(removeStaffFavoriteMenu)
+);
+
 //Orders Routes
 outletRoute.post(
   "/:outletId/staff-post-order",
@@ -303,9 +431,9 @@ outletRoute.post(
   errorHandler(postOrderForUser)
 );
 outletRoute.patch(
-  "/:outletId/add-orders/:orderId",
+  "/:outletId/add-existing-orders-staff/:orderId",
   isAuthMiddelware,
-  errorHandler(existingOrderPatch)
+  errorHandler(existingOrderPatchForStaff)
 );
 outletRoute.patch(
   "/:outletId/order-item-patch/:orderId",
@@ -358,19 +486,12 @@ outletRoute.get(
   errorHandler(getTodayOrdersCount)
 );
 outletRoute.get("/:outletId/live-orders", errorHandler(getLiveOrders));
-outletRoute.get(
-  "/:outletId/all-orders",
-  isAuthMiddelware,
-  errorHandler(getAllOrders)
-);
+
 outletRoute.get(
   "/:outletId/active-session-orders",
   errorHandler(getAllActiveSessionOrders)
 );
-outletRoute.get(
-  "/:outletId/all-session-orders",
-  errorHandler(getAllSessionOrders)
-);
+
 outletRoute.post(
   "/:outletId/all-table-session-orders",
   isAuthMiddelware,
@@ -398,14 +519,27 @@ outletRoute.post(
   isAuthMiddelware,
   errorHandler(postItem)
 );
-outletRoute.get("/:outletId/get-items", errorHandler(getAllItem));
-outletRoute.get("/:outletId/menu-items", errorHandler(getItemsByCategory));
-outletRoute.get("/:outletId/menu-items-search", errorHandler(getItemsBySearch));
+outletRoute.get(
+  "/:outletId/get-items",
+  isAuthMiddelware,
+  errorHandler(getAllItem)
+);
+outletRoute.get(
+  "/:outletId/menu-items",
+  isAuthMiddelware,
+  errorHandler(getItemsByCategory)
+);
+outletRoute.get(
+  "/:outletId/menu-items-search",
+  isAuthMiddelware,
+  errorHandler(getItemsBySearch)
+);
 outletRoute.post(
   "/:outletId/get-table-items",
   isAuthMiddelware,
   errorHandler(getItemForTable)
 );
+
 outletRoute.post(
   "/:outletId/get-table-categories",
   isAuthMiddelware,
@@ -617,13 +751,24 @@ outletRoute.post(
   isAuthMiddelware,
   errorHandler(createReport)
 );
+outletRoute.post(
+  "/:outletId/get-table-report",
+  isAuthMiddelware,
+  errorHandler(getReportsForTable)
+);
 
 //domains
+outletRoute.get(
+  "/:outletId/check-domain",
+  isAuthMiddelware,
+  errorHandler(checkDomain)
+);
 outletRoute.get(
   "/:outletId/get-domain",
   isAuthMiddelware,
   errorHandler(getDomain)
 );
+
 outletRoute.post(
   "/:outletId/create-sub-domain",
   isAuthMiddelware,
@@ -651,9 +796,15 @@ outletRoute.patch(
   isAuthMiddelware,
   errorHandler(bulkUpdatePayrollStatus)
 );
+outletRoute.get(
+  "/:outletId/get-staff-ids",
+  isAuthMiddelware,
+  errorHandler(getStaffIds)
+);
 //customers
 outletRoute.get(
   "/:outletId/get-customers",
+
   isAuthMiddelware,
   errorHandler(getAllCustomer)
 );

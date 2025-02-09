@@ -23,7 +23,10 @@ const appAuthController_1 = require("../../controllers/auth/owner/appAuthControl
 const expenseController_1 = require("../../controllers/outlet/expenses/expenseController");
 const alert_controleer_1 = require("../../controllers/outlet/alerts/alert-controleer");
 const reports_controller_1 = require("../../controllers/outlet/reports/reports-controller");
+const staff_order_controller_1 = require("../../controllers/outlet/order/staff-order-controller");
+const staffs_items_controller_1 = require("../../controllers/outlet/items/staffs-items-controller");
 const outletRoute = (0, express_1.Router)();
+outletRoute.patch("/:outletId/update-outlet-type", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.updateOutletType));
 outletRoute.get("/staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getStaffOutlet));
 outletRoute.get("/:outletId/get-razorpay-config", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getrazorpayConfig));
 outletRoute.post("/:outletId/create-outlet-from-copy", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.createOutletFromOutletHub));
@@ -36,7 +39,9 @@ outletRoute.delete("/:outletId/delete-outlet", auth_1.isAuthMiddelware, (0, erro
 //integration
 outletRoute.get("/:outletId/get-integrations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getIntegration));
 outletRoute.post("/:outletId/patch-online-hub", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.patchOutletOnlinePOrtalDetails));
+outletRoute.patch("/:outletId/online-portal-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.updateOnlinePortalStatus));
 //staff
+outletRoute.post("/:outletId/accept-order-from-prime", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.acceptOrderFromPrime));
 outletRoute.get("/:outletId/get-staffs", (0, error_handler_1.errorHandler)(staffController_1.getAllStaffs));
 outletRoute.get("/:outletId/get-staff/:staffId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.getStaffId));
 outletRoute.post("/:outletId/create-staff", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.createStaff));
@@ -45,11 +50,29 @@ outletRoute.post("/:outletId/get-table-customers", auth_1.isAuthMiddelware, (0, 
 outletRoute.patch("/:outletId/update-staff/:staffId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.updateStaff));
 outletRoute.patch("/:outletId/outlet-personal", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.patchOutletDetails));
 outletRoute.delete("/:outletId/delete-staff/:staffId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.deleteStaff));
+//staff order
+outletRoute.get("/:outletId/staff-live-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.getByStaffLiveOrders));
+outletRoute.get("/:outletId/staff-order-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.getStaffOrderStats));
+outletRoute.get("/:outletId/staff-recent-ten-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.getStaffOrdersRecentTenOrders));
+outletRoute.get("/:outletId/staff-all-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.getByStaffAllOrders));
+outletRoute.patch("/:outletId/staff-order-item-patch/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.orderItemModificationByStaff));
+outletRoute.patch("/:outletId/staff-order-status-patch/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.orderStatusPatchByStaff));
+outletRoute.post("/:outletId/get-staff-attendance", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.getStaffAttendance));
+//online and delivery
+outletRoute.get("/:outletId/online-and-delivery-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategoryForOnlineAndDelivery));
+outletRoute.get("/:outletId/online-and-delivery-items-search", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearchForOnlineAndDelivery));
+outletRoute.get("/:outletId/online-and-delivery-all-items", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(itemsController_1.getItemsForOnlineAndDelivery));
+//staff items
+outletRoute.get("/:outletId/staff-favorite-menu", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffs_items_controller_1.getStaffFavoriteMenu));
+outletRoute.post("/:outletId/staff-favorite-menu", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffs_items_controller_1.addStaffFavoriteMenu));
+outletRoute.delete("/:outletId/staff-favorite-menu/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffs_items_controller_1.removeStaffFavoriteMenu));
 //Orders Routes
-outletRoute.post("/:outletId/staff-post-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.postOrderForStaf));
+outletRoute.post("/:outletId/staff-post-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.postOrderForStaf));
 outletRoute.post("/:outletId/app-post-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.postOrderForOwner));
 outletRoute.post("/:outletId/user-post-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.postOrderForUser));
-outletRoute.patch("/:outletId/add-orders/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.existingOrderPatch));
+outletRoute.patch("/:outletId/add-existing-orders-staff/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.existingOrderPatchForStaff));
 outletRoute.patch("/:outletId/order-item-patch/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderItemModification));
 outletRoute.delete("/:outletId/order-item-delete/:orderItemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.deleteOrderItem));
 outletRoute.patch("/:outletId/app-add-orders/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.existingOrderPatchApp));
@@ -61,18 +84,16 @@ outletRoute.patch("/:outletId/orderSession/:orderSessionId", auth_1.isAuthMiddel
 outletRoute.patch("/:outletId/order-session-bulk-delete", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderessionBatchDelete));
 outletRoute.get("/:outletId/today-order-count", (0, error_handler_1.errorHandler)(orderOutletController_1.getTodayOrdersCount));
 outletRoute.get("/:outletId/live-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getLiveOrders));
-outletRoute.get("/:outletId/all-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllOrders));
 outletRoute.get("/:outletId/active-session-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getAllActiveSessionOrders));
-outletRoute.get("/:outletId/all-session-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getAllSessionOrders));
 outletRoute.post("/:outletId/all-table-session-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllSessionOrders));
 outletRoute.post("/:outletId/all-table-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllOrders));
 outletRoute.get("/:outletId/all-staff-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllOrderByStaff));
 outletRoute.get("/:outletId/table/:tableId/customer/:customerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.getTableCurrentOrders));
 //Items Route
 outletRoute.post("/:outletId/create-item", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.postItem));
-outletRoute.get("/:outletId/get-items", (0, error_handler_1.errorHandler)(itemsController_1.getAllItem));
-outletRoute.get("/:outletId/menu-items", (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategory));
-outletRoute.get("/:outletId/menu-items-search", (0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearch));
+outletRoute.get("/:outletId/get-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getAllItem));
+outletRoute.get("/:outletId/menu-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategory));
+outletRoute.get("/:outletId/menu-items-search", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearch));
 outletRoute.post("/:outletId/get-table-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemForTable));
 outletRoute.post("/:outletId/get-table-categories", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getCategoriesForTable));
 outletRoute.post("/:outletId/get-table-variants", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getVariantsForTable));
@@ -127,6 +148,7 @@ outletRoute.get("/:outletId/get-hour-wise-order-metrics", auth_1.isAuthMiddelwar
 outletRoute.get("/:outletId/get-category-order-contribution", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getCategoryContributionStats));
 outletRoute.post("/:outletId/create-report", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(reports_controller_1.createReport));
 //domains
+outletRoute.get("/:outletId/check-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.checkDomain));
 outletRoute.get("/:outletId/get-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.getDomain));
 outletRoute.post("/:outletId/create-sub-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.createSubDomain));
 outletRoute.delete("/:outletId/delete-domain-settings/:siteId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.deleteSite));

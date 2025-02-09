@@ -12,11 +12,11 @@ datasource db {
 }
 
 model Restaurant {
-  id                    String                 @id @default(auto()) @map("_id") @db.ObjectId
+  id                    String                     @id @default(auto()) @map("_id") @db.ObjectId
   name                  String
-  imageUrl              String                 @default("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=1000&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8cmVzdGF1cmFudHxlbnwwfHwwfHx8MA%3D%3D")
-  adminId               String                 @db.ObjectId()
-  outletType            OutletType             @default(NONE)
+  imageUrl              String                     @default("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=1000&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8cmVzdGF1cmFudHxlbnwwfHwwfHx8MA%3D%3D")
+  adminId               String                     @db.ObjectId()
+  outletType            OutletType                 @default(NONE)
   address               String?
   email                 String?
   phoneNo               String?
@@ -33,45 +33,46 @@ model Restaurant {
   fssai                 String?
   orderRadius           Int?
   businessType          String?
-  status                Boolean                @default(false)
+  status                Boolean                    @default(false)
   closeTime             String?
-  isDelivery            Boolean                @default(false)
-  isPickUp              Boolean                @default(false)
-  isDineIn              Boolean                @default(false)
-  onlinePortal          Boolean                @default(false)
-  users                 User                   @relation("RestaurantToUsers", fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  customers             Customer[]             @relation("RestaurantToCustomer")
-  assets                Assets[]               @relation("RestaurantToAssets")
-  categories            Category[]             @relation("RestaurantToCategory")
-  units                 Unit[]                 @relation("RestaurantToUnit")
-  rawMaterialCategories RawMaterialCategory[]  @relation("RestaurantToRawCategory")
-  variants              Variants[]             @relation("RestaurantToVariants")
-  addOns                AddOns[]               @relation("RestaurantToAddOns")
-  menu                  MenuItem[]             @relation("RestaurantToMenu")
-  menuVariansts         MenuItemVariant[]      @relation("RestaurantToMenuVariants")
-  addOnVariants         AddOnVariants[]        @relation("RestaurantToAddOnVariants")
-  rawMaterial           RawMaterial[]          @relation("RestaurantToRawMaterial")
-  orders                Order[]                @relation("RestaurantToOrder")
-  sites                 Site[]                 @relation("RestaurantToSite")
-  tables                Table[]                @relation("RestaurantToTable")
-  staffs                Staff[]                @relation("RestaurantToStaffs")
-  areas                 Areas[]                @relation("RestaurantToAreas")
-  vendors               Vendor[]               @relation("RestaurantToVendor")
-  purchases             Purchase[]             @relation("RestaurantToPurchase")
-  invoice               Invoice?               @relation("RestaurantToInvoice")
-  razorpayInfo          RazorpayIntegration?   @relation("RestaurantToRazorapy")
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  isDelivery            Boolean                    @default(false)
+  isPickUp              Boolean                    @default(false)
+  isDineIn              Boolean                    @default(false)
+  onlinePortal          Boolean                    @default(false)
+  users                 User                       @relation("RestaurantToUsers", fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  customerAccess        CustomerRestaurantAccess[] @relation("RestaurantToCustomerAccess")
+  assets                Assets[]                   @relation("RestaurantToAssets")
+  categories            Category[]                 @relation("RestaurantToCategory")
+  units                 Unit[]                     @relation("RestaurantToUnit")
+  rawMaterialCategories RawMaterialCategory[]      @relation("RestaurantToRawCategory")
+  variants              Variants[]                 @relation("RestaurantToVariants")
+  addOns                AddOns[]                   @relation("RestaurantToAddOns")
+  menu                  MenuItem[]                 @relation("RestaurantToMenu")
+  menuVariansts         MenuItemVariant[]          @relation("RestaurantToMenuVariants")
+  addOnVariants         AddOnVariants[]            @relation("RestaurantToAddOnVariants")
+  rawMaterial           RawMaterial[]              @relation("RestaurantToRawMaterial")
+  orders                Order[]                    @relation("RestaurantToOrder")
+  sites                 Site[]                     @relation("RestaurantToSite")
+  tables                Table[]                    @relation("RestaurantToTable")
+  staffs                Staff[]                    @relation("RestaurantToStaffs")
+  areas                 Areas[]                    @relation("RestaurantToAreas")
+  vendors               Vendor[]                   @relation("RestaurantToVendor")
+  purchases             Purchase[]                 @relation("RestaurantToPurchase")
+  invoice               Invoice?                   @relation("RestaurantToInvoice")
+  razorpayInfo          RazorpayIntegration?       @relation("RestaurantToRazorapy")
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
   Areas                 Areas[]
-  integrations          Integration[]          @relation("RestaurantToIntegration")
-  notifications         Notification[]         @relation("RestaurantToNotification")
-  orderSession          OrderSession[]         @relation("RestaurantToOrderSession")
-  ItemRecipes           ItemRecipe[]           @relation("RestaurantToRecepies")
+  integrations          Integration[]              @relation("RestaurantToIntegration")
+  notifications         Notification[]             @relation("RestaurantToNotification")
+  orderSession          OrderSession[]             @relation("RestaurantToOrderSession")
+  ItemRecipes           ItemRecipe[]               @relation("RestaurantToRecepies")
   Invite                Invite[]
-  userAccess            UserRestaurantAccess[] @relation("RestaurantToAccess")
-  Expenses              Expenses[]             @relation("RestaurantToExpenses")
-  Alert                 Alert[]                @relation("RestaurantToAlert")
-  Report                Report[]               @relation("RestaurantToReports")
+  userAccess            UserRestaurantAccess[]     @relation("RestaurantToAccess")
+  Expenses              Expenses[]                 @relation("RestaurantToExpenses")
+  Alert                 Alert[]                    @relation("RestaurantToAlert")
+  Report                Report[]                   @relation("RestaurantToReports")
+  targetMetrics         TargetMetrics?
 }
 
 model Invite {
@@ -167,6 +168,11 @@ enum UserRole {
   PARTNER
   WAITER
   CHEF
+  FRONTDESK
+  SECURITY
+  DISHWASHER
+  OTHER
+  HOUSEKEEPING
   CUSTOMER
 }
 
@@ -176,37 +182,78 @@ enum StaffActive {
 }
 
 model Staff {
-  id            String         @id @default(auto()) @map("_id") @db.ObjectId
-  active        StaffActive    @default(ACTIVE)
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  active        StaffActive     @default(ACTIVE)
   name          String
-  email         String         @unique
+  email         String          @unique
   emailVerified Boolean?
   password      String?
   image         String?
-  phoneNo       String         @unique
+  phoneNo       String          @unique
   role          UserRole
-  restaurantId  String         @db.ObjectId
-  restaurant    Restaurant     @relation("RestaurantToStaffs", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  restaurantId  String          @db.ObjectId
+  restaurant    Restaurant      @relation("RestaurantToStaffs", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   orderSession  OrderSession[]
   orders        Order[]
   table         Table[]
+  shift         Shift[]
+  checkIns      CheckInRecord[]
   payroll       Payroll[]
-  allowances    String?
-  deductions    String?
-  payFrequency  PayFrequency   @default(MONTHLY)
+  favoriteMenu  String[]
+  payFrequency  PayFrequency    @default(MONTHLY)
+  allowances    Float?
+  deductions    Float?
   salary        String
   joinedDate    DateTime
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([restaurantId])
+}
+
+model Shift {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  staff       Staff       @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  staffId     String      @db.ObjectId
+  status      ShiftStatus
+  shift       ShiftType
+  shiftTiming String
+  shiftDate   DateTime
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum ShiftStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ShiftType {
+  MORNING
+  EVENING
+  NIGHT
+}
+
+model CheckInRecord {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  staff        Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  staffId      String    @db.ObjectId
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  date         DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Payroll {
   id           String        @id @default(auto()) @map("_id") @db.ObjectId
   staffId      String        @db.ObjectId
   staff        Staff         @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  allowances   Float?
+  deductions   Float?
+  bonus        Float?
   amountPaid   Float         @default(0)
+  reason       String?
   payDate      DateTime      @default(now())
   status       PayrollStatus @default(PENDING)
   payFrequency PayFrequency
@@ -261,8 +308,8 @@ model UserRestaurantAccess {
   id           String     @id @default(auto()) @map("_id") @db.ObjectId
   userId       String     @db.ObjectId
   restaurantId String     @db.ObjectId
-  user         User       @relation("UserToAccess", fields: [userId], references: [id])
-  restaurant   Restaurant @relation("RestaurantToAccess", fields: [restaurantId], references: [id])
+  user         User       @relation("UserToAccess", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  restaurant   Restaurant @relation("RestaurantToAccess", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   role         UserRole   @default(MANAGER) // Custom role for access control
   createdAt    DateTime   @default(now())
 }
@@ -357,24 +404,39 @@ enum RestaurantType {
 }
 
 model Customer {
-  id             String          @id @default(auto()) @map("_id") @db.ObjectId
-  name           String
-  phoneNo        String          @unique
-  email          String?
-  role           UserRole        @default(CUSTOMER)
-  emailVerified  DateTime?
-  image          String?
-  hashedPassword String?
-  userType       RestaurantType?
-  restaurantId   String          @db.ObjectId
-  restaurant     Restaurant      @relation("RestaurantToCustomer", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  table          Table[]
-  orderSession   OrderSession[]
-  sessionStart   DateTime?
-  sessionEnd     DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id               String                     @id @default(auto()) @map("_id") @db.ObjectId
+  name             String
+  phoneNo          String                     @unique
+  email            String?
+  role             UserRole                   @default(CUSTOMER)
+  emailVerified    DateTime?
+  image            String?
+  hashedPassword   String?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  restaurantAccess CustomerRestaurantAccess[] @relation("CustomerToAccess")
+}
 
+// New model for customer-restaurant relationship
+model CustomerRestaurantAccess {
+  id           String          @id @default(auto()) @map("_id") @db.ObjectId
+  customerId   String          @db.ObjectId
+  restaurantId String          @db.ObjectId
+  customer     Customer        @relation("CustomerToAccess", fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant      @relation("RestaurantToCustomerAccess", fields: [restaurantId], references: [id], onDelete: Cascade)
+  // Additional fields for customer-restaurant relationship
+  userType     RestaurantType?
+  table        Table[]
+  orderSession OrderSession[]
+  lastVisit    DateTime?
+  totalOrders  Int             @default(0)
+  totalSpent   Float           @default(0)
+  isFavorite   Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([customerId, restaurantId])
+  @@index([customerId])
   @@index([restaurantId])
 }
 
@@ -415,6 +477,7 @@ model Category {
   restaurantId String     @db.ObjectId
   restaurant   Restaurant @relation("RestaurantToCategory", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name         String
+  slug         String
   description  String?
   menuItems    MenuItem[] @relation("CategoryToMenu")
   createdAt    DateTime   @default(now())
@@ -428,6 +491,7 @@ model RawMaterialCategory {
   restaurantId String        @db.ObjectId
   restaurant   Restaurant    @relation("RestaurantToRawCategory", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name         String
+  slug         String
   shortName    String?
   ramMaterial  RawMaterial[] @relation("RawCategoryToRawMaterial")
   createdAt    DateTime      @default(now())
@@ -441,6 +505,7 @@ model Unit {
   restaurantId      String          @db.ObjectId
   restaurant        Restaurant      @relation("RestaurantToUnit", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name              String
+  slug              String
   description       String?
   purchaseUnits     PurchaseItems[] @relation("PurchaseItemToUnit")
   consumptionUnits  RawMaterial[]   @relation("UnitToConsumption")
@@ -465,6 +530,7 @@ model RawMaterial {
   minimumStockUnit      Unit                @relation("UnitToMinimumStock", fields: [minimumStockLevelUnit], references: [id])
   // Basic fields
   name                  String
+  slug                  String
   shortcode             String?
   currentStock          Float?
   minimumStockLevel     Float?
@@ -492,6 +558,7 @@ model Areas {
   restaurantId String     @db.ObjectId
   restaurant   Restaurant @relation("RestaurantToAreas", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name         String
+  slug         String
   table        Table[]    @relation("AreasToTable")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -515,10 +582,11 @@ model MenuItem {
   restaurantId     String            @db.ObjectId
   restaurant       Restaurant        @relation("RestaurantToMenu", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   categoryId       String            @db.ObjectId
-  category         Category          @relation("CategoryToMenu", fields: [categoryId], references: [id])
+  category         Category          @relation("CategoryToMenu", fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   isFeatured       Boolean?          @default(false)
   isArchived       Boolean?          @default(false)
   name             String
+  slug             String
   shortCode        String?
   description      String
   isVariants       Boolean           @default(false)
@@ -544,7 +612,7 @@ model MenuItem {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   itemRecipeId     String?           @db.ObjectId
-  itemRecipe       ItemRecipe?       @relation("ItemRecipeToMenu", fields: [itemRecipeId], references: [id])
+  itemRecipe       ItemRecipe?       @relation("ItemRecipeToMenu", fields: [itemRecipeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@index([categoryId])
   @@index([restaurantId])
@@ -581,6 +649,7 @@ model ItemRecipe {
   itemPrice          Float?
   itemCost           Float?
   name               String             @default("")
+  slug               String
   ingredients        RecipeIngredient[]
   createdBy          String?
   lastModifiedBy     String?
@@ -611,6 +680,7 @@ model RecipeIngredient {
 model Variants {
   id               String            @id @default(auto()) @map("_id") @db.ObjectId
   name             String
+  slug             String
   variantCategory  TypeVariants
   restaurantId     String            @db.ObjectId
   restaurant       Restaurant        @relation("RestaurantToVariants", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -672,6 +742,7 @@ model AddOns {
   restaurant      Restaurant        @relation("RestaurantToAddOns", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   menuAddOnGroups MenuGroupAddOns[] @relation("AddOnsToMenuGroupAddOns")
   title           String
+  slug            String
   description     String?
   status          Boolean           @default(true)
   addOnVariants   AddOnVariants[]
@@ -690,6 +761,7 @@ model AddOnVariants {
   restaurant      Restaurant       @relation("RestaurantToAddOnVariants", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   addon           AddOns           @relation(fields: [addonId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name            String
+  slug            String
   netPrice        String?
   price           String           @default("")
   gst             Float?
@@ -732,31 +804,31 @@ enum OrderSessionStatus {
 }
 
 model OrderSession {
-  id            String             @id @default(auto()) @map("_id") @db.ObjectId
+  id            String                    @id @default(auto()) @map("_id") @db.ObjectId
   billId        String
   orders        Order[]
   username      String
   phoneNo       String?
-  sessionStatus OrderSessionStatus @default(ONPROGRESS)
+  sessionStatus OrderSessionStatus        @default(ONPROGRESS)
   orderType     OrderType
-  active        Boolean            @default(true)
-  restaurantId  String             @db.ObjectId
-  restaurant    Restaurant         @relation("RestaurantToOrderSession", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  customerId    String?            @db.ObjectId
-  customer      Customer?          @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  tableId       String?            @db.ObjectId
-  table         Table?             @relation(fields: [tableId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  staffId       String?            @db.ObjectId
-  staff         Staff?             @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  adminId       String?            @db.ObjectId
-  admin         User?              @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  createdAt     DateTime           @default(now())
+  active        Boolean                   @default(true)
+  restaurantId  String                    @db.ObjectId
+  restaurant    Restaurant                @relation("RestaurantToOrderSession", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  customerId    String?                   @db.ObjectId
+  customer      CustomerRestaurantAccess? @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tableId       String?                   @db.ObjectId
+  table         Table?                    @relation(fields: [tableId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  staffId       String?                   @db.ObjectId
+  staff         Staff?                    @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  adminId       String?                   @db.ObjectId
+  admin         User?                     @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt     DateTime                  @default(now())
   subTotal      Float?
-  isPaid        Boolean?           @default(false)
+  isPaid        Boolean?                  @default(false)
   invoiceUrl    String?
   createdBy     String?
   paymentMethod PaymentMethod?
-  updatedAt     DateTime           @updatedAt
+  updatedAt     DateTime                  @updatedAt
 
   @@index([customerId])
   @@index([staffId])
@@ -824,7 +896,7 @@ model OrderItem {
   netPrice        String?
   grossProfit     Float?
   originalRate    Int?
-  quantity        String
+  quantity        Float
   isVariants      Boolean
   selectedVariant selectedSizeVariant?
   addOnSelected   AddOnSelected[]
@@ -891,25 +963,26 @@ model Otp {
 }
 
 model Table {
-  id                    String         @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId          String         @db.ObjectId
-  restaurant            Restaurant     @relation("RestaurantToTable", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id                    String                    @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId          String                    @db.ObjectId
+  restaurant            Restaurant                @relation("RestaurantToTable", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name                  String
+  slug                  String
   shortCode             String
   capacity              String
   uniqueId              String
   inviteCode            String?
   qrcode                String?
-  areaId                String         @db.ObjectId
-  areas                 Areas          @relation("AreasToTable", fields: [areaId], references: [id])
+  areaId                String                    @db.ObjectId
+  areas                 Areas                     @relation("AreasToTable", fields: [areaId], references: [id])
   orderSession          OrderSession[]
   currentOrderSessionId String?
-  staffId               String?        @db.ObjectId
-  staff                 Staff?         @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  customerId            String?        @db.ObjectId
-  customer              Customer?      @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  createdAt             DateTime       @default(now())
-  occupied              Boolean        @default(false)
+  staffId               String?                   @db.ObjectId
+  staff                 Staff?                    @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  customerId            String?                   @db.ObjectId
+  customer              CustomerRestaurantAccess? @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt             DateTime                  @default(now())
+  occupied              Boolean                   @default(false)
 
   @@index([restaurantId])
   @@index([staffId])
@@ -935,6 +1008,7 @@ model Vendor {
   restaurantId String     @db.ObjectId
   restaurant   Restaurant @relation("RestaurantToVendor", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name         String
+  slug         String
   purchases    Purchase[] @relation("PurchaseToVendor")
 
   @@index([restaurantId])
@@ -1073,12 +1147,22 @@ model Report {
   userId       String
   reportType   ReportType
   format       ReportFormat
+  dateRange    DateRange?
+  reportData   Json?
   generatedBy  String?
   fileUrl      String?
   status       ReportStatus @default(PENDING)
   error        String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+}
+
+model DateRange {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  startDate DateTime
+  endDate   DateTime
+  reportId  String   @unique @db.ObjectId
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
 }
 
 enum ReportType {
@@ -1099,4 +1183,22 @@ enum ReportStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+model TargetMetrics {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String     @unique @db.ObjectId
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  targetGrossProfit       Float @default(30) // 30% target
+  targetNetProfit         Float @default(15) // 15% target
+  targetFoodCost          Float @default(30) // 30% target
+  targetLaborCost         Float @default(25) // 25% target
+  targetOccupancyRate     Float @default(70) // 70% target
+  targetServiceTime       Float @default(30) // 30 minutes target
+  targetInventoryTurnover Float @default(12) // 12 times per year
+  targetCurrentRatio      Float @default(1.5) // 1.5:1 target
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }

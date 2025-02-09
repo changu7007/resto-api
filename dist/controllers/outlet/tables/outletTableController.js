@@ -18,6 +18,7 @@ const redis_1 = require("../../../services/redis");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const get_tables_1 = require("../../../lib/outlet/get-tables");
 const orderOutletController_1 = require("../order/orderOutletController");
+const utils_1 = require("../../../lib/utils");
 const getAllTablesForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -223,6 +224,7 @@ const createTable = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     yield __1.prismaDB.table.create({
         data: {
             name,
+            slug: (0, utils_1.generateSlug)(name),
             capacity,
             uniqueId,
             shortCode,
@@ -326,6 +328,7 @@ const createArea = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     yield __1.prismaDB.areas.create({
         data: {
             name,
+            slug: (0, utils_1.generateSlug)(name),
             restaurantId: getOutlet.id,
         },
     });
@@ -491,9 +494,9 @@ const getTableCurrentOrders = (req, res) => __awaiter(void 0, void 0, void 0, fu
     if (customerId !== ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
-    const validCustomer = yield __1.prismaDB.customer.findFirst({
+    const validCustomer = yield __1.prismaDB.customerRestaurantAccess.findFirst({
         where: {
-            id: customerId,
+            customerId: customerId,
         },
     });
     if (!(validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.id)) {

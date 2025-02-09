@@ -3,6 +3,7 @@ import { errorHandler } from "../../error-handler";
 import { getPrimeDomain } from "../../controllers/outlet/domains/domainController";
 import {
   CustomerLogin,
+  CustomerUpdateAccessToken,
   customerUpdateSession,
   getCurrentOrderForCustomer,
   getCustomerOrdersById,
@@ -37,5 +38,10 @@ appRoute.post(
   "/outlet/:outletId/create-razorpay-order",
   isAuthMiddelware,
   errorHandler(CreateRazorPayOrderForOutlet)
+);
+appRoute.post(
+  "/customer-update-access-token",
+  isAuthMiddelware,
+  errorHandler(CustomerUpdateAccessToken)
 );
 export default appRoute;

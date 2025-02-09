@@ -13,6 +13,8 @@ import LokiTransport from "winston-loki";
 import { createLogger } from "winston";
 import { cleanupMiddleware } from "./monitoring";
 import { initializeAlertCrons } from "./lib/alert-service";
+import { billQueueWorker } from "./services/bullmq/worker";
+import { setupCacheInvalidation } from "./controllers/outlet/stats/statsController";
 
 const options = {
   transports: [
@@ -30,6 +32,30 @@ const server = http.createServer(app);
 
 websocketManager.initialize(server);
 
+logger.info("Worker process started");
+
+// Keep the process running
+process.on("SIGTERM", async () => {
+  logger.info("Worker process terminating...");
+  await billQueueWorker.close();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("Worker process interrupted...");
+  await billQueueWorker.close();
+  process.exit(0);
+});
+
+// Log any unhandled errors
+process.on("unhandledRejection", (error) => {
+  logger.error("Unhandled rejection in worker:", error);
+});
+
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught exception in worker:", error);
+});
+
 app.use(cleanupMiddleware);
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -37,6 +63,7 @@ app.use(cookieParser());
 app.use(morgan("dev"));
 app.use("/api", rootRouter);
 app.use(errorMiddelware);
+setupCacheInvalidation();
 initializeAlertCrons();
 
 export const prismaDB = new PrismaClient();

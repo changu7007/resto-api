@@ -15,6 +15,7 @@ const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
 const __1 = require("../../..");
 const bad_request_1 = require("../../../exceptions/bad-request");
+const utils_1 = require("../../../lib/utils");
 const getVariants = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -48,6 +49,7 @@ const createVariant = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     yield __1.prismaDB.variants.create({
         data: {
             name,
+            slug: (0, utils_1.generateSlug)(name),
             variantCategory,
             restaurantId: outlet.id,
         },

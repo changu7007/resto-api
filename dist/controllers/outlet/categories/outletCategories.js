@@ -16,6 +16,8 @@ const root_1 = require("../../../exceptions/root");
 const __1 = require("../../..");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const redis_1 = require("../../../services/redis");
+const get_items_1 = require("../../../lib/outlet/get-items");
+const utils_1 = require("../../../lib/utils");
 const getAllCategories = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const categories = yield redis_1.redis.get(`o-${outletId}-categories`);
@@ -30,15 +32,7 @@ const getAllCategories = (req, res) => __awaiter(void 0, void 0, void 0, functio
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const getCategories = yield __1.prismaDB.category.findMany({
-        where: {
-            restaurantId: outlet.id,
-        },
-        include: {
-            menuItems: true,
-        },
-    });
-    yield redis_1.redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
+    const getCategories = yield (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id);
     return res.json({
         success: true,
         categories: getCategories,
@@ -59,18 +53,11 @@ const createCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
     yield __1.prismaDB.category.create({
         data: {
             name,
+            slug: (0, utils_1.generateSlug)(name),
             restaurantId: outlet.id,
         },
     });
-    const getCategories = yield __1.prismaDB.category.findMany({
-        where: {
-            restaurantId: outlet.id,
-        },
-        include: {
-            menuItems: true,
-        },
-    });
-    yield redis_1.redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
+    yield (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id);
     return res.json({
         success: true,
         message: "Category Created ",
@@ -128,15 +115,7 @@ const deleteCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
             id: category === null || category === void 0 ? void 0 : category.id,
         },
     });
-    const getCategories = yield __1.prismaDB.category.findMany({
-        where: {
-            restaurantId: outlet.id,
-        },
-        include: {
-            menuItems: true,
-        },
-    });
-    yield redis_1.redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
+    yield (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id);
     return res.json({
         success: true,
         message: "Category Deleted ",

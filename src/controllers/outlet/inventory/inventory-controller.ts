@@ -21,6 +21,7 @@ import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { getOAllItems } from "../../../lib/outlet/get-items";
 import { websocketManager } from "../../../services/ws";
+import { generateSlug } from "../../../lib/utils";
 
 const unitSchema = z.object({
   name: z.string().min(1),
@@ -70,6 +71,7 @@ export const createRawMaterial = async (req: Request, res: Response) => {
     data: {
       restaurantId: outlet?.id,
       name: validateFields.name,
+      slug: generateSlug(validateFields.name),
       shortcode: validateFields.barcode,
       categoryId: validateFields.categoryId,
       consumptionUnitId: validateFields.consumptionUnitId,
@@ -250,6 +252,7 @@ export const createUnit = async (req: Request, res: Response) => {
     data: {
       restaurantId: outlet?.id,
       name: validateFields.name,
+      slug: generateSlug(validateFields.name),
     },
   });
 
@@ -389,6 +392,7 @@ export const createRawMaterialCategory = async (
     data: {
       restaurantId: outlet?.id,
       name: validateFields.name,
+      slug: generateSlug(validateFields.name),
     },
   });
 
@@ -1305,6 +1309,7 @@ export const createVendor = async (req: Request, res: Response) => {
     data: {
       restaurantId: outlet?.id,
       name: validateFields.name,
+      slug: generateSlug(validateFields.name),
     },
   });
 
@@ -1606,6 +1611,48 @@ export const createItemRecipe = async (req: Request, res: Response) => {
 
   const validateFields = recipeSchema.parse(req.body);
 
+  const menuItems = await prismaDB.menuItem.findMany({
+    where: {
+      restaurantId: outlet?.id,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  const menuVariants = await prismaDB.menuItemVariant.findMany({
+    where: {
+      restaurantId: outlet?.id,
+    },
+    select: {
+      variant: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  const addOns = await prismaDB.addOnVariants.findMany({
+    where: {
+      restaurantId: outlet?.id,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+  const slugName =
+    validateFields?.recipeFor === "MENU_ITEMS"
+      ? menuItems?.find((item) => item?.id === validateFields?.itemId)?.name
+      : validateFields?.recipeFor === "MENU_VARIANTS"
+      ? menuVariants?.find(
+          (variant) => variant?.variant?.id === validateFields?.itemId
+        )?.variant?.name
+      : addOns?.find((addOn) => addOn?.id === validateFields?.itemId)?.name;
+
   const itemRecipe = await prismaDB.itemRecipe.create({
     data: {
       restaurantId: outlet?.id,
@@ -1613,6 +1660,15 @@ export const createItemRecipe = async (req: Request, res: Response) => {
       recipeType: validateFields?.recipeType,
       createdBy: `${findUser?.name} (${findUser?.role})`,
       lastModifiedBy: `${findUser?.name} (${findUser?.role})`,
+      name:
+        validateFields?.recipeFor === "MENU_ITEMS"
+          ? menuItems?.find((item) => item?.id === validateFields?.itemId)?.name
+          : validateFields?.recipeFor === "MENU_VARIANTS"
+          ? menuVariants?.find(
+              (variant) => variant?.variant?.id === validateFields?.itemId
+            )?.variant?.name
+          : addOns?.find((addOn) => addOn?.id === validateFields?.itemId)?.name,
+      slug: generateSlug(slugName as string),
       menuId:
         validateFields?.recipeFor === "MENU_ITEMS"
           ? validateFields?.itemId

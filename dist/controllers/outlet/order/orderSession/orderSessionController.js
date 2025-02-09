@@ -21,8 +21,6 @@ const bad_request_1 = require("../../../../exceptions/bad-request");
 const __1 = require("../../../..");
 const redis_1 = require("../../../../services/redis");
 const ws_1 = require("../../../../services/ws");
-const get_order_1 = require("../../../../lib/outlet/get-order");
-const get_tables_1 = require("../../../../lib/outlet/get-tables");
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
 const ejs_1 = __importDefault(require("ejs"));
@@ -31,6 +29,7 @@ const client_s3_1 = require("@aws-sdk/client-s3");
 const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
 const axios_1 = __importDefault(require("axios"));
 const secrets_1 = require("../../../../secrets");
+const producer_1 = require("../../../../services/bullmq/producer");
 const s3Client = new client_s3_1.S3Client({
     region: process.env.AWS_REGION,
     credentials: {
@@ -39,7 +38,7 @@ const s3Client = new client_s3_1.S3Client({
     },
 });
 const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const { orderSessionId, outletId } = req.params;
     const { subTotal, paymentMethod } = req.body;
     if (typeof subTotal !== "number" ||
@@ -153,14 +152,40 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         rounded: roundedDifference,
         total: roundedTotal,
     };
-    (0, exports.generatePdfInvoiceInBackground)(invoiceData, outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    yield producer_1.billQueueProducer.addJob({
+        invoiceData,
+        outletId: outlet.id,
+        phoneNumber: (_d = result === null || result === void 0 ? void 0 : result.phoneNo) !== null && _d !== void 0 ? _d : undefined,
+        whatsappData: {
+            billId: result === null || result === void 0 ? void 0 : result.billId,
+            items: invoiceData.orderItems.map((item) => ({
+                id: item.id.toString(),
+                name: item.name,
+                quantity: parseInt(item.quantity),
+                price: item.price,
+            })),
+            subtotal: invoiceData.subtotal,
+            tax: invoiceData.sgst + invoiceData.cgst,
+            discount: 0,
+            totalAmount: invoiceData.total,
+            paymentStatus: "PAID",
+            restaurantName: outlet === null || outlet === void 0 ? void 0 : outlet.restaurantName,
+            orderType: orderSession === null || orderSession === void 0 ? void 0 : orderSession.orderType,
+        },
+        ownerPhone: (_e = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _e === void 0 ? void 0 : _e.phoneNo,
+        paymentData: {
+            amount: invoiceData.total,
+            billId: result === null || result === void 0 ? void 0 : result.billId,
+            paymentMode: paymentMethod,
+        },
+    }, `bill-${result.id}`);
     yield Promise.all([
-        (0, get_order_1.getFetchActiveOrderSessionToRedis)(outletId),
-        (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId),
-        (0, get_order_1.getFetchAllOrdersToRedis)(outletId),
-        (0, get_order_1.getFetchLiveOrderToRedis)(outletId),
-        (0, get_tables_1.getFetchAllTablesToRedis)(outletId),
-        (0, get_tables_1.getFetchAllAreastoRedis)(outletId),
+        redis_1.redis.del(`active-os-${outletId}`),
+        redis_1.redis.del(`liv-o-${outletId}`),
+        redis_1.redis.del(`tables-${outletId}`),
+        redis_1.redis.del(`a-${outletId}`),
+        redis_1.redis.del(`o-n-${outletId}`),
+        redis_1.redis.del(`${outletId}-stocks`),
         redis_1.redis.del(`all-order-staff-${outletId}`),
     ]);
     // if (outlet?.fcmToken) {
@@ -170,6 +195,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
     //     `${subTotal}`
     //   );
     // }
+    yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
     ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "BILL_UPDATED");
     return res.json({
         success: true,
@@ -190,7 +216,6 @@ const generatePdfInvoiceInBackground = (invoiceData, outletId) => __awaiter(void
             },
         });
         console.log("Invoice Generated");
-        yield (0, get_order_1.getFetchAllOrderSessionToRedis)(outletId);
         // Notify WebSocket clients about the updated invoice
         // websocketManager.notifyClients(invoiceData.restaurantName, "INVOICE_GENERATED");
     }
@@ -201,17 +226,27 @@ const generatePdfInvoiceInBackground = (invoiceData, outletId) => __awaiter(void
 exports.generatePdfInvoiceInBackground = generatePdfInvoiceInBackground;
 const generatePdfInvoice = (invoiceData) => __awaiter(void 0, void 0, void 0, function* () {
     // Read the EJS template
+    const isDevelopment = process.env.NODE_ENV === "development";
     const templatePath = path_1.default.join(process.cwd(), "templates/invoice.ejs");
     const template = yield promises_1.default.readFile(templatePath, "utf-8");
     try {
         const renderedHtml = yield ejs_1.default.renderFile(templatePath, {
             invoiceData,
         });
-        const browser = yield puppeteer_1.default.launch({
-            headless: true,
-            executablePath: secrets_1.PUPPETEER_EXECUTABLE_PATH,
-            args: ["--no-sandbox", "--disable-setuid-sandbox"],
-        });
+        // Configure Puppeteer based on environment
+        const puppeteerConfig = isDevelopment
+            ? {
+                // Development (Windows) configuration
+                headless: "new", // Use new headless mode
+                product: "chrome",
+            }
+            : {
+                // Production (Linux) configuration
+                headless: true,
+                executablePath: secrets_1.PUPPETEER_EXECUTABLE_PATH,
+                args: ["--no-sandbox", "--disable-setuid-sandbox"],
+            };
+        const browser = yield puppeteer_1.default.launch(puppeteerConfig);
         const page = yield browser.newPage();
         yield page.setContent(renderedHtml, { waitUntil: "networkidle0" });
         const pdfBuffer = yield page.pdf({

@@ -42,34 +42,35 @@ const getCustomersForTable = (req, res) => __awaiter(void 0, void 0, void 0, fun
         [filter.id]: { in: filter.value },
     }));
     // Fetch total count for the given query
-    const totalCount = yield __1.prismaDB.customer.count({
+    const totalCount = yield __1.prismaDB.customerRestaurantAccess.count({
         where: {
             restaurantId: outletId,
-            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            OR: [{ customer: { name: { contains: search, mode: "insensitive" } } }],
             AND: filterConditions,
         },
     });
-    const getCustomers = yield __1.prismaDB.customer.findMany({
+    const getCustomers = yield __1.prismaDB.customerRestaurantAccess.findMany({
         skip,
         take,
         where: {
             restaurantId: outletId,
-            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            OR: [{ customer: { name: { contains: search, mode: "insensitive" } } }],
             AND: filterConditions,
         },
         include: {
+            customer: true,
             orderSession: true,
         },
         orderBy,
     });
     const formattedCustomers = getCustomers === null || getCustomers === void 0 ? void 0 : getCustomers.map((staff) => {
-        var _a;
+        var _a, _b, _c, _d;
         return ({
             id: staff === null || staff === void 0 ? void 0 : staff.id,
-            name: staff === null || staff === void 0 ? void 0 : staff.name,
-            email: staff === null || staff === void 0 ? void 0 : staff.email,
-            phoneNo: staff === null || staff === void 0 ? void 0 : staff.phoneNo,
-            orders: (_a = staff === null || staff === void 0 ? void 0 : staff.orderSession) === null || _a === void 0 ? void 0 : _a.length,
+            name: (_a = staff === null || staff === void 0 ? void 0 : staff.customer) === null || _a === void 0 ? void 0 : _a.name,
+            email: (_b = staff === null || staff === void 0 ? void 0 : staff.customer) === null || _b === void 0 ? void 0 : _b.email,
+            phoneNo: (_c = staff === null || staff === void 0 ? void 0 : staff.customer) === null || _c === void 0 ? void 0 : _c.phoneNo,
+            orders: (_d = staff === null || staff === void 0 ? void 0 : staff.orderSession) === null || _d === void 0 ? void 0 : _d.length,
             createdAt: staff === null || staff === void 0 ? void 0 : staff.createdAt,
         });
     });

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = exports.getStaffsForTable = void 0;
+exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = exports.getStaffAttendance = exports.getStaffsForTable = void 0;
 const redis_1 = require("../../../services/redis");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -17,6 +17,7 @@ const __1 = require("../../..");
 const outlet_1 = require("../../../lib/outlet");
 const get_staffs_1 = require("../../../lib/outlet/get-staffs");
 const get_users_1 = require("../../../lib/get-users");
+const date_fns_1 = require("date-fns");
 const getStaffsForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -88,6 +89,138 @@ const getStaffsForTable = (req, res) => __awaiter(void 0, void 0, void 0, functi
     });
 });
 exports.getStaffsForTable = getStaffsForTable;
+const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const search = req.body.search;
+    const sorting = req.body.sorting || [];
+    const filters = req.body.filters || [];
+    const pagination = req.body.pagination || {
+        pageIndex: 0,
+        pageSize: 8,
+    };
+    // Get today's date range
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+    // Build orderBy for Prisma query
+    const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
+        ? sorting.map((sort) => ({
+            [sort.id]: sort.desc ? "desc" : "asc",
+        }))
+        : [{ createdAt: "desc" }];
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = pagination.pageIndex * take;
+    // Build filters dynamically
+    const filterConditions = filters.map((filter) => ({
+        [filter.id]: { in: filter.value },
+    }));
+    const getStaffs = yield __1.prismaDB.staff.findMany({
+        // skip,
+        // take,
+        where: {
+            restaurantId: outletId,
+            OR: [{ name: { contains: search, mode: "insensitive" } }],
+            AND: filterConditions,
+        },
+        include: {
+            orders: true,
+        },
+        orderBy,
+    });
+    console.log("Get all outlet based active staff", getStaffs);
+    // Get or create check-in records for today
+    const checkInRecords = yield Promise.all(getStaffs.map((staff) => __awaiter(void 0, void 0, void 0, function* () {
+        const todayRecords = yield __1.prismaDB.checkInRecord.findMany({
+            where: {
+                staffId: staff.id,
+                date: {
+                    gte: startOfDay,
+                    lte: endOfDay,
+                },
+            },
+            orderBy: {
+                checkInTime: "asc",
+            },
+        });
+        console.log("Today records Fetched", todayRecords);
+        if (todayRecords.length === 0) {
+            // Create a default record for staff with no check-in
+            const defaultRecord = yield __1.prismaDB.checkInRecord.create({
+                data: {
+                    staffId: staff.id,
+                    date: startOfDay,
+                    checkInTime: undefined,
+                    checkOutTime: undefined,
+                },
+            });
+            console.log("Default Record Created", defaultRecord);
+            return {
+                staff,
+                records: [defaultRecord],
+                totalWorkingHours: 0,
+            };
+        }
+        console.log("Total Workinh hour calculate INitiated");
+        // Calculate total working hours from multiple check-ins
+        let totalWorkingMinutes = 0;
+        todayRecords.forEach((record) => {
+            if (record.checkInTime && record.checkOutTime) {
+                totalWorkingMinutes += (0, date_fns_1.differenceInMinutes)(record.checkOutTime, record.checkInTime);
+            }
+        });
+        console.log("Total Workinh hour calculate finished", totalWorkingMinutes, staff.name);
+        return {
+            staff,
+            records: todayRecords,
+            totalWorkingHours: Math.round((totalWorkingMinutes / 60) * 100) / 100,
+        };
+    })));
+    // Format attendance data
+    const formattedAttendance = checkInRecords.map(({ staff, records, totalWorkingHours }) => {
+        var _a, _b;
+        const checkInHistory = records.map((record) => ({
+            checkIn: record.checkInTime,
+            checkOut: record.checkOutTime,
+        }));
+        // Determine status based on check-in history
+        let status = "Absent";
+        if (checkInHistory.some((record) => record.checkIn)) {
+            status = "Present";
+        }
+        else if (checkInHistory.length > 0) {
+            status = "Not Logged";
+        }
+        return {
+            id: staff.id,
+            name: staff.name,
+            role: staff.role,
+            image: staff.image || undefined,
+            checkIn: ((_a = checkInHistory[0]) === null || _a === void 0 ? void 0 : _a.checkIn) || undefined,
+            checkOut: ((_b = checkInHistory[checkInHistory.length - 1]) === null || _b === void 0 ? void 0 : _b.checkOut) || undefined,
+            status,
+            totalEntries: checkInHistory.filter((record) => record.checkIn).length,
+            workingHours: totalWorkingHours,
+            checkInHistory,
+        };
+    });
+    // Apply pagination
+    const paginatedRecords = formattedAttendance.slice(pagination.pageIndex * pagination.pageSize, (pagination.pageIndex + 1) * pagination.pageSize);
+    console.log("Filtered Attendance", formattedAttendance);
+    return res.json({
+        success: true,
+        data: {
+            totalCount: checkInRecords.length,
+            attendance: paginatedRecords,
+        },
+        message: "Staff attendance fetched successfully ✅",
+    });
+});
+exports.getStaffAttendance = getStaffAttendance;
 const getAllStaffs = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisStaff = yield redis_1.redis.get(`staffs-${outletId}`);

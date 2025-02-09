@@ -16,6 +16,7 @@ const __1 = require("../../..");
 const root_1 = require("../../../exceptions/root");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const redis_1 = require("../../../services/redis");
+const utils_1 = require("../../../lib/utils");
 const getAddon = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const addOns = yield redis_1.redis.get(`o-${outletId}-addons`);
@@ -58,10 +59,12 @@ const createAddOn = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     yield __1.prismaDB.addOns.create({
         data: {
             title,
+            slug: (0, utils_1.generateSlug)(title),
             description,
             addOnVariants: {
                 create: addOnVariants.map((addOn) => ({
                     name: addOn.name,
+                    slug: (0, utils_1.generateSlug)(addOn.name),
                     price: addOn.price,
                     type: addOn.type,
                 })),
@@ -146,6 +149,7 @@ const updateAddon = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 data: {
                     restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
                     name: variant.name,
+                    slug: (0, utils_1.generateSlug)(variant.name),
                     price: variant.price,
                     type: variant.type,
                     addonId: addOn.id,

@@ -15,4 +15,5 @@ appRoute.patch("/update-customer-session/:outletId/:customerId", auth_1.isAuthMi
 appRoute.get("/outlet/:outletId/customer/:customerId/get-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(authControl_1.getCustomerOrdersById));
 appRoute.get("/outlet/:outletId/customer/:customerId/get-current-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(authControl_1.getCurrentOrderForCustomer));
 appRoute.post("/outlet/:outletId/create-razorpay-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.CreateRazorPayOrderForOutlet));
+appRoute.post("/customer-update-access-token", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(authControl_1.CustomerUpdateAccessToken));
 exports.default = appRoute;

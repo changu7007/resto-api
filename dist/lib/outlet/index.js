@@ -24,6 +24,12 @@ const getOutletById = (id) => __awaiter(void 0, void 0, void 0, function* () {
             integrations: true,
             razorpayInfo: true,
             invoice: true,
+            users: {
+                select: {
+                    phoneNo: true,
+                    sites: true,
+                },
+            },
         },
     });
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
@@ -52,7 +58,7 @@ const fetchOutletByIdToRedis = (id) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.fetchOutletByIdToRedis = fetchOutletByIdToRedis;
 const getOutletCustomerAndFetchToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
-    const customers = yield __1.prismaDB.customer.findMany({
+    const customers = yield __1.prismaDB.customerRestaurantAccess.findMany({
         where: {
             restaurantId: outletId,
         },

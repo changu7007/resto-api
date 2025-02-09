@@ -15,6 +15,10 @@ authRoute.post("/register-app-user", (0, error_handler_1.errorHandler)(appAuthCo
 authRoute.post("/app-logout", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.AppLogout));
 authRoute.get("/app-user", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.OwnerUser));
 authRoute.get("/app-refresh-token", (0, error_handler_1.errorHandler)(appAuthController_1.AppUpdateAccessToken));
+//staff
+authRoute.get("/staff-user/:id/latest", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.getLatestRecordByStaffId));
+authRoute.post("/staff-check-in", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.staffCheckIn));
+authRoute.post("/staff-check-out", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.staffCheckOut));
 authRoute.post("/staff-login", (0, error_handler_1.errorHandler)(staffAuthController_1.StaffLogin));
 authRoute.post("/staff-logout", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.StaffLogout));
 authRoute.get("/staff-user", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.GetStaff));

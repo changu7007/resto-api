@@ -9,9 +9,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDaysRemaining = exports.getVerificationTokenByToken = exports.getVerificationTokenByEmail = exports.generateVerificationToken = exports.getPeriodDates = void 0;
+exports.getDaysRemaining = exports.getVerificationTokenByToken = exports.getVerificationTokenByEmail = exports.generateVerificationToken = exports.getPeriodDates = exports.generateSlug = void 0;
 const __1 = require("..");
 const uuid_1 = require("uuid");
+function generateSlug(name) {
+    return name.toLowerCase().replace(/\s+/g, "-");
+}
+exports.generateSlug = generateSlug;
 function getPeriodDates(period) {
     const now = new Date();
     let startDate;

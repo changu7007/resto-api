@@ -9,6 +9,9 @@ import { subMonths, format, parse } from "date-fns";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { DateTime } from "luxon";
+import { redis } from "../../../services/redis";
+import Redis from "ioredis";
+import { REDIS_URL } from "../../../secrets";
 
 interface Metrics {
   totalRevenue: number;
@@ -125,9 +128,62 @@ const getPeriodLabel = (period: string): string => {
   return labels[period] || "the previous period";
 };
 
+// Cache keys and TTL configuration
+const CACHE_CONFIG = {
+  DASHBOARD_METRICS: {
+    prefix: "dashboard:metrics",
+    ttl: 300, // 5 minutes
+  },
+  REVENUE_EXPENSES: {
+    prefix: "revenue:expenses",
+    ttl: 600, // 10 minutes
+  },
+} as const;
+
+// Cache invalidation patterns
+const INVALIDATION_PATTERNS = {
+  ORDER: "order:*",
+  EXPENSE: "expense:*",
+  CUSTOMER: "customer:*",
+} as const;
+
+// Helper function to generate cache key
+const generateCacheKey = (
+  prefix: string,
+  outletId: string,
+  period?: string
+) => {
+  return `${prefix}:${outletId}${period ? `:${period}` : ""}`;
+};
+
+// Helper function to invalidate cache by pattern
+const invalidateCache = async (pattern: string) => {
+  const keys = await redis.keys(pattern);
+  if (keys.length) {
+    await redis.del(...keys);
+  }
+};
+
 export const getDashboardMetrics = async (req: Request, res: Response) => {
   const { outletId } = req.params;
   const { period } = req.query as { period: string };
+
+  const cacheKey = generateCacheKey(
+    CACHE_CONFIG.DASHBOARD_METRICS.prefix,
+    outletId,
+    period
+  );
+
+  // Try to get from cache first
+  const cachedData = await redis.get(cacheKey);
+  if (cachedData) {
+    return res.json({
+      success: true,
+      metrics: JSON.parse(cachedData),
+      message: "Dashboard Metrics Retrieved from Cache",
+      cached: true,
+    });
+  }
 
   const outlet = await getOutletById(outletId);
   if (!outlet?.id) {
@@ -176,13 +232,13 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
         orderType: true,
       },
     }),
-    prismaDB.customer.count({
+    prismaDB.customerRestaurantAccess.count({
       where: {
         restaurantId: outlet.id,
         createdAt: { gte: startDate, lte: endDate },
       },
     }),
-    prismaDB.customer.count({
+    prismaDB.customerRestaurantAccess.count({
       where: {
         restaurantId: outlet.id,
         createdAt: { gte: prevStartDate, lte: prevEndDate },
@@ -293,6 +349,13 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     },
   };
 
+  // Cache the result
+  await redis.setex(
+    cacheKey,
+    CACHE_CONFIG.DASHBOARD_METRICS.ttl,
+    JSON.stringify(metrics)
+  );
+
   return res.json({
     success: true,
     metrics,
@@ -300,8 +363,59 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
   });
 };
 
+// Subscribe to relevant events for cache invalidation
+export const setupCacheInvalidation = () => {
+  const pubsub = new Redis(REDIS_URL!);
+  console.log("Setting up cache invalidation");
+  pubsub.subscribe("orderUpdated", "expenseUpdated", "customerUpdated");
+
+  pubsub.on("message", async (channel, message) => {
+    const { outletId } = JSON.parse(message);
+    console.log("Message received", JSON.parse(message));
+    switch (channel) {
+      case "orderUpdated":
+        await invalidateCache(
+          `${CACHE_CONFIG.DASHBOARD_METRICS.prefix}:${outletId}:*`
+        );
+        await invalidateCache(
+          `${CACHE_CONFIG.REVENUE_EXPENSES.prefix}:${outletId}:*`
+        );
+        break;
+      case "expenseUpdated":
+        await invalidateCache(
+          `${CACHE_CONFIG.DASHBOARD_METRICS.prefix}:${outletId}:*`
+        );
+        await invalidateCache(
+          `${CACHE_CONFIG.REVENUE_EXPENSES.prefix}:${outletId}:*`
+        );
+        break;
+      case "customerUpdated":
+        await invalidateCache(
+          `${CACHE_CONFIG.DASHBOARD_METRICS.prefix}:${outletId}:*`
+        );
+        break;
+    }
+  });
+};
+
 export const getRevenueAndExpenses = async (req: Request, res: Response) => {
   const { outletId } = req.params;
+
+  const cacheKey = generateCacheKey(
+    CACHE_CONFIG.REVENUE_EXPENSES.prefix,
+    outletId
+  );
+
+  // Try to get from cache first
+  const cachedData = await redis.get(cacheKey);
+  if (cachedData) {
+    return res.json({
+      success: true,
+      monthStats: JSON.parse(cachedData),
+      message: "Revenue and Expenses Retrieved from Cache",
+      cached: true,
+    });
+  }
 
   const outlet = await getOutletById(outletId);
 
@@ -419,6 +533,12 @@ export const getRevenueAndExpenses = async (req: Request, res: Response) => {
       };
     })
     .reverse();
+
+  await redis.setex(
+    cacheKey,
+    CACHE_CONFIG.REVENUE_EXPENSES.ttl,
+    JSON.stringify(chartData)
+  );
 
   return res.json({
     success: true,
@@ -1264,14 +1384,6 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
   });
 };
 
-function formatDateForPrisma(dateString: string): Date {
-  const parsedDate = parse(dateString, "dd-MM-yyyy", new Date());
-  if (isNaN(parsedDate.getTime())) {
-    throw new Error(`Invalid date format: ${dateString}`);
-  }
-  return parsedDate;
-}
-
 export const expenseMetrics = async (req: Request, res: Response) => {
   const { outletId } = req.params;
   const { startDate, endDate, prevStartDate, prevEndDate } = req.query;
@@ -1431,6 +1543,18 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
 
   const timeZone = "Asia/Kolkata"; // Default to a specific time zone
 
+  let startHour = 0;
+  let endHour = 23;
+
+  if (outlet.openTime && outlet.closeTime) {
+    // Parse hours from HH:mm format
+    startHour = parseInt(outlet.openTime.split(":")[0]);
+    const closeHour = parseInt(outlet.closeTime.split(":")[0]);
+
+    // Handle cases where closing time is on the next day
+    endHour = closeHour < startHour ? closeHour + 24 : closeHour;
+  }
+
   // Start and end of today in the restaurant's time zone
   const todayStart = DateTime.now()
     .setZone(timeZone)
@@ -1474,7 +1598,13 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
   });
 
   // Generate data for all 24 hours in the outlet's time zone
-  const hours = Array.from({ length: 24 }, (_, i) => i);
+  // const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  // Generate data only for outlet operating hours
+  const hours = Array.from(
+    { length: endHour - startHour + 1 },
+    (_, i) => (startHour + i) % 24
+  );
   const formattedData = hours.map((hour) => {
     const ordersAtHour = orders.filter((order) => {
       const orderHour = DateTime.fromJSDate(order.createdAt, {

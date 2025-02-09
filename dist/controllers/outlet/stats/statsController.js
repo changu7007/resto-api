@@ -8,8 +8,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCategoryContributionStats = exports.getOrderHourWise = exports.expenseMetrics = exports.getFinancialMetrics = exports.totalInventory = exports.cashFlowStats = exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = exports.getRevenueAndExpenses = exports.getDashboardMetrics = void 0;
+exports.getCategoryContributionStats = exports.getOrderHourWise = exports.expenseMetrics = exports.getFinancialMetrics = exports.totalInventory = exports.cashFlowStats = exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = exports.getRevenueAndExpenses = exports.setupCacheInvalidation = exports.getDashboardMetrics = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -20,6 +23,9 @@ const date_fns_1 = require("date-fns");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
 const luxon_1 = require("luxon");
+const redis_1 = require("../../../services/redis");
+const ioredis_1 = __importDefault(require("ioredis"));
+const secrets_1 = require("../../../secrets");
 const getPreviousPeriodDates = (period) => {
     const { startDate, endDate } = (0, utils_1.getPeriodDates)(period);
     switch (period) {
@@ -84,9 +90,48 @@ const getPeriodLabel = (period) => {
     };
     return labels[period] || "the previous period";
 };
+// Cache keys and TTL configuration
+const CACHE_CONFIG = {
+    DASHBOARD_METRICS: {
+        prefix: "dashboard:metrics",
+        ttl: 300, // 5 minutes
+    },
+    REVENUE_EXPENSES: {
+        prefix: "revenue:expenses",
+        ttl: 600, // 10 minutes
+    },
+};
+// Cache invalidation patterns
+const INVALIDATION_PATTERNS = {
+    ORDER: "order:*",
+    EXPENSE: "expense:*",
+    CUSTOMER: "customer:*",
+};
+// Helper function to generate cache key
+const generateCacheKey = (prefix, outletId, period) => {
+    return `${prefix}:${outletId}${period ? `:${period}` : ""}`;
+};
+// Helper function to invalidate cache by pattern
+const invalidateCache = (pattern) => __awaiter(void 0, void 0, void 0, function* () {
+    const keys = yield redis_1.redis.keys(pattern);
+    if (keys.length) {
+        yield redis_1.redis.del(...keys);
+    }
+});
 const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const { period } = req.query;
+    const cacheKey = generateCacheKey(CACHE_CONFIG.DASHBOARD_METRICS.prefix, outletId, period);
+    // Try to get from cache first
+    const cachedData = yield redis_1.redis.get(cacheKey);
+    if (cachedData) {
+        return res.json({
+            success: true,
+            metrics: JSON.parse(cachedData),
+            message: "Dashboard Metrics Retrieved from Cache",
+            cached: true,
+        });
+    }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
@@ -124,13 +169,13 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
                 orderType: true,
             },
         }),
-        __1.prismaDB.customer.count({
+        __1.prismaDB.customerRestaurantAccess.count({
             where: {
                 restaurantId: outlet.id,
                 createdAt: { gte: startDate, lte: endDate },
             },
         }),
-        __1.prismaDB.customer.count({
+        __1.prismaDB.customerRestaurantAccess.count({
             where: {
                 restaurantId: outlet.id,
                 createdAt: { gte: prevStartDate, lte: prevEndDate },
@@ -211,6 +256,8 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
             customerGrowth: formatGrowthMessage(growthRates.customers, periodLabel),
         },
     };
+    // Cache the result
+    yield redis_1.redis.setex(cacheKey, CACHE_CONFIG.DASHBOARD_METRICS.ttl, JSON.stringify(metrics));
     return res.json({
         success: true,
         metrics,
@@ -218,8 +265,43 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 });
 exports.getDashboardMetrics = getDashboardMetrics;
+// Subscribe to relevant events for cache invalidation
+const setupCacheInvalidation = () => {
+    const pubsub = new ioredis_1.default(secrets_1.REDIS_URL);
+    console.log("Setting up cache invalidation");
+    pubsub.subscribe("orderUpdated", "expenseUpdated", "customerUpdated");
+    pubsub.on("message", (channel, message) => __awaiter(void 0, void 0, void 0, function* () {
+        const { outletId } = JSON.parse(message);
+        console.log("Message received", JSON.parse(message));
+        switch (channel) {
+            case "orderUpdated":
+                yield invalidateCache(`${CACHE_CONFIG.DASHBOARD_METRICS.prefix}:${outletId}:*`);
+                yield invalidateCache(`${CACHE_CONFIG.REVENUE_EXPENSES.prefix}:${outletId}:*`);
+                break;
+            case "expenseUpdated":
+                yield invalidateCache(`${CACHE_CONFIG.DASHBOARD_METRICS.prefix}:${outletId}:*`);
+                yield invalidateCache(`${CACHE_CONFIG.REVENUE_EXPENSES.prefix}:${outletId}:*`);
+                break;
+            case "customerUpdated":
+                yield invalidateCache(`${CACHE_CONFIG.DASHBOARD_METRICS.prefix}:${outletId}:*`);
+                break;
+        }
+    }));
+};
+exports.setupCacheInvalidation = setupCacheInvalidation;
 const getRevenueAndExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
+    const cacheKey = generateCacheKey(CACHE_CONFIG.REVENUE_EXPENSES.prefix, outletId);
+    // Try to get from cache first
+    const cachedData = yield redis_1.redis.get(cacheKey);
+    if (cachedData) {
+        return res.json({
+            success: true,
+            monthStats: JSON.parse(cachedData),
+            message: "Revenue and Expenses Retrieved from Cache",
+            cached: true,
+        });
+    }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
@@ -325,6 +407,7 @@ const getRevenueAndExpenses = (req, res) => __awaiter(void 0, void 0, void 0, fu
         };
     })
         .reverse();
+    yield redis_1.redis.setex(cacheKey, CACHE_CONFIG.REVENUE_EXPENSES.ttl, JSON.stringify(chartData));
     return res.json({
         success: true,
         monthStats: chartData,
@@ -1028,13 +1111,6 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 });
 exports.getFinancialMetrics = getFinancialMetrics;
-function formatDateForPrisma(dateString) {
-    const parsedDate = (0, date_fns_1.parse)(dateString, "dd-MM-yyyy", new Date());
-    if (isNaN(parsedDate.getTime())) {
-        throw new Error(`Invalid date format: ${dateString}`);
-    }
-    return parsedDate;
-}
 const expenseMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const { startDate, endDate, prevStartDate, prevEndDate } = req.query;

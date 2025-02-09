@@ -4,7 +4,7 @@ import { getDaysRemaining } from "./utils";
 import { NotFoundException } from "../exceptions/not-found";
 import { ErrorCode } from "../exceptions/root";
 import { redis } from "../services/redis";
-import { UserRole } from "@prisma/client";
+import { Payroll, CheckInRecord, UserRole } from "@prisma/client";
 
 export const getOwnerUserByEmail = async (email: string) => {
   const user = await prismaDB.user.findFirst({
@@ -136,8 +136,13 @@ export type FStaff = {
   emailVerified: Date | null;
   phoneNo: string | null;
   role: UserRole;
+  image: string | null;
   isSubscribed: boolean;
+  expiryDate: Date | null;
+  checkIns: CheckInRecord | null;
+  payroll: Payroll[];
   toRenewal: number | null;
+
   plan: "FREETRIAL" | "STANDARD" | "PREMIUM" | "ENTERPRISE";
   restaurant: {
     id: string;
@@ -159,6 +164,12 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
     },
     include: {
       restaurant: true,
+      payroll: true,
+      checkIns: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
     },
   });
 
@@ -182,7 +193,11 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
     },
     include: {
       restaurant: true,
-      billings: true,
+      billings: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
     },
   });
 
@@ -208,13 +223,16 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
     email: findStaff?.email,
     emailVerified: findStaff?.emailVerified,
     phoneNo: findStaff?.phoneNo,
-    // image: findStaff?.image,
+    image: findStaff?.image,
     role: findStaff?.role,
     // onboardingStatus: findStaff?.onboardingStatus,
     isSubscribed: renewalDay > 0 ? true : false,
     // isTwoFA: findStaff?.isTwoFactorEnabled,
     toRenewal: renewalDay,
+    expiryDate: findSubscription?.validDate,
     plan: findSubscription?.subscriptionPlan,
+    checkIns: findStaff?.checkIns[0],
+    payroll: findStaff?.payroll,
     restaurant: {
       id: getOutlet?.id,
       name: getOutlet?.name,
@@ -229,14 +247,13 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
   };
 
   await redis.set(findStaff?.id, JSON.stringify(formatToSend));
-
   return formatToSend;
 };
 
 export const getCustomerById = async (id: string, outletId: string) => {
-  const customer = await prismaDB.customer.findFirst({
+  const customer = await prismaDB.customerRestaurantAccess.findFirst({
     where: {
-      id: id,
+      customerId: id,
       restaurantId: outletId,
     },
     include: {

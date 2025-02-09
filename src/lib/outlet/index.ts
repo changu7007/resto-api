@@ -13,6 +13,13 @@ export const getOutletById = async (id: string) => {
       integrations: true,
       razorpayInfo: true,
       invoice: true,
+      users: {
+        select: {
+          name: true,
+          phoneNo: true,
+          sites: true,
+        },
+      },
     },
   });
 
@@ -52,7 +59,7 @@ export const fetchOutletByIdToRedis = async (id: string) => {
 };
 
 export const getOutletCustomerAndFetchToRedis = async (outletId: string) => {
-  const customers = await prismaDB.customer.findMany({
+  const customers = await prismaDB.customerRestaurantAccess.findMany({
     where: {
       restaurantId: outletId,
     },

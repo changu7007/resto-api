@@ -15,6 +15,7 @@ import {
   ColumnSort,
   PaginationState,
 } from "../../../schema/staff";
+import { generateSlug } from "../../../lib/utils";
 
 export const getAllTablesForTable = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -271,6 +272,7 @@ export const createTable = async (req: Request, res: Response) => {
   await prismaDB.table.create({
     data: {
       name,
+      slug: generateSlug(name),
       capacity,
       uniqueId,
       shortCode,
@@ -415,6 +417,7 @@ export const createArea = async (req: Request, res: Response) => {
   await prismaDB.areas.create({
     data: {
       name,
+      slug: generateSlug(name),
       restaurantId: getOutlet.id,
     },
   });
@@ -630,9 +633,9 @@ export const getTableCurrentOrders = async (req: Request, res: Response) => {
     throw new BadRequestsException("Invalid User", ErrorCode.UNAUTHORIZED);
   }
 
-  const validCustomer = await prismaDB.customer.findFirst({
+  const validCustomer = await prismaDB.customerRestaurantAccess.findFirst({
     where: {
-      id: customerId,
+      customerId: customerId,
     },
   });
 

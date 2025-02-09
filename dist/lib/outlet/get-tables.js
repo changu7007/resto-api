@@ -31,12 +31,7 @@ const getFetchAllTablesToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             createdAt: "asc",
         },
     });
-    if ((tables === null || tables === void 0 ? void 0 : tables.length) > 0) {
-        yield redis_1.redis.set(`tables-${outletId}`, JSON.stringify(tables));
-    }
-    else {
-        yield redis_1.redis.del(`tables-${outletId}`);
-    }
+    yield redis_1.redis.set(`tables-${outletId}`, JSON.stringify(tables));
     return tables;
 });
 exports.getFetchAllTablesToRedis = getFetchAllTablesToRedis;
@@ -130,12 +125,7 @@ const getFetchAllAreastoRedis = (outletId) => __awaiter(void 0, void 0, void 0, 
             })),
         })),
     }));
-    if ((allAreas === null || allAreas === void 0 ? void 0 : allAreas.length) > 0) {
-        yield redis_1.redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
-    }
-    else {
-        yield redis_1.redis.del(`a-${outletId}`);
-    }
+    yield redis_1.redis.set(`a-${outletId}`, JSON.stringify(filteredAreas));
     return allAreas;
 });
 exports.getFetchAllAreastoRedis = getFetchAllAreastoRedis;
