@@ -39,6 +39,7 @@ outletRoute.delete("/:outletId/delete-outlet", auth_1.isAuthMiddelware, (0, erro
 //integration
 outletRoute.get("/:outletId/get-integrations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getIntegration));
 outletRoute.post("/:outletId/patch-online-hub", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.patchOutletOnlinePOrtalDetails));
+outletRoute.post("/:outletId/update-operating-hours", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.updateOrCreateOperatingHours));
 outletRoute.patch("/:outletId/online-portal-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.updateOnlinePortalStatus));
 //staff
 outletRoute.post("/:outletId/accept-order-from-prime", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.acceptOrderFromPrime));
@@ -147,6 +148,7 @@ outletRoute.get("/:outletId/get-expense-metrics", auth_1.isAuthMiddelware, (0, e
 outletRoute.get("/:outletId/get-hour-wise-order-metrics", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getOrderHourWise));
 outletRoute.get("/:outletId/get-category-order-contribution", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getCategoryContributionStats));
 outletRoute.post("/:outletId/create-report", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(reports_controller_1.createReport));
+outletRoute.post("/:outletId/get-table-report", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(reports_controller_1.getReportsForTable));
 //domains
 outletRoute.get("/:outletId/check-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.checkDomain));
 outletRoute.get("/:outletId/get-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.getDomain));
@@ -156,6 +158,7 @@ outletRoute.delete("/:outletId/delete-domain-settings/:siteId", auth_1.isAuthMid
 outletRoute.post("/:outletId/get-monthly-payroll", (0, error_handler_1.errorHandler)(payrollController_1.getThisMonthPayroll));
 outletRoute.patch("/:outletId/staff-payroll-status/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(payrollController_1.updatePayrollStatus));
 outletRoute.patch("/:outletId/bulk-payroll-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(payrollController_1.bulkUpdatePayrollStatus));
+outletRoute.get("/:outletId/get-staff-ids", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.getStaffIds));
 //customers
 outletRoute.get("/:outletId/get-customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(customerController_1.getAllCustomer));
 //invoice

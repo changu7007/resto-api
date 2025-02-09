@@ -31,8 +31,8 @@ const createPayrollForStaff = (staffId) => __awaiter(void 0, void 0, void 0, fun
         }
         // Payroll calculation logic
         const baseSalary = parseFloat(staff.salary);
-        const allowances = staff.allowances ? parseFloat(staff.allowances) : 0;
-        const deductions = staff.deductions ? parseFloat(staff.deductions) : 0;
+        const allowances = staff.allowances ? Number(staff.allowances) : 0;
+        const deductions = staff.deductions ? Number(staff.deductions) : 0;
         const netPay = baseSalary + allowances - deductions;
         // Create a payroll record
         const staffPayrolll = yield __1.prismaDB.payroll.create({

@@ -169,7 +169,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                                     strike: false,
                                     isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
                                     originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
-                                    quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                    quantity: item === null || item === void 0 ? void 0 : item.quantity,
                                     netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
                                     gst: item === null || item === void 0 ? void 0 : item.gst,
                                     grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
@@ -362,7 +362,7 @@ const existingOrderPatchForStaff = (req, res) => __awaiter(void 0, void 0, void 
                                 strike: false,
                                 isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
                                 originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
-                                quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                quantity: item === null || item === void 0 ? void 0 : item.quantity,
                                 netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
                                 gst: item === null || item === void 0 ? void 0 : item.gst,
                                 grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
@@ -496,7 +496,7 @@ const orderItemModificationByStaff = (req, res) => __awaiter(void 0, void 0, voi
                 order: { restaurantId: outlet.id },
             },
             data: {
-                quantity: validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity.toString(),
+                quantity: validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity,
                 selectedVariant: validateFields.selectedVariantId
                     ? {
                         update: {

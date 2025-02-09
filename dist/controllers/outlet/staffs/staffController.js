@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = exports.getStaffAttendance = exports.getStaffsForTable = void 0;
+exports.getStaffIds = exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = exports.getStaffAttendance = exports.getStaffsForTable = void 0;
 const redis_1 = require("../../../services/redis");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -363,3 +363,25 @@ const deleteStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     });
 });
 exports.deleteStaff = deleteStaff;
+const getStaffIds = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, staffId } = req.params;
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const staff = yield __1.prismaDB.staff.findMany({
+        where: {
+            restaurantId: getOutlet.id,
+        },
+        select: {
+            id: true,
+            name: true,
+        },
+    });
+    return res.json({
+        success: true,
+        staffs: staff,
+        message: "Staffs Fetched",
+    });
+});
+exports.getStaffIds = getStaffIds;

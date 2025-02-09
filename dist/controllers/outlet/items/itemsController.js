@@ -190,59 +190,62 @@ exports.getItemsBySearchForOnlineAndDelivery = getItemsBySearchForOnlineAndDeliv
 const getItemsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const categoryId = req.query.categoryId;
-    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // Use Promise.all to parallelize independent operations
+    const [outlet, redisItems] = yield Promise.all([
+        (0, outlet_1.getOutletById)(outletId),
+        redis_1.redis.get(`${outletId}-all-items`),
+    ]);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const redisItems = yield redis_1.redis.get(`${outletId}-all-items`);
+    let sendItems = [];
+    let items;
     if (redisItems) {
-        const items = JSON.parse(redisItems);
-        let sendItems = [];
-        if (categoryId) {
-            if (categoryId === "all") {
-                sendItems = items;
-            }
-            else if (categoryId === "favourites") {
-                const users = yield __1.prismaDB.user.findFirst({
-                    where: {
-                        id: outlet === null || outlet === void 0 ? void 0 : outlet.adminId,
-                    },
-                });
-                sendItems = items.filter((item) => { var _a; return (_a = users === null || users === void 0 ? void 0 : users.favItems) === null || _a === void 0 ? void 0 : _a.includes(item.id); });
-            }
-            else {
-                sendItems = items.filter((item) => item.categoryId === categoryId);
-            }
-        }
-        return res.json({
-            success: true,
-            data: sendItems,
-        });
+        items = JSON.parse(redisItems);
     }
     else {
-        const items = yield (0, get_items_1.getOAllItems)(outletId);
-        let sendItems = [];
-        if (categoryId) {
-            if (categoryId === "all") {
-                sendItems = items;
-            }
-            else if (categoryId === "favourites") {
-                const users = yield __1.prismaDB.user.findFirst({
-                    where: {
-                        id: outlet === null || outlet === void 0 ? void 0 : outlet.adminId,
-                    },
-                });
-                sendItems = items.filter((item) => { var _a; return (_a = users === null || users === void 0 ? void 0 : users.favItems) === null || _a === void 0 ? void 0 : _a.includes(item.id); });
-            }
-            else {
-                sendItems = items.filter((item) => item.categoryId === categoryId);
-            }
-        }
+        items = yield (0, get_items_1.getOAllItems)(outletId);
+        // Cache the items in Redis with a reasonable TTL
+        yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(items), "EX", 300); // 5 minutes TTL
+    }
+    // Early return for "all" category to avoid unnecessary processing
+    if (categoryId === "all") {
         return res.json({
             success: true,
-            data: sendItems,
+            data: items,
         });
     }
+    // For favorites, cache the user's favItems to avoid repeated DB calls
+    if (categoryId === "favourites") {
+        const userCacheKey = `user-favitems-${outlet.adminId}`;
+        let favItems = yield redis_1.redis.get(userCacheKey);
+        if (!favItems) {
+            const user = yield __1.prismaDB.user.findUnique({
+                where: { id: outlet.adminId },
+                select: { favItems: true },
+            });
+            favItems = JSON.stringify((user === null || user === void 0 ? void 0 : user.favItems) || []);
+            yield redis_1.redis.set(userCacheKey, favItems, "EX", 300); // 5 minutes TTL
+        }
+        const userFavItems = JSON.parse(favItems);
+        sendItems = items.filter((item) => userFavItems.includes(item.id));
+    }
+    else {
+        // For specific category, use direct array filtering
+        const categoryIdCacheKey = `${outletId}-category-${categoryId}`;
+        const categoryIdCache = yield redis_1.redis.get(categoryIdCacheKey);
+        if (categoryIdCache) {
+            sendItems = JSON.parse(categoryIdCache);
+        }
+        else {
+            sendItems = items.filter((item) => item.categoryId === categoryId);
+            yield redis_1.redis.set(`${outletId}-category-${categoryId}`, JSON.stringify(sendItems), "EX", 300);
+        }
+    }
+    return res.json({
+        success: true,
+        data: sendItems,
+    });
 });
 exports.getItemsByCategory = getItemsByCategory;
 const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -1164,6 +1167,7 @@ const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, functio
     const { outletId } = req.params;
     // @ts-ignore
     const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
+    yield redis_1.redis.del(`user-favitems-${userId}`);
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);

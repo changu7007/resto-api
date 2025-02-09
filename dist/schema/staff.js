@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rawMaterialSchema = exports.outletOnlinePortalSchema = exports.userSchema = exports.staffSchema = void 0;
+exports.rawMaterialSchema = exports.operatingHoursSchema = exports.outletOnlinePortalSchema = exports.userSchema = exports.staffSchema = void 0;
 const z = __importStar(require("zod"));
 exports.staffSchema = z.object({
     email: z.string().min(1, { message: "Provide email address" }),
@@ -49,6 +49,10 @@ exports.outletOnlinePortalSchema = z.object({
     isDelivery: z.boolean().optional(),
     isPickUp: z.boolean().optional(),
     isDineIn: z.boolean().optional(),
+});
+exports.operatingHoursSchema = z.object({
+    openTime: timeSchema, // Changed from nested timings
+    closeTime: timeSchema, // Changed from nested timings
 });
 exports.rawMaterialSchema = z.object({
     name: z.string().min(1, "Name is required"),

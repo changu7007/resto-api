@@ -616,7 +616,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                                     strike: false,
                                     isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
                                     originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
-                                    quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                    quantity: item === null || item === void 0 ? void 0 : item.quantity,
                                     netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
                                     gst: item === null || item === void 0 ? void 0 : item.gst,
                                     grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
@@ -808,7 +808,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                         strike: false,
                         isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
                         originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
-                        quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                        quantity: item === null || item === void 0 ? void 0 : item.quantity,
                         netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
                         gst: item === null || item === void 0 ? void 0 : item.gst,
                         grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
@@ -1117,7 +1117,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
                                 strike: false,
                                 isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
                                 originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
-                                quantity: item === null || item === void 0 ? void 0 : item.quantity.toString(),
+                                quantity: item === null || item === void 0 ? void 0 : item.quantity,
                                 netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
                                 gst: item === null || item === void 0 ? void 0 : item.gst,
                                 grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
@@ -1572,7 +1572,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 order: { restaurantId: outlet.id },
             },
             data: {
-                quantity: validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity.toString(),
+                quantity: validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity,
                 selectedVariant: validateFields.selectedVariantId
                     ? {
                         update: {
@@ -1723,11 +1723,10 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
         }
         else {
             // Recalculate Order totals
-            const totalGrossProfit = remainingOrderItems.reduce((total, item) => total + (Number(item.grossProfit) * parseFloat(item.quantity) || 0), 0);
+            const totalGrossProfit = remainingOrderItems.reduce((total, item) => total + (Number(item.grossProfit) * Number(item.quantity) || 0), 0);
             const totalNetPrice = remainingOrderItems.reduce((total, item) => total +
-                (parseFloat(item.netPrice) * parseFloat(item.quantity) ||
-                    0), 0);
-            const gstPrice = remainingOrderItems.reduce((total, item) => total + (Number(item.gst) * parseFloat(item.quantity) || 0), 0);
+                (parseFloat(item.netPrice) * Number(item.quantity) || 0), 0);
+            const gstPrice = remainingOrderItems.reduce((total, item) => total + (Number(item.gst) * Number(item.quantity) || 0), 0);
             const totalAmount = remainingOrderItems.reduce((total, item) => total + item.totalPrice, 0);
             // Update the Order
             yield tx.order.update({

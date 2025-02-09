@@ -1233,6 +1233,15 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const timeZone = "Asia/Kolkata"; // Default to a specific time zone
+    let startHour = 0;
+    let endHour = 23;
+    if (outlet.openTime && outlet.closeTime) {
+        // Parse hours from HH:mm format
+        startHour = parseInt(outlet.openTime.split(":")[0]);
+        const closeHour = parseInt(outlet.closeTime.split(":")[0]);
+        // Handle cases where closing time is on the next day
+        endHour = closeHour < startHour ? closeHour + 24 : closeHour;
+    }
     // Start and end of today in the restaurant's time zone
     const todayStart = luxon_1.DateTime.now()
         .setZone(timeZone)
@@ -1270,7 +1279,9 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
         },
     });
     // Generate data for all 24 hours in the outlet's time zone
-    const hours = Array.from({ length: 24 }, (_, i) => i);
+    // const hours = Array.from({ length: 24 }, (_, i) => i);
+    // Generate data only for outlet operating hours
+    const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => (startHour + i) % 24);
     const formattedData = hours.map((hour) => {
         const ordersAtHour = orders.filter((order) => {
             const orderHour = luxon_1.DateTime.fromJSDate(order.createdAt, {

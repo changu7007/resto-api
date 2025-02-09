@@ -161,7 +161,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
             items: invoiceData.orderItems.map((item) => ({
                 id: item.id.toString(),
                 name: item.name,
-                quantity: parseInt(item.quantity),
+                quantity: item.quantity,
                 price: item.price,
             })),
             subtotal: invoiceData.subtotal,

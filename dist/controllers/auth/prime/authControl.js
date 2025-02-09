@@ -79,12 +79,12 @@ const updateOtp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             where: { mobile: mobile.toString() },
             data: { otp: newOtp, expires: newExpiry },
         });
-        yield whatsappService.sendAuthenticationOTP({
-            phoneNumber: mobile.toString(),
-            otp: newOtp,
-            expiryMinutes: 5,
-            businessName: "Your Restaurant",
-        });
+        // await whatsappService.sendAuthenticationOTP({
+        //   phoneNumber: mobile.toString(),
+        //   otp: newOtp,
+        //   expiryMinutes: 5,
+        //   businessName: "Your Restaurant",
+        // });
         return res.json({ success: true, otp: update.otp });
     }
     else {
@@ -95,12 +95,12 @@ const updateOtp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 expires: newExpiry,
             }, // expires in 5 minutes
         });
-        yield whatsappService.sendAuthenticationOTP({
-            phoneNumber: mobile.toString(),
-            otp: newOtp,
-            expiryMinutes: 5,
-            businessName: "Your Restaurant",
-        });
+        // await whatsappService.sendAuthenticationOTP({
+        //   phoneNumber: mobile.toString(),
+        //   otp: newOtp,
+        //   expiryMinutes: 5,
+        //   businessName: "Your Restaurant",
+        // });
         return res.json({ success: true, otp: createdOTP.otp });
     }
 });

@@ -26,6 +26,7 @@ const getOutletById = (id) => __awaiter(void 0, void 0, void 0, function* () {
             invoice: true,
             users: {
                 select: {
+                    name: true,
                     phoneNo: true,
                     sites: true,
                 },

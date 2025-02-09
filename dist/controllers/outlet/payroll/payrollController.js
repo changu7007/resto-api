@@ -153,8 +153,8 @@ const getThisMonthPayroll = (req, res) => __awaiter(void 0, void 0, void 0, func
     const newPayrolls = [];
     for (const staff of staffList) {
         const baseSalary = parseFloat(staff.salary);
-        const allowances = staff.allowances ? parseFloat(staff.allowances) : 0;
-        const deductions = staff.deductions ? parseFloat(staff.deductions) : 0;
+        const allowances = staff.allowances ? Number(staff.allowances) : 0;
+        const deductions = staff.deductions ? Number(staff.deductions) : 0;
         const netPay = baseSalary + allowances - deductions;
         const newPayroll = yield __1.prismaDB.payroll.create({
             data: {

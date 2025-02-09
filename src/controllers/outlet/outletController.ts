@@ -335,6 +335,14 @@ export const patchOutletOnlinePOrtalDetails = async (
         link: validateFields.data.subdomain,
       },
     });
+    await prismaDB.site.create({
+      data: {
+        // @ts-ignore
+        adminId: req?.user?.id,
+        restaurantId: outlet?.id,
+        subdomain: validateFields.data.subdomain,
+      },
+    });
   }
 
   await fetchOutletByIdToRedis(outlet?.id);

@@ -100,7 +100,9 @@ const addStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, fun
         throw new bad_request_1.BadRequestsException("Item ID is required", root_1.ErrorCode.INTERNAL_EXCEPTION);
     }
     // Ensure favItems is an array
-    const favItems = Array.isArray(staff.favoriteMenu) ? staff.favoriteMenu : [];
+    const favItems = Array.isArray(staff === null || staff === void 0 ? void 0 : staff.favoriteMenu)
+        ? staff === null || staff === void 0 ? void 0 : staff.favoriteMenu
+        : [];
     // Check if the menu ID exists in favItems
     const updatedFavItems = favItems.includes(itemId)
         ? favItems.filter((favId) => favId !== itemId) // Remove the ID if present
