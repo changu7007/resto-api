@@ -1049,6 +1049,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 }
                 : undefined,
         };
+        yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
         // Notify clients and update Redis
         ws_1.websocketManager.notifyClients(getOutlet.id, "NEW_ORDER_FROM_PRIME", orderData);
         return res.json({
@@ -1182,6 +1183,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
         redis_1.redis.del(`o-n-${outletId}`),
         redis_1.redis.del(`${outletId}-stocks`),
     ]);
+    yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
     ws_1.websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
     return res.json({
         success: true,

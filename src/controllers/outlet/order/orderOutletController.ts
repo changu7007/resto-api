@@ -1300,7 +1300,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
           }
         : undefined,
     };
-
+    await redis.publish("orderUpdated", JSON.stringify({ outletId }));
     // Notify clients and update Redis
     websocketManager.notifyClients(
       getOutlet.id,
@@ -1487,7 +1487,7 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
     redis.del(`o-n-${outletId}`),
     redis.del(`${outletId}-stocks`),
   ]);
-
+  await redis.publish("orderUpdated", JSON.stringify({ outletId }));
   websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
 
   return res.json({

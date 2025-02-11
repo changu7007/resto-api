@@ -1187,8 +1187,9 @@ const expenseMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 category: {
                     in: [
                         "Ingredients",
-                        "Salaries",
                         "Utilities",
+                        "Salaries",
+                        "Equipment",
                         "Marketing",
                         "Rent",
                         "Miscellaneous",

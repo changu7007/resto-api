@@ -23,15 +23,15 @@ import { FoodRole } from "@prisma/client";
 
 export const getStaffOutlet = async (req: Request, res: Response) => {
   //@ts-ignore
-  const getOutlet = await redis.get(`O-${req?.user?.restaurantId}`);
+  // const getOutlet = await redis.get(`O-${req?.user?.restaurantId}`);
 
-  if (getOutlet) {
-    return res.status(200).json({
-      success: true,
-      outlet: JSON.parse(getOutlet),
-      message: "Fetched Successfully from Redis",
-    });
-  }
+  // if (getOutlet) {
+  //   return res.status(200).json({
+  //     success: true,
+  //     outlet: JSON.parse(getOutlet),
+  //     message: "Fetched Successfully from Redis",
+  //   });
+  // }
 
   //@ts-ignore
   const outlet = await getOutletByIdForStaff(req?.user?.restaurantId);

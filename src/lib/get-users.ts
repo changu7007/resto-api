@@ -44,10 +44,26 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
       id: userId,
     },
     include: {
-      restaurant: true,
+      restaurant: {
+        include: {
+          users: true,
+        },
+      },
       restaurants: {
         include: {
-          restaurant: true, // Fetch the restaurant details from the access relation
+          restaurant: {
+            include: {
+              users: {
+                include: {
+                  billings: {
+                    orderBy: {
+                      createdAt: "desc",
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
       billings: {
@@ -62,20 +78,58 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
     throw new NotFoundException("User not found", ErrorCode.UNAUTHORIZED);
   }
 
-  // Combine owned and accessible restaurants
-  const ownedRestaurants = findOwner.restaurant.map((outlet) => ({
-    id: outlet.id,
-    name: outlet.name,
-    image: outlet.imageUrl,
-  }));
+  // Helper function to calculate subscription status
+  const calculateSubscriptionStatus = (billings: any[]) => {
+    const latestBilling = billings[0];
+    if (!latestBilling)
+      return { isSubscribed: false, renewalDay: 0, plan: null };
 
-  const accessibleRestaurants = findOwner.restaurants.map((access) => ({
-    id: access.restaurant.id,
-    name: access.restaurant.name,
-    image: access.restaurant.imageUrl,
-  }));
+    const renewalDay = getDaysRemaining(latestBilling.validDate as Date);
+    return {
+      isSubscribed: renewalDay > 0,
+      renewalDay,
+      plan: latestBilling.subscriptionPlan,
+      billing: latestBilling,
+    };
+  };
 
-  // Merge owned and accessible restaurants, removing duplicates
+  // Handle owned restaurants (where user is admin)
+  const ownedRestaurants = findOwner.restaurant.map((outlet) => {
+    // For owned restaurants, use the owner's own subscription
+    const ownerSubscription = calculateSubscriptionStatus(findOwner.billings);
+    return {
+      id: outlet.id,
+      name: outlet.name,
+      image: outlet.imageUrl,
+      isOwner: true,
+      role: "ADMIN",
+      accessType: "FULL_ACCESS",
+      permissions: ["FULL_ACCESS"],
+      subscriptionStatus: ownerSubscription,
+    };
+  });
+
+  // Handle restaurants where user has access (not owner)
+  const accessibleRestaurants = findOwner.restaurants.map((access) => {
+    // Get the restaurant owner's subscription details
+    const restaurantOwner = access.restaurant.users; // First user is the admin/owner
+    const ownerSubscription = restaurantOwner
+      ? calculateSubscriptionStatus(restaurantOwner.billings)
+      : { isSubscribed: false, renewalDay: 0, plan: null };
+
+    return {
+      id: access.restaurant.id,
+      name: access.restaurant.name,
+      image: access.restaurant.imageUrl,
+      isOwner: false,
+      role: access.role,
+      accessType: access.accessType,
+      permissions: access.permissions || [],
+      subscriptionStatus: ownerSubscription,
+    };
+  });
+
+  // Merge restaurants, removing duplicates
   const allRestaurants = [
     ...ownedRestaurants,
     ...accessibleRestaurants.filter(
@@ -84,14 +138,19 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
     ),
   ];
 
-  const findSubscription = findOwner?.billings.find(
-    (billing) => billing?.userId === findOwner.id
-  );
-
-  const renewalDay =
-    findSubscription?.userId === findOwner.id
-      ? getDaysRemaining(findSubscription.validDate as Date)
-      : 0;
+  // For the user's primary subscription status:
+  // If they own any restaurants, use their own subscription
+  // If they only have access to restaurants, use the first valid subscription from any restaurant they have access to
+  const userSubscription =
+    findOwner.billings.length > 0
+      ? calculateSubscriptionStatus(findOwner.billings)
+      : allRestaurants.reduce(
+          (validSub, restaurant) => {
+            if (validSub.isSubscribed) return validSub;
+            return restaurant.subscriptionStatus;
+          },
+          { isSubscribed: false, renewalDay: 0, plan: null }
+        );
 
   const formatToSend = {
     id: findOwner?.id,
@@ -102,10 +161,10 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
     image: findOwner?.image,
     role: findOwner?.role,
     onboardingStatus: findOwner?.onboardingStatus,
-    isSubscribed: renewalDay > 0 ? true : false,
+    isSubscribed: userSubscription.isSubscribed,
     favItems: findOwner?.favItems,
     isTwoFA: findOwner?.isTwoFactorEnabled,
-    subscriptions: findOwner?.billings.map((billing) => ({
+    subscriptions: findOwner.billings.map((billing) => ({
       id: billing.id,
       planName: billing.subscriptionPlan,
       paymentId: billing.paymentId,
@@ -117,11 +176,25 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
         new Date(billing?.subscribedDate)
       ),
       purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-      status: renewalDay === 0 ? "EXPIRED" : "VALID",
+      status:
+        getDaysRemaining(billing.validDate as Date) <= 0 ? "EXPIRED" : "VALID",
     })),
-    toRenewal: renewalDay,
-    plan: findSubscription?.subscriptionPlan,
-    outlets: allRestaurants,
+    toRenewal: userSubscription.renewalDay,
+    plan: userSubscription.plan,
+    outlets: allRestaurants.map((restaurant) => ({
+      id: restaurant.id,
+      name: restaurant.name,
+      image: restaurant.image,
+      role: restaurant.role,
+      isOwner: restaurant.isOwner,
+      accessType: restaurant.accessType,
+      permissions: restaurant.permissions,
+      subscription: {
+        isValid: restaurant.subscriptionStatus.isSubscribed,
+        renewalDays: restaurant.subscriptionStatus.renewalDay,
+        plan: restaurant.subscriptionStatus.plan,
+      },
+    })),
   };
 
   await redis.set(userId, JSON.stringify(formatToSend));

@@ -85,7 +85,9 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
         ? "INCOMMING"
         : orderMode === "EXPRESS"
             ? "COMPLETED"
-            : "SERVED";
+            : orderMode === "READY"
+                ? "FOODREADY"
+                : "SERVED";
     const result = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
         var _c, _d, _e, _f;
         let customer;

@@ -11,6 +11,7 @@ import {
   ColumnSort,
   PaginationState,
 } from "../../../schema/staff";
+import { redis } from "../../../services/redis";
 
 const expenseSchema = z.object({
   date: z.string({
@@ -28,6 +29,7 @@ const expenseSchema = z.object({
     ],
     { required_error: "Please select a category." }
   ),
+  purchaseId: z.string().optional(),
   vendorId: z.string().min(1, { message: "Vendor Is Required" }).optional(),
   rawMaterials: z.array(
     z.object({
@@ -61,8 +63,6 @@ export const createExpenses = async (req: Request, res: Response) => {
   const { outletId } = req.params;
 
   const { data: validateFields, error } = expenseSchema.safeParse(req.body);
-
-  console.log("ValidateFields", validateFields);
 
   if (error) {
     throw new BadRequestsException(
@@ -99,55 +99,69 @@ export const createExpenses = async (req: Request, res: Response) => {
     );
   }
 
-  let purchaseId;
+  const result = await prismaDB.$transaction(
+    async (tx) => {
+      let purchaseId;
 
-  if (validateFields.category === "Ingredients" && validateFields?.vendorId) {
-    const invoiceNo = await generatePurchaseNo(outlet.id);
-    const create = await prismaDB.purchase.create({
-      data: {
-        restaurantId: outletId,
-        // @ts-ignore
-        createdBy: `${req?.user?.name}-${req?.user?.role}`,
-        vendorId: validateFields?.vendorId,
-        invoiceNo: invoiceNo,
-        purchaseStatus: "COMPLETED",
-        purchaseItems: {
-          create: validateFields?.rawMaterials.map((item) => ({
-            rawMaterialId: item?.rawMaterialId,
-            rawMaterialName: item?.rawMaterialName,
-            purchaseUnitId: item?.requestUnitId,
-            purchaseUnitName: item?.unitName,
-            purchaseQuantity: item?.requestQuantity,
-            cgst: item?.gst / 2,
-            sgst: item?.gst / 2,
-            purchasePrice: item?.total,
-          })),
+      if (
+        validateFields.category === "Ingredients" &&
+        validateFields?.vendorId
+      ) {
+        const invoiceNo = await generatePurchaseNo(outlet.id);
+        const create = await tx.purchase.create({
+          data: {
+            restaurantId: outletId,
+            // @ts-ignore
+            createdBy: `${req?.user?.name}-${req?.user?.role}`,
+            vendorId: validateFields?.vendorId,
+            invoiceNo: invoiceNo,
+            purchaseStatus: "COMPLETED",
+            purchaseItems: {
+              create: validateFields?.rawMaterials.map((item) => ({
+                rawMaterialId: item?.rawMaterialId,
+                rawMaterialName: item?.rawMaterialName,
+                purchaseUnitId: item?.requestUnitId,
+                purchaseUnitName: item?.unitName,
+                purchaseQuantity: item?.requestQuantity,
+                cgst: item?.gst / 2,
+                sgst: item?.gst / 2,
+                purchasePrice: item?.total,
+              })),
+            },
+            generatedAmount: validateFields?.amount,
+            isPaid: true,
+            paymentMethod: validateFields?.paymentMethod,
+            totalAmount: validateFields?.amount,
+          },
+        });
+        purchaseId = create?.id;
+      }
+
+      const createExpense = await tx.expenses.create({
+        data: {
+          restaurantId: outlet.id,
+          date: new Date(validateFields?.date),
+          // @ts-ignore
+          createdBy: `${req?.user?.name} (${req?.user?.role})`,
+          attachments: validateFields?.attachments,
+          category: validateFields?.category,
+          amount: validateFields?.amount,
+          description: validateFields?.description,
+          purchaseId: purchaseId,
+          paymentMethod: validateFields?.paymentMethod,
         },
-        generatedAmount: validateFields?.amount,
-        isPaid: true,
-        paymentMethod: validateFields?.paymentMethod,
-        totalAmount: validateFields?.amount,
-      },
-    });
-    purchaseId = create?.id;
-  }
+      });
 
-  const createExpense = await prismaDB.expenses.create({
-    data: {
-      restaurantId: outlet.id,
-      date: new Date(validateFields?.date),
-      // @ts-ignore
-      createdBy: `${req?.user?.name} (${req?.user?.role})`,
-      attachments: validateFields?.attachments,
-      category: validateFields?.category,
-      amount: validateFields?.amount,
-      description: validateFields?.description,
-      purchaseId: purchaseId,
-      paymentMethod: validateFields?.paymentMethod,
+      return createExpense;
     },
-  });
+    {
+      maxWait: 10000, // 10s maximum wait time
+      timeout: 30000, // 30s timeout
+    }
+  );
 
-  if (createExpense?.id) {
+  if (result?.id) {
+    await redis.publish("orderUpdated", JSON.stringify({ outletId }));
     return res.json({
       success: true,
       message: "Expense Created ✅",
@@ -167,6 +181,19 @@ export const updateExpenses = async (req: Request, res: Response) => {
     );
   }
 
+  if (
+    validateFields?.category === "Ingredients" &&
+    (!validateFields?.vendorId ||
+      !validateFields?.rawMaterials ||
+      validateFields?.rawMaterials.length === 0 ||
+      validateFields?.rawMaterials?.some((r) => !r.rawMaterialId))
+  ) {
+    throw new BadRequestsException(
+      "Vendor & Raw Materials Required for Expenses",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   const outlet = await getOutletById(outletId);
   // @ts-ignore
   let userId = req.user?.id;
@@ -182,35 +209,135 @@ export const updateExpenses = async (req: Request, res: Response) => {
     );
   }
 
-  const findExpenses = await prismaDB?.expenses.findFirst({
-    where: {
-      id: id,
-      restaurantId: outlet?.id,
-    },
-  });
-  if (!findExpenses?.id) {
-    throw new NotFoundException("Expense Not Found", ErrorCode.NOT_FOUND);
-  }
+  const result = await prismaDB.$transaction(
+    async (tx) => {
+      if (validateFields?.category === "Ingredients") {
+        const findPurchase = await tx.purchase.findFirst({
+          where: {
+            id: validateFields?.purchaseId,
+            restaurantId: outlet?.id,
+          },
+          include: {
+            purchaseItems: true,
+          },
+        });
 
-  const updateExpense = await prismaDB.expenses.update({
-    where: {
-      id: findExpenses.id,
-      restaurantId: outlet.id,
-    },
-    data: {
-      date: new Date(validateFields?.date),
-      category: validateFields?.category,
-      amount: validateFields?.amount,
-      description: validateFields?.description,
-    },
-  });
+        if (!findPurchase?.id) {
+          throw new NotFoundException(
+            "Purchase Expense Not Found for RawMaterials",
+            ErrorCode.NOT_FOUND
+          );
+        }
 
-  if (updateExpense?.id) {
-    return res.json({
-      success: true,
-      message: "Expense Updated ✅",
-    });
-  }
+        // Get existing and new raw material IDs
+        const existingRawMaterialIds = findPurchase.purchaseItems.map(
+          (item) => item.rawMaterialId
+        );
+        const newRawMaterialIds = validateFields.rawMaterials.map(
+          (item) => item.rawMaterialId
+        );
+
+        // Find items to delete, update, and create
+        const itemsToDelete = findPurchase.purchaseItems.filter(
+          (item) => !newRawMaterialIds.includes(item.rawMaterialId)
+        );
+
+        const itemsToUpdate = validateFields.rawMaterials.filter((item) =>
+          existingRawMaterialIds.includes(item.rawMaterialId)
+        );
+
+        const itemsToCreate = validateFields.rawMaterials.filter(
+          (item) => !existingRawMaterialIds.includes(item.rawMaterialId)
+        );
+
+        // Update purchase with all changes
+        await tx.purchase.update({
+          where: {
+            id: findPurchase?.id,
+            restaurantId: outlet?.id,
+          },
+          data: {
+            purchaseItems: {
+              // Delete removed items
+              deleteMany: itemsToDelete.map((item) => ({
+                id: item.id,
+              })),
+
+              // Update existing items
+              updateMany: itemsToUpdate.map((item) => ({
+                where: {
+                  rawMaterialId: item.rawMaterialId,
+                  purchaseId: findPurchase.id,
+                },
+                data: {
+                  rawMaterialName: item.rawMaterialName,
+                  purchaseUnitId: item.requestUnitId,
+                  purchaseUnitName: item.unitName,
+                  purchaseQuantity: item.requestQuantity,
+                  cgst: item.gst / 2,
+                  sgst: item.gst / 2,
+                  purchasePrice: item.total,
+                },
+              })),
+
+              // Create new items
+              create: itemsToCreate.map((item) => ({
+                rawMaterialId: item.rawMaterialId,
+                rawMaterialName: item.rawMaterialName,
+                purchaseUnitId: item.requestUnitId,
+                purchaseUnitName: item.unitName,
+                purchaseQuantity: item.requestQuantity,
+                cgst: item.gst / 2,
+                sgst: item.gst / 2,
+                purchasePrice: item.total,
+              })),
+            },
+            generatedAmount: validateFields?.amount,
+            totalAmount: validateFields?.amount,
+            paymentMethod: validateFields?.paymentMethod,
+          },
+        });
+      }
+
+      const findExpenses = await tx.expenses.findFirst({
+        where: {
+          id: id,
+          restaurantId: outlet?.id,
+        },
+      });
+
+      if (!findExpenses?.id) {
+        throw new NotFoundException("Expense Not Found", ErrorCode.NOT_FOUND);
+      }
+
+      const updateExpense = await tx.expenses.update({
+        where: {
+          id: findExpenses.id,
+          restaurantId: outlet.id,
+        },
+        data: {
+          date: new Date(validateFields?.date),
+          category: validateFields?.category,
+          amount: validateFields?.amount,
+          description: validateFields?.description,
+          attachments: validateFields?.attachments,
+          paymentMethod: validateFields?.paymentMethod,
+        },
+      });
+
+      return updateExpense;
+    },
+    {
+      maxWait: 10000, // 10s maximum wait time
+      timeout: 30000, // 30s timeout
+    }
+  );
+  await redis.publish("orderUpdated", JSON.stringify({ outletId }));
+  return res.json({
+    success: true,
+    message: "Expense Updated ✅",
+    data: result,
+  });
 };
 
 export const deleteExpenses = async (req: Request, res: Response) => {
@@ -250,6 +377,7 @@ export const deleteExpenses = async (req: Request, res: Response) => {
   });
 
   if (deleteExpense?.id) {
+    await redis.publish("orderUpdated", JSON.stringify({ outletId }));
     return res.json({
       success: true,
       message: "Expense Deleted ✅",
@@ -315,17 +443,54 @@ export const getAllExpensesForTable = async (req: Request, res: Response) => {
       attachments: true,
       description: true,
       amount: true,
+      paymentMethod: true,
+      purchase: {
+        include: {
+          vendor: true,
+          purchaseItems: {
+            include: {
+              rawMaterial: true,
+              purchaseUnit: true,
+            },
+          },
+        },
+      },
       createdAt: true,
       updatedAt: true,
     },
     orderBy,
   });
 
+  const formattedExpenses = getExpenses?.map((expense) => ({
+    id: expense?.id,
+    date: expense?.date,
+    category: expense?.category,
+    createdBy: expense?.createdBy,
+    attachments: expense?.attachments,
+    description: expense?.description,
+    amount: expense?.amount,
+    vendorId: expense?.purchase?.vendor?.id,
+    purchaseId: expense?.purchase?.id,
+    rawMaterials: expense?.purchase?.purchaseItems?.map((item) => ({
+      id: item?.rawMaterial?.id,
+      rawMaterialId: item?.rawMaterial?.id,
+      rawMaterialName: item?.rawMaterial?.name,
+      unitName: item?.purchaseUnit?.name,
+      requestUnitId: item?.purchaseUnit?.id,
+      requestQuantity: item?.purchaseQuantity,
+      gst: Number(item?.cgst || 0) + Number(item?.sgst || 0),
+      total: item?.purchasePrice,
+    })),
+    paymentMethod: expense?.paymentMethod,
+    createdAt: expense?.createdAt,
+    updatedAt: expense?.updatedAt,
+  }));
+
   return res.json({
     success: true,
     data: {
       totalCount,
-      expenses: getExpenses,
+      expenses: formattedExpenses,
     },
   });
 };

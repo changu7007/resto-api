@@ -84,6 +84,8 @@ model Invite {
   token        String
   expires      DateTime
   invitedBy    String     @db.ObjectId // adminId of the inviter
+  accessType   String     @default("FULL_ACCESS") // FULL_ACCESS, CUSTOM_ACCESS
+  permissions  String[]   @default([]) // Array of permission IDs
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -311,6 +313,8 @@ model UserRestaurantAccess {
   user         User       @relation("UserToAccess", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   restaurant   Restaurant @relation("RestaurantToAccess", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   role         UserRole   @default(MANAGER) // Custom role for access control
+  accessType   String     @default("FULL_ACCESS") // FULL_ACCESS or CUSTOM_ACCESS
+  permissions  String[]   @default([]) // Array of permission IDs
   createdAt    DateTime   @default(now())
 }
 

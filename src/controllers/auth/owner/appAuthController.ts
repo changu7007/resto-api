@@ -23,6 +23,7 @@ import { v4 as uuidv4 } from "uuid";
 import { differenceInDays } from "date-fns";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { getOutletById } from "../../../lib/outlet";
+import { z } from "zod";
 
 export type FUser = {
   id: string;
@@ -534,9 +535,24 @@ export const updateUserProfileDetails = async (req: Request, res: Response) => {
   });
 };
 
+const formInviteSchema = z.object({
+  email: z.string({ required_error: "Valid Email Required" }),
+  role: z.enum(["MANAGER", "ACCOUNTANT", "PARTNER", "FRONTDESK"]),
+  accessType: z.enum(["FULL_ACCESS", "CUSTOM_ACCESS"]),
+  permissions: z.array(z.string()).optional(),
+});
+
 export const InviteUserToDashboard = async (req: Request, res: Response) => {
   const { outletId } = req.params;
-  const { email, role } = req.body;
+  const validateFields = formInviteSchema.safeParse(req.body);
+
+  if (!validateFields.success) {
+    throw new BadRequestsException(
+      "Invalid Request",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   const getOutlet = await getOutletById(outletId);
 
   if (!getOutlet?.id) {
@@ -546,15 +562,24 @@ export const InviteUserToDashboard = async (req: Request, res: Response) => {
   // @ts-ignore
   if (getOutlet?.adminId !== req.user?.id) {
     throw new UnauthorizedException(
-      "Your not Authorized for this access",
+      "Your not Authorized for this access, Only Owner can Invite Users",
       ErrorCode.UNAUTHORIZED
     );
   }
+
+  //@ts-ignore
+  if (req?.user?.email === validateFields?.data?.email) {
+    throw new BadRequestsException(
+      "You can't invite yourself",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   const token = uuidv4();
   const expires = new Date(new Date().getTime() + 3600 * 24 * 1000);
   const findInvite = await prismaDB.invite.findFirst({
     where: {
-      email: email,
+      email: validateFields.data.email,
     },
   });
 
@@ -564,14 +589,37 @@ export const InviteUserToDashboard = async (req: Request, res: Response) => {
       ErrorCode.INTERNAL_EXCEPTION
     );
   }
+  console.log(`Permissions ${validateFields.data.permissions}`);
+  // Determine permissions based on access type
+  const permissions =
+    validateFields.data.accessType === "FULL_ACCESS"
+      ? [
+          "dashboard",
+          "pos",
+          "orders",
+          "order_transactions",
+          "inventory",
+          "expenses",
+          "manage_tables",
+          "manage_food",
+          "staffs",
+          "staff_attendance",
+          "customers",
+          "payroll",
+          "integration",
+          "settings",
+        ]
+      : validateFields.data.permissions || [];
 
   await prismaDB.invite.create({
     data: {
-      email: email,
+      email: validateFields.data.email,
       expires: expires,
-      role: role,
+      role: validateFields.data.role,
       restaurantId: getOutlet.id,
       invitedBy: getOutlet.adminId,
+      accessType: validateFields.data.accessType,
+      permissions: permissions,
       token: token,
     },
   });
@@ -599,8 +647,14 @@ export const getDashboardInvite = async (req: Request, res: Response) => {
       status: true,
       expires: true,
       token: true,
+      role: true,
       createdAt: true,
       updatedAt: true,
+      accessType: true,
+      permissions: true,
+    },
+    orderBy: {
+      createdAt: "desc",
     },
   });
 
@@ -647,32 +701,47 @@ export const verifyInvite = async (req: Request, res: Response) => {
     );
   }
 
-  const findUser = await prismaDB.user.findFirst({
+  // Check if user already has access to this restaurant
+  const existingAccess = await prismaDB.userRestaurantAccess.findFirst({
     where: {
-      email: getToken?.email,
-      restaurant: {
-        some: {
-          id: outletId,
-        },
-      },
+      AND: [
+        { restaurant: { id: outletId } },
+        { user: { email: getToken.email } },
+      ],
     },
   });
 
-  if (findUser) {
+  if (existingAccess) {
     throw new BadRequestsException(
-      "This user already has the access",
+      "This user already has access to this outlet",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  await prismaDB.user.update({
-    where: {
-      email: getToken?.email,
-    },
-    data: {
-      restaurant: {
-        connect: { id: outletId },
+  // Find or create user
+  let user = await prismaDB.user.findUnique({
+    where: { email: getToken.email },
+  });
+
+  if (!user) {
+    // Create new user if they don't exist
+    user = await prismaDB.user.create({
+      data: {
+        email: getToken.email,
+        role: getToken.role, // Default role for invited users
+        name: getToken.email.split("@")[0], // Default name from email
       },
+    });
+  }
+
+  // Create UserRestaurantAccess entry
+  await prismaDB.userRestaurantAccess.create({
+    data: {
+      userId: user.id,
+      restaurantId: outletId,
+      role: getToken.role,
+      permissions: getToken.permissions, // Make sure to add this field to UserRestaurantAccess model
+      accessType: getToken.accessType, // Make sure to add this field to UserRestaurantAccess model
     },
   });
 

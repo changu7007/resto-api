@@ -51,10 +51,26 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
             id: userId,
         },
         include: {
-            restaurant: true,
+            restaurant: {
+                include: {
+                    users: true,
+                },
+            },
             restaurants: {
                 include: {
-                    restaurant: true, // Fetch the restaurant details from the access relation
+                    restaurant: {
+                        include: {
+                            users: {
+                                include: {
+                                    billings: {
+                                        orderBy: {
+                                            createdAt: "desc",
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
             },
             billings: {
@@ -67,26 +83,67 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
     if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
         throw new not_found_1.NotFoundException("User not found", root_1.ErrorCode.UNAUTHORIZED);
     }
-    // Combine owned and accessible restaurants
-    const ownedRestaurants = findOwner.restaurant.map((outlet) => ({
-        id: outlet.id,
-        name: outlet.name,
-        image: outlet.imageUrl,
-    }));
-    const accessibleRestaurants = findOwner.restaurants.map((access) => ({
-        id: access.restaurant.id,
-        name: access.restaurant.name,
-        image: access.restaurant.imageUrl,
-    }));
-    // Merge owned and accessible restaurants, removing duplicates
+    // Helper function to calculate subscription status
+    const calculateSubscriptionStatus = (billings) => {
+        const latestBilling = billings[0];
+        if (!latestBilling)
+            return { isSubscribed: false, renewalDay: 0, plan: null };
+        const renewalDay = (0, utils_1.getDaysRemaining)(latestBilling.validDate);
+        return {
+            isSubscribed: renewalDay > 0,
+            renewalDay,
+            plan: latestBilling.subscriptionPlan,
+            billing: latestBilling,
+        };
+    };
+    // Handle owned restaurants (where user is admin)
+    const ownedRestaurants = findOwner.restaurant.map((outlet) => {
+        // For owned restaurants, use the owner's own subscription
+        const ownerSubscription = calculateSubscriptionStatus(findOwner.billings);
+        return {
+            id: outlet.id,
+            name: outlet.name,
+            image: outlet.imageUrl,
+            isOwner: true,
+            role: "ADMIN",
+            accessType: "FULL_ACCESS",
+            permissions: ["FULL_ACCESS"],
+            subscriptionStatus: ownerSubscription,
+        };
+    });
+    // Handle restaurants where user has access (not owner)
+    const accessibleRestaurants = findOwner.restaurants.map((access) => {
+        // Get the restaurant owner's subscription details
+        const restaurantOwner = access.restaurant.users; // First user is the admin/owner
+        const ownerSubscription = restaurantOwner
+            ? calculateSubscriptionStatus(restaurantOwner.billings)
+            : { isSubscribed: false, renewalDay: 0, plan: null };
+        return {
+            id: access.restaurant.id,
+            name: access.restaurant.name,
+            image: access.restaurant.imageUrl,
+            isOwner: false,
+            role: access.role,
+            accessType: access.accessType,
+            permissions: access.permissions || [],
+            subscriptionStatus: ownerSubscription,
+        };
+    });
+    // Merge restaurants, removing duplicates
     const allRestaurants = [
         ...ownedRestaurants,
         ...accessibleRestaurants.filter((accessible) => !ownedRestaurants.some((owned) => owned.id === accessible.id)),
     ];
-    const findSubscription = findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.find((billing) => (billing === null || billing === void 0 ? void 0 : billing.userId) === findOwner.id);
-    const renewalDay = (findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.userId) === findOwner.id
-        ? (0, utils_1.getDaysRemaining)(findSubscription.validDate)
-        : 0;
+    // For the user's primary subscription status:
+    // If they own any restaurants, use their own subscription
+    // If they only have access to restaurants, use the first valid subscription from any restaurant they have access to
+    const userSubscription = findOwner.billings.length > 0
+        ? calculateSubscriptionStatus(findOwner.billings)
+        : allRestaurants.reduce((validSub, restaurant) => {
+            if (validSub.isSubscribed)
+                return validSub;
+            return restaurant.subscriptionStatus;
+        }, { isSubscribed: false, renewalDay: 0, plan: null });
     const formatToSend = {
         id: findOwner === null || findOwner === void 0 ? void 0 : findOwner.id,
         name: findOwner === null || findOwner === void 0 ? void 0 : findOwner.name,
@@ -96,10 +153,10 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
         image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
         role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
         onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
-        isSubscribed: renewalDay > 0 ? true : false,
+        isSubscribed: userSubscription.isSubscribed,
         favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,
         isTwoFA: findOwner === null || findOwner === void 0 ? void 0 : findOwner.isTwoFactorEnabled,
-        subscriptions: findOwner === null || findOwner === void 0 ? void 0 : findOwner.billings.map((billing) => ({
+        subscriptions: findOwner.billings.map((billing) => ({
             id: billing.id,
             planName: billing.subscriptionPlan,
             paymentId: billing.paymentId,
@@ -108,11 +165,24 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
             amount: billing.paidAmount,
             validityDays: (0, date_fns_1.differenceInDays)(new Date(billing === null || billing === void 0 ? void 0 : billing.validDate), new Date(billing === null || billing === void 0 ? void 0 : billing.subscribedDate)),
             purchased: billing.paymentId ? "PURCHASED" : "NOT PURCHASED",
-            status: renewalDay === 0 ? "EXPIRED" : "VALID",
+            status: (0, utils_1.getDaysRemaining)(billing.validDate) <= 0 ? "EXPIRED" : "VALID",
         })),
-        toRenewal: renewalDay,
-        plan: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.subscriptionPlan,
-        outlets: allRestaurants,
+        toRenewal: userSubscription.renewalDay,
+        plan: userSubscription.plan,
+        outlets: allRestaurants.map((restaurant) => ({
+            id: restaurant.id,
+            name: restaurant.name,
+            image: restaurant.image,
+            role: restaurant.role,
+            isOwner: restaurant.isOwner,
+            accessType: restaurant.accessType,
+            permissions: restaurant.permissions,
+            subscription: {
+                isValid: restaurant.subscriptionStatus.isSubscribed,
+                renewalDays: restaurant.subscriptionStatus.renewalDay,
+                plan: restaurant.subscriptionStatus.plan,
+            },
+        })),
     };
     yield redis_1.redis.set(userId, JSON.stringify(formatToSend));
     return formatToSend;

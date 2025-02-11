@@ -147,8 +147,6 @@ export const getStaffAttendance = async (req: Request, res: Response) => {
     orderBy,
   });
 
-  console.log("Get all outlet based active staff", getStaffs);
-
   // Get or create check-in records for today
   const checkInRecords = await Promise.all(
     getStaffs.map(async (staff) => {
@@ -164,7 +162,7 @@ export const getStaffAttendance = async (req: Request, res: Response) => {
           checkInTime: "asc",
         },
       });
-      console.log("Today records Fetched", todayRecords);
+
       if (todayRecords.length === 0) {
         // Create a default record for staff with no check-in
         const defaultRecord = await prismaDB.checkInRecord.create({
@@ -175,7 +173,7 @@ export const getStaffAttendance = async (req: Request, res: Response) => {
             checkOutTime: undefined,
           },
         });
-        console.log("Default Record Created", defaultRecord);
+
         return {
           staff,
           records: [defaultRecord],
@@ -193,11 +191,6 @@ export const getStaffAttendance = async (req: Request, res: Response) => {
           );
         }
       });
-      console.log(
-        "Total Workinh hour calculate finished",
-        totalWorkingMinutes,
-        staff.name
-      );
 
       return {
         staff,
@@ -246,7 +239,6 @@ export const getStaffAttendance = async (req: Request, res: Response) => {
     (pagination.pageIndex + 1) * pagination.pageSize
   );
 
-  console.log("Filtered Attendance", formattedAttendance);
   return res.json({
     success: true,
     data: {

@@ -1475,8 +1475,9 @@ export const expenseMetrics = async (req: Request, res: Response) => {
           category: {
             in: [
               "Ingredients",
-              "Salaries",
               "Utilities",
+              "Salaries",
+              "Equipment",
               "Marketing",
               "Rent",
               "Miscellaneous",

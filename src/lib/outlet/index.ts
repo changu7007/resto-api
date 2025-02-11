@@ -108,6 +108,9 @@ export const getOutletByIdForStaff = async (id: string) => {
     where: {
       id,
     },
+    include: {
+      invoice: true,
+    },
   });
   return getOutlet;
 };

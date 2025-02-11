@@ -63,8 +63,74 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             createdAt: "desc",
         },
     });
-    yield redis_1.redis.set(`liv-o-${outletId}`, JSON.stringify(liveOrders));
-    return liveOrders;
+    const formattedOrderData = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
+        var _a, _b;
+        return ({
+            id: order.id,
+            generatedOrderId: order.generatedOrderId,
+            name: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.username,
+            mode: order.orderType,
+            table: (_b = order.orderSession.table) === null || _b === void 0 ? void 0 : _b.name,
+            orderItems: order.orderItems.map((item) => ({
+                id: item.id,
+                menuItem: {
+                    id: item.menuItem.id,
+                    name: item.menuItem.name,
+                    shortCode: item.menuItem.shortCode,
+                    categoryId: item.menuItem.category.id,
+                    categoryName: item.menuItem.category.name,
+                    type: item.menuItem.type,
+                    price: item.menuItem.price,
+                    isVariants: item.menuItem.isVariants,
+                    isAddOns: item.menuItem.isAddons,
+                    images: item.menuItem.images.map((image) => ({
+                        id: image.id,
+                        url: image.url,
+                    })),
+                    menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+                        id: variant.id,
+                        variantName: variant.variant.name,
+                        gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                        netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
+                        grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
+                        price: variant.price,
+                        type: variant.price,
+                    })),
+                    menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
+                        id: groupAddOn.id,
+                        addOnGroupName: groupAddOn.addOnGroups.title,
+                        description: groupAddOn.addOnGroups.description,
+                        addonVariants: groupAddOn.addOnGroups.addOnVariants.map((addOnVariant) => ({
+                            id: addOnVariant.id,
+                            name: addOnVariant.name,
+                            price: addOnVariant.price,
+                            type: addOnVariant.type,
+                        })),
+                    })),
+                },
+                name: item.name,
+                quantity: item.quantity,
+                netPrice: item.netPrice,
+                gst: item.gst,
+                gstPrice: (Number(item.originalRate) - Number(item.netPrice)) *
+                    Number(item.quantity),
+                grossProfit: item.grossProfit,
+                originalRate: item.originalRate,
+                isVariants: item.isVariants,
+                totalPrice: item.totalPrice,
+                selectedVariant: item.selectedVariant,
+                addOnSelected: item.addOnSelected,
+            })),
+            createdBy: order === null || order === void 0 ? void 0 : order.createdBy,
+            orderStatus: order.orderStatus,
+            paid: order.isPaid,
+            total: order.totalAmount,
+            createdAt: order === null || order === void 0 ? void 0 : order.createdAt,
+            date: (0, date_fns_1.format)(order.createdAt, "PP"),
+        });
+    });
+    yield redis_1.redis.set(`liv-o-${outletId}`, JSON.stringify(formattedOrderData));
+    return formattedOrderData;
 });
 exports.getFetchLiveOrderToRedis = getFetchLiveOrderToRedis;
 const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -354,8 +420,85 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
             createdAt: "desc",
         },
     });
-    yield redis_1.redis.set(`active-os-${outletId}`, JSON.stringify(activeOrders));
-    return activeOrders;
+    const formattedAllOrderData = activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => {
+        var _a;
+        return ({
+            id: order.id,
+            billNo: order.billId,
+            phoneNo: order.phoneNo,
+            active: order.active,
+            sessionStatus: order.sessionStatus,
+            userName: order.username,
+            isPaid: order.isPaid,
+            paymentmethod: order.paymentMethod,
+            orderMode: order.orderType,
+            table: (_a = order.table) === null || _a === void 0 ? void 0 : _a.name,
+            subTotal: order.subTotal,
+            orders: order.orders.map((order) => ({
+                id: order.id,
+                generatedOrderId: order.generatedOrderId,
+                mode: order.orderType,
+                orderStatus: order.orderStatus,
+                paid: order.isPaid,
+                totalNetPrice: order === null || order === void 0 ? void 0 : order.totalNetPrice,
+                gstPrice: order === null || order === void 0 ? void 0 : order.gstPrice,
+                totalGrossProfit: order === null || order === void 0 ? void 0 : order.totalGrossProfit,
+                totalAmount: order.totalAmount,
+                createdAt: (0, date_fns_1.formatDistanceToNow)(new Date(order.createdAt), {
+                    addSuffix: true,
+                }),
+                date: (0, date_fns_1.format)(order.createdAt, "PP"),
+                orderItems: order.orderItems.map((item) => ({
+                    id: item.id,
+                    menuItem: {
+                        id: item.menuItem.id,
+                        name: item.menuItem.name,
+                        shortCode: item.menuItem.shortCode,
+                        categoryId: item.menuItem.category.id,
+                        categoryName: item.menuItem.category.name,
+                        type: item.menuItem.type,
+                        price: item.menuItem.price,
+                        isVariants: item.menuItem.isVariants,
+                        isAddOns: item.menuItem.isAddons,
+                        images: item.menuItem.images.map((image) => ({
+                            id: image.id,
+                            url: image.url,
+                        })),
+                        menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+                            id: variant.id,
+                            variantName: variant.variant.name,
+                            price: variant.price,
+                            type: variant.price,
+                        })),
+                        menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
+                            id: groupAddOn.id,
+                            addOnGroupName: groupAddOn.addOnGroups.title,
+                            description: groupAddOn.addOnGroups.description,
+                            addonVariants: groupAddOn.addOnGroups.addOnVariants.map((addOnVariant) => ({
+                                id: addOnVariant.id,
+                                name: addOnVariant.name,
+                                price: addOnVariant.price,
+                                type: addOnVariant.type,
+                            })),
+                        })),
+                    },
+                    name: item.name,
+                    quantity: item.quantity,
+                    netPrice: item.netPrice,
+                    gst: item.gst,
+                    grossProfit: item.grossProfit,
+                    originalRate: item.originalRate,
+                    isVariants: item.isVariants,
+                    totalPrice: item.totalPrice,
+                    selectedVariant: item.selectedVariant,
+                    addOnSelected: item.addOnSelected,
+                })),
+            })),
+            date: order.createdAt,
+        });
+    });
+    yield redis_1.redis.set(`active-os-${outletId}`, JSON.stringify(formattedAllOrderData));
+    return formattedAllOrderData;
 });
 exports.getFetchActiveOrderSessionToRedis = getFetchActiveOrderSessionToRedis;
 const getFetchAllStaffOrderSessionToRedis = (outletId, staffId) => __awaiter(void 0, void 0, void 0, function* () {

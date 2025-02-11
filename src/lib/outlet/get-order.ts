@@ -53,9 +53,77 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`liv-o-${outletId}`, JSON.stringify(liveOrders));
+  const formattedOrderData = liveOrders?.map((order) => ({
+    id: order.id,
+    generatedOrderId: order.generatedOrderId,
+    name: order?.orderSession?.username,
+    mode: order.orderType,
+    table: order.orderSession.table?.name,
+    orderItems: order.orderItems.map((item) => ({
+      id: item.id,
+      menuItem: {
+        id: item.menuItem.id,
+        name: item.menuItem.name,
+        shortCode: item.menuItem.shortCode,
+        categoryId: item.menuItem.category.id,
+        categoryName: item.menuItem.category.name,
+        type: item.menuItem.type,
+        price: item.menuItem.price,
+        isVariants: item.menuItem.isVariants,
+        isAddOns: item.menuItem.isAddons,
+        images: item.menuItem.images.map((image) => ({
+          id: image.id,
+          url: image.url,
+        })),
+        menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+          id: variant.id,
+          variantName: variant.variant.name,
+          gst: variant?.gst,
+          netPrice: variant?.netPrice,
+          grossProfit: variant?.grossProfit,
+          price: variant.price,
+          type: variant.price,
+        })),
+        menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
+          id: groupAddOn.id,
+          addOnGroupName: groupAddOn.addOnGroups.title,
+          description: groupAddOn.addOnGroups.description,
+          addonVariants: groupAddOn.addOnGroups.addOnVariants.map(
+            (addOnVariant) => ({
+              id: addOnVariant.id,
+              name: addOnVariant.name,
+              price: addOnVariant.price,
+              type: addOnVariant.type,
+            })
+          ),
+        })),
+      },
+      name: item.name,
+      quantity: item.quantity,
+      netPrice: item.netPrice,
+      gst: item.gst,
+      gstPrice:
+        (Number(item.originalRate) - Number(item.netPrice)) *
+        Number(item.quantity),
+      grossProfit: item.grossProfit,
+      originalRate: item.originalRate,
+      isVariants: item.isVariants,
+      totalPrice: item.totalPrice,
+      selectedVariant: item.selectedVariant,
 
-  return liveOrders;
+      addOnSelected: item.addOnSelected,
+    })),
+    createdBy: order?.createdBy,
+    orderStatus: order.orderStatus,
+    paid: order.isPaid,
+    total: order.totalAmount,
+    createdAt: order?.createdAt,
+    date: format(order.createdAt, "PP"),
+  }));
+
+  await redis.set(`liv-o-${outletId}`, JSON.stringify(formattedOrderData));
+
+  return formattedOrderData;
 };
 
 export const getFetchAllOrderByStaffToRedis = async (
@@ -372,9 +440,89 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
     },
   });
 
-  await redis.set(`active-os-${outletId}`, JSON.stringify(activeOrders));
+  const formattedAllOrderData = activeOrders?.map((order) => ({
+    id: order.id,
+    billNo: order.billId,
+    phoneNo: order.phoneNo,
+    active: order.active,
+    sessionStatus: order.sessionStatus,
+    userName: order.username,
+    isPaid: order.isPaid,
+    paymentmethod: order.paymentMethod,
+    orderMode: order.orderType,
+    table: order.table?.name,
+    subTotal: order.subTotal,
+    orders: order.orders.map((order) => ({
+      id: order.id,
+      generatedOrderId: order.generatedOrderId,
+      mode: order.orderType,
+      orderStatus: order.orderStatus,
+      paid: order.isPaid,
+      totalNetPrice: order?.totalNetPrice,
+      gstPrice: order?.gstPrice,
+      totalGrossProfit: order?.totalGrossProfit,
+      totalAmount: order.totalAmount,
+      createdAt: formatDistanceToNow(new Date(order.createdAt), {
+        addSuffix: true,
+      }),
+      date: format(order.createdAt, "PP"),
+      orderItems: order.orderItems.map((item) => ({
+        id: item.id,
+        menuItem: {
+          id: item.menuItem.id,
+          name: item.menuItem.name,
+          shortCode: item.menuItem.shortCode,
+          categoryId: item.menuItem.category.id,
+          categoryName: item.menuItem.category.name,
+          type: item.menuItem.type,
+          price: item.menuItem.price,
+          isVariants: item.menuItem.isVariants,
+          isAddOns: item.menuItem.isAddons,
+          images: item.menuItem.images.map((image) => ({
+            id: image.id,
+            url: image.url,
+          })),
+          menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+            id: variant.id,
+            variantName: variant.variant.name,
+            price: variant.price,
+            type: variant.price,
+          })),
+          menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
+            id: groupAddOn.id,
+            addOnGroupName: groupAddOn.addOnGroups.title,
+            description: groupAddOn.addOnGroups.description,
+            addonVariants: groupAddOn.addOnGroups.addOnVariants.map(
+              (addOnVariant) => ({
+                id: addOnVariant.id,
+                name: addOnVariant.name,
+                price: addOnVariant.price,
+                type: addOnVariant.type,
+              })
+            ),
+          })),
+        },
+        name: item.name,
+        quantity: item.quantity,
+        netPrice: item.netPrice,
+        gst: item.gst,
+        grossProfit: item.grossProfit,
+        originalRate: item.originalRate,
+        isVariants: item.isVariants,
+        totalPrice: item.totalPrice,
+        selectedVariant: item.selectedVariant,
+        addOnSelected: item.addOnSelected,
+      })),
+    })),
+    date: order.createdAt,
+  }));
 
-  return activeOrders;
+  await redis.set(
+    `active-os-${outletId}`,
+    JSON.stringify(formattedAllOrderData)
+  );
+
+  return formattedAllOrderData;
 };
 
 export const getFetchAllStaffOrderSessionToRedis = async (

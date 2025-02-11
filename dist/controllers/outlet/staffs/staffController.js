@@ -132,7 +132,6 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
         },
         orderBy,
     });
-    console.log("Get all outlet based active staff", getStaffs);
     // Get or create check-in records for today
     const checkInRecords = yield Promise.all(getStaffs.map((staff) => __awaiter(void 0, void 0, void 0, function* () {
         const todayRecords = yield __1.prismaDB.checkInRecord.findMany({
@@ -147,7 +146,6 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 checkInTime: "asc",
             },
         });
-        console.log("Today records Fetched", todayRecords);
         if (todayRecords.length === 0) {
             // Create a default record for staff with no check-in
             const defaultRecord = yield __1.prismaDB.checkInRecord.create({
@@ -158,7 +156,6 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
                     checkOutTime: undefined,
                 },
             });
-            console.log("Default Record Created", defaultRecord);
             return {
                 staff,
                 records: [defaultRecord],
@@ -173,7 +170,6 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 totalWorkingMinutes += (0, date_fns_1.differenceInMinutes)(record.checkOutTime, record.checkInTime);
             }
         });
-        console.log("Total Workinh hour calculate finished", totalWorkingMinutes, staff.name);
         return {
             staff,
             records: todayRecords,
@@ -210,7 +206,6 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
     });
     // Apply pagination
     const paginatedRecords = formattedAttendance.slice(pagination.pageIndex * pagination.pageSize, (pagination.pageIndex + 1) * pagination.pageSize);
-    console.log("Filtered Attendance", formattedAttendance);
     return res.json({
         success: true,
         data: {

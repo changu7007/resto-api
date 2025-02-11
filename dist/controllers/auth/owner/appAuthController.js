@@ -53,6 +53,7 @@ const utils_1 = require("../../../lib/utils");
 const uuid_1 = require("uuid");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
 const outlet_1 = require("../../../lib/outlet");
+const zod_1 = require("zod");
 const socialAuthLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { providerAccountId, name, email, image } = req.body;
     const findOwner = yield __1.prismaDB.user.findFirst({
@@ -457,35 +458,70 @@ const updateUserProfileDetails = (req, res) => __awaiter(void 0, void 0, void 0,
     });
 });
 exports.updateUserProfileDetails = updateUserProfileDetails;
+const formInviteSchema = zod_1.z.object({
+    email: zod_1.z.string({ required_error: "Valid Email Required" }),
+    role: zod_1.z.enum(["MANAGER", "ACCOUNTANT", "PARTNER", "FRONTDESK"]),
+    accessType: zod_1.z.enum(["FULL_ACCESS", "CUSTOM_ACCESS"]),
+    permissions: zod_1.z.array(zod_1.z.string()).optional(),
+});
 const InviteUserToDashboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _c;
+    var _c, _d, _e;
     const { outletId } = req.params;
-    const { email, role } = req.body;
+    const validateFields = formInviteSchema.safeParse(req.body);
+    if (!validateFields.success) {
+        throw new bad_request_1.BadRequestsException("Invalid Request", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     // @ts-ignore
     if ((getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.adminId) !== ((_c = req.user) === null || _c === void 0 ? void 0 : _c.id)) {
-        throw new unauthorized_1.UnauthorizedException("Your not Authorized for this access", root_1.ErrorCode.UNAUTHORIZED);
+        throw new unauthorized_1.UnauthorizedException("Your not Authorized for this access, Only Owner can Invite Users", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    //@ts-ignore
+    if (((_d = req === null || req === void 0 ? void 0 : req.user) === null || _d === void 0 ? void 0 : _d.email) === ((_e = validateFields === null || validateFields === void 0 ? void 0 : validateFields.data) === null || _e === void 0 ? void 0 : _e.email)) {
+        throw new bad_request_1.BadRequestsException("You can't invite yourself", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const token = (0, uuid_1.v4)();
     const expires = new Date(new Date().getTime() + 3600 * 24 * 1000);
     const findInvite = yield __1.prismaDB.invite.findFirst({
         where: {
-            email: email,
+            email: validateFields.data.email,
         },
     });
     if (findInvite) {
         throw new bad_request_1.BadRequestsException("User has been Invited", root_1.ErrorCode.INTERNAL_EXCEPTION);
     }
+    console.log(`Permissions ${validateFields.data.permissions}`);
+    // Determine permissions based on access type
+    const permissions = validateFields.data.accessType === "FULL_ACCESS"
+        ? [
+            "dashboard",
+            "pos",
+            "orders",
+            "order_transactions",
+            "inventory",
+            "expenses",
+            "manage_tables",
+            "manage_food",
+            "staffs",
+            "staff_attendance",
+            "customers",
+            "payroll",
+            "integration",
+            "settings",
+        ]
+        : validateFields.data.permissions || [];
     yield __1.prismaDB.invite.create({
         data: {
-            email: email,
+            email: validateFields.data.email,
             expires: expires,
-            role: role,
+            role: validateFields.data.role,
             restaurantId: getOutlet.id,
             invitedBy: getOutlet.adminId,
+            accessType: validateFields.data.accessType,
+            permissions: permissions,
             token: token,
         },
     });
@@ -511,8 +547,14 @@ const getDashboardInvite = (req, res) => __awaiter(void 0, void 0, void 0, funct
             status: true,
             expires: true,
             token: true,
+            role: true,
             createdAt: true,
             updatedAt: true,
+            accessType: true,
+            permissions: true,
+        },
+        orderBy: {
+            createdAt: "desc",
         },
     });
     return res.json({
@@ -542,27 +584,40 @@ const verifyInvite = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     if (hasExpired) {
         throw new bad_request_1.BadRequestsException("Token Expired", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    const findUser = yield __1.prismaDB.user.findFirst({
+    // Check if user already has access to this restaurant
+    const existingAccess = yield __1.prismaDB.userRestaurantAccess.findFirst({
         where: {
-            email: getToken === null || getToken === void 0 ? void 0 : getToken.email,
-            restaurant: {
-                some: {
-                    id: outletId,
-                },
-            },
+            AND: [
+                { restaurant: { id: outletId } },
+                { user: { email: getToken.email } },
+            ],
         },
     });
-    if (findUser) {
-        throw new bad_request_1.BadRequestsException("This user already has the access", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    if (existingAccess) {
+        throw new bad_request_1.BadRequestsException("This user already has access to this outlet", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    yield __1.prismaDB.user.update({
-        where: {
-            email: getToken === null || getToken === void 0 ? void 0 : getToken.email,
-        },
-        data: {
-            restaurant: {
-                connect: { id: outletId },
+    // Find or create user
+    let user = yield __1.prismaDB.user.findUnique({
+        where: { email: getToken.email },
+    });
+    if (!user) {
+        // Create new user if they don't exist
+        user = yield __1.prismaDB.user.create({
+            data: {
+                email: getToken.email,
+                role: getToken.role, // Default role for invited users
+                name: getToken.email.split("@")[0], // Default name from email
             },
+        });
+    }
+    // Create UserRestaurantAccess entry
+    yield __1.prismaDB.userRestaurantAccess.create({
+        data: {
+            userId: user.id,
+            restaurantId: outletId,
+            role: getToken.role,
+            permissions: getToken.permissions, // Make sure to add this field to UserRestaurantAccess model
+            accessType: getToken.accessType, // Make sure to add this field to UserRestaurantAccess model
         },
     });
     yield __1.prismaDB.invite.update({

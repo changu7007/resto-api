@@ -129,13 +129,14 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     generatedOrderId(getOutlet.id),
     generateBillNo(getOutlet.id),
   ]);
-
   // Determine order status
   const orderStatus =
     orderMode === "KOT"
       ? "INCOMMING"
       : orderMode === "EXPRESS"
       ? "COMPLETED"
+      : orderMode === "READY"
+      ? "FOODREADY"
       : "SERVED";
 
   const result = await prismaDB.$transaction(async (prisma) => {
