@@ -57,7 +57,12 @@ const sendToken = (user, statusCode, res) => __awaiter(void 0, void 0, void 0, f
     const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
         expiresIn: "7d",
     });
-    yield redis_1.redis.set(user.id, JSON.stringify(user));
+    if (user) {
+        yield redis_1.redis.set(`pos-${user.id}`, JSON.stringify(user));
+    }
+    else {
+        yield redis_1.redis.set(user.id, JSON.stringify(user));
+    }
     if (process.env.NODE_ENV === "production") {
         exports.accessTokenOptions.secure = true;
     }

@@ -50,7 +50,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
     var _b;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { staffId, username, isPaid, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, } = req.body;
+    const { staffId, username, isPaid, cashRegisterId, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, } = req.body;
     if (isValid === true && !phoneNo) {
         throw new bad_request_1.BadRequestsException("please provide Phone No", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
@@ -61,6 +61,16 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
     }
     if (isPaid === true && !paymentMethod) {
         throw new bad_request_1.BadRequestsException("Please Select Payment Mode", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    let cashRegister = null;
+    if (isPaid === true && paymentMethod) {
+        const findCashRegister = yield __1.prismaDB.cashRegister.findFirst({
+            where: { id: cashRegisterId, status: "OPEN" },
+        });
+        if (!(findCashRegister === null || findCashRegister === void 0 ? void 0 : findCashRegister.id)) {
+            throw new not_found_1.NotFoundException("Cash Register Not Found", root_1.ErrorCode.NOT_FOUND);
+        }
+        cashRegister = findCashRegister;
     }
     const [findStaff, getOutlet] = yield Promise.all([
         __1.prismaDB.staff.findFirst({ where: { id: staffId } }),
@@ -276,6 +286,20 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 },
                 data: {
                     invoiceNo: { increment: 1 },
+                },
+            });
+        }
+        if (isPaid && (cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id)) {
+            // Create cash transaction for the order
+            yield __1.prismaDB.cashTransaction.create({
+                data: {
+                    registerId: cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id,
+                    amount: totalAmount,
+                    type: "CASH_IN",
+                    source: "ORDER",
+                    description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems === null || orderItems === void 0 ? void 0 : orderItems.length} x Items`,
+                    paymentMethod: paymentMethod,
+                    performedBy: staffId,
                 },
             });
         }

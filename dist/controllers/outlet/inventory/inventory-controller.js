@@ -1230,17 +1230,20 @@ const allStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             minimumStockUnit: true,
         },
     });
-    const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => ({
-        id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
-        name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
-        consumptionUnit: rawItem.consumptionUnit.name,
-        stock: `${rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
-        purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
-        lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
-        purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
-        purchasedStock: `${rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
-        createdAt: rawItem.createdAt,
-    }));
+    const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
+        var _a, _b;
+        return ({
+            id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
+            name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
+            consumptionUnit: rawItem.consumptionUnit.name,
+            stock: `${(_a = rawItem.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
+            lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
+            purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
+            purchasedStock: `${(_b = rawItem.currentStock) === null || _b === void 0 ? void 0 : _b.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            createdAt: rawItem.createdAt,
+        });
+    });
     yield redis_1.redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks));
     return res.json({
         success: true,
@@ -2284,16 +2287,16 @@ const allTableStocks = (req, res) => __awaiter(void 0, void 0, void 0, function*
         orderBy,
     });
     const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
-        var _a;
+        var _a, _b, _c;
         return ({
             id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
             name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
             consumptionUnit: (_a = rawItem === null || rawItem === void 0 ? void 0 : rawItem.consumptionUnit) === null || _a === void 0 ? void 0 : _a.name,
-            stock: `${rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            stock: `${(_b = rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock) === null || _b === void 0 ? void 0 : _b.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
             purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
             lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
             purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
-            purchasedStock: `${rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            purchasedStock: `${(_c = rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock) === null || _c === void 0 ? void 0 : _c.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
             createdAt: rawItem === null || rawItem === void 0 ? void 0 : rawItem.createdAt,
         });
     });

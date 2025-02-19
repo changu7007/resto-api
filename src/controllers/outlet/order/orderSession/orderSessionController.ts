@@ -27,8 +27,9 @@ const s3Client = new S3Client({
 
 export const billingOrderSession = async (req: Request, res: Response) => {
   const { orderSessionId, outletId } = req.params;
-
-  const { subTotal, paymentMethod } = req.body;
+  // @ts-ignore
+  const { id, role } = req.user;
+  const { subTotal, paymentMethod, cashRegisterId } = req.body;
 
   if (
     typeof subTotal !== "number" ||
@@ -37,6 +38,13 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     throw new BadRequestsException(
       "Invalid total or Choose Payment method",
       ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (!cashRegisterId) {
+    throw new BadRequestsException(
+      "Cash Register ID Not Found",
+      ErrorCode.INTERNAL_EXCEPTION
     );
   }
 
@@ -50,6 +58,21 @@ export const billingOrderSession = async (req: Request, res: Response) => {
 
   if (!orderSession?.id) {
     throw new NotFoundException("Order Session not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const cashRegister = await prismaDB.cashRegister.findFirst({
+    where: {
+      id: cashRegisterId,
+      restaurantId: outlet.id,
+      status: "OPEN",
+    },
+  });
+
+  if (!cashRegister?.id) {
+    throw new BadRequestsException(
+      "Cash Register Not Found",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
   }
 
   const result = await prismaDB?.$transaction(async (prisma) => {
@@ -122,6 +145,25 @@ export const billingOrderSession = async (req: Request, res: Response) => {
         },
       });
     }
+
+    // Create cash transaction for the order
+    await prismaDB.cashTransaction.create({
+      data: {
+        registerId: cashRegister?.id,
+        amount: subTotal,
+        type: "CASH_IN",
+        source: "ORDER",
+        description: `Order Sales - #${orderSession.billId} - ${
+          orderSession.orderType
+        } - ${
+          updatedOrderSession?.orders?.filter(
+            (order) => order?.orderStatus === "COMPLETED"
+          ).length
+        } x Items`,
+        paymentMethod: paymentMethod,
+        performedBy: id,
+      },
+    });
 
     return updatedOrderSession;
   });

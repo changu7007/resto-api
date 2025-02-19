@@ -25,7 +25,11 @@ const alert_controleer_1 = require("../../controllers/outlet/alerts/alert-contro
 const reports_controller_1 = require("../../controllers/outlet/reports/reports-controller");
 const staff_order_controller_1 = require("../../controllers/outlet/order/staff-order-controller");
 const staffs_items_controller_1 = require("../../controllers/outlet/items/staffs-items-controller");
+const registerController_1 = require("../../controllers/outlet/cash-registers/registerController");
+const adminRegisterController_1 = require("../../controllers/outlet/cash-registers/adminRegisterController");
 const outletRoute = (0, express_1.Router)();
+outletRoute.get("/get-all-outlets", (0, error_handler_1.errorHandler)(outletController_1.getAllOutlets));
+outletRoute.get("/:outletId/get-admin-register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
 outletRoute.patch("/:outletId/update-outlet-type", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.updateOutletType));
 outletRoute.get("/staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getStaffOutlet));
 outletRoute.get("/:outletId/get-razorpay-config", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getrazorpayConfig));
@@ -238,4 +242,12 @@ outletRoute.delete("/:outletId/expenses/delete-expense/:id", auth_1.isAuthMiddel
 //Alerts Start GET
 outletRoute.get("/:outletId/alerts/get-all-alerts", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(alert_controleer_1.getAlerts));
 outletRoute.patch("/:outletId/alerts/acknowledge", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(alert_controleer_1.acknowledgeAlert));
+//Cash Register
+outletRoute.get("/:outletId/cash-registers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAllCashRegisters));
+outletRoute.get("/:outletId/transactions", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getTransactionHistory));
+outletRoute.post("/:outletId/admin-register/open", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(adminRegisterController_1.openAdminRegister));
+outletRoute.post("/:outletId/admin-register/:registerId/close", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(adminRegisterController_1.closeAdminRegister));
+outletRoute.get("/:outletId/admin-register/status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
+outletRoute.post("/:outletId/admin-register/record-income", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.recordIncome));
+outletRoute.get("/:outletId/admin-register/transactions-for-register", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getTransactionHistoryForRegister));
 exports.default = outletRoute;

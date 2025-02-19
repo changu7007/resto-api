@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const error_handler_1 = require("../error-handler");
+const auth_1 = require("../middlewares/auth");
+const posController_1 = require("../controllers/outlet/posController");
+const posRoute = (0, express_1.Router)();
+posRoute.post("/:outletId/register", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posController_1.posStaffCheckInAndRegister));
+posRoute.post("/:outletId/close-shift", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posController_1.posStaffCheckOut));
+posRoute.get("/:outletId/register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posController_1.posGetRegisterStatus));
+exports.default = posRoute;

@@ -40,10 +40,15 @@ const s3Client = new client_s3_1.S3Client({
 const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e;
     const { orderSessionId, outletId } = req.params;
-    const { subTotal, paymentMethod } = req.body;
+    // @ts-ignore
+    const { id, role } = req.user;
+    const { subTotal, paymentMethod, cashRegisterId } = req.body;
     if (typeof subTotal !== "number" ||
         !Object.values(client_1.PaymentMethod).includes(paymentMethod)) {
         throw new bad_request_1.BadRequestsException("Invalid total or Choose Payment method", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (!cashRegisterId) {
+        throw new bad_request_1.BadRequestsException("Cash Register ID Not Found", root_1.ErrorCode.INTERNAL_EXCEPTION);
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
@@ -53,7 +58,18 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
     if (!(orderSession === null || orderSession === void 0 ? void 0 : orderSession.id)) {
         throw new not_found_1.NotFoundException("Order Session not Found", root_1.ErrorCode.NOT_FOUND);
     }
+    const cashRegister = yield __1.prismaDB.cashRegister.findFirst({
+        where: {
+            id: cashRegisterId,
+            restaurantId: outlet.id,
+            status: "OPEN",
+        },
+    });
+    if (!(cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id)) {
+        throw new bad_request_1.BadRequestsException("Cash Register Not Found", root_1.ErrorCode.INTERNAL_EXCEPTION);
+    }
     const result = yield (__1.prismaDB === null || __1.prismaDB === void 0 ? void 0 : __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        var _f;
         const updatedOrderSession = yield __1.prismaDB.orderSession.update({
             where: {
                 id: orderSession.id,
@@ -117,6 +133,18 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
                 },
             });
         }
+        // Create cash transaction for the order
+        yield __1.prismaDB.cashTransaction.create({
+            data: {
+                registerId: cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id,
+                amount: subTotal,
+                type: "CASH_IN",
+                source: "ORDER",
+                description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${(_f = updatedOrderSession === null || updatedOrderSession === void 0 ? void 0 : updatedOrderSession.orders) === null || _f === void 0 ? void 0 : _f.filter((order) => (order === null || order === void 0 ? void 0 : order.orderStatus) === "COMPLETED").length} x Items`,
+                paymentMethod: paymentMethod,
+                performedBy: id,
+            },
+        });
         return updatedOrderSession;
     })));
     const formattedOrders = (_a = result === null || result === void 0 ? void 0 : result.orders) === null || _a === void 0 ? void 0 : _a.map((order) => ({

@@ -12,7 +12,6 @@ import {
   PaginationState,
 } from "../../../schema/staff";
 import { differenceInMinutes } from "date-fns";
-import { UserRole } from "@prisma/client";
 
 export const getStaffsForTable = async (req: Request, res: Response) => {
   const { outletId } = req.params;

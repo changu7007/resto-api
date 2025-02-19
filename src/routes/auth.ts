@@ -49,6 +49,11 @@ import {
   getAllPlans,
 } from "../controllers/outlet/plans/planController";
 import { generatePdfInvoice } from "../controllers/outlet/order/orderSession/orderSessionController";
+import {
+  GetPOSUser,
+  StaffPOSLogin,
+  StaffPOSLogout,
+} from "../controllers/auth/pos/pos-controller";
 
 const authRoute: Router = Router();
 
@@ -72,6 +77,9 @@ authRoute.post(
 );
 
 authRoute.post("/staff-login", errorHandler(StaffLogin));
+authRoute.post("/pos-login", errorHandler(StaffPOSLogin));
+authRoute.post("/pos-logout", isAuthMiddelware, errorHandler(StaffPOSLogout));
+authRoute.get("/pos-user", isAuthMiddelware, errorHandler(GetPOSUser));
 authRoute.post("/staff-logout", isAuthMiddelware, errorHandler(StaffLogout));
 authRoute.get("/staff-user", isAuthMiddelware, errorHandler(GetStaff));
 authRoute.get("/staff-refresh-token", errorHandler(StaffUpdateAccessToken));

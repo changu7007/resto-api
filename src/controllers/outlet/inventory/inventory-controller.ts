@@ -1521,11 +1521,13 @@ export const allStocks = async (req: Request, res: Response) => {
     id: rawItem?.id,
     name: rawItem?.name,
     consumptionUnit: rawItem.consumptionUnit.name,
-    stock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
+    stock: `${rawItem.currentStock?.toFixed(2)} - ${rawItem?.purchasedUnit}`,
     purchasedPrice: rawItem?.purchasedPrice,
     lastPurchasedPrice: rawItem?.lastPurchasedPrice,
     purchasedPricePerItem: rawItem?.purchasedPricePerItem,
-    purchasedStock: `${rawItem.currentStock} - ${rawItem?.purchasedUnit}`,
+    purchasedStock: `${rawItem.currentStock?.toFixed(2)} - ${
+      rawItem?.purchasedUnit
+    }`,
     createdAt: rawItem.createdAt,
   }));
 
@@ -2765,11 +2767,13 @@ export const allTableStocks = async (req: Request, res: Response) => {
     id: rawItem?.id,
     name: rawItem?.name,
     consumptionUnit: rawItem?.consumptionUnit?.name,
-    stock: `${rawItem?.currentStock} - ${rawItem?.purchasedUnit}`,
+    stock: `${rawItem?.currentStock?.toFixed(2)} - ${rawItem?.purchasedUnit}`,
     purchasedPrice: rawItem?.purchasedPrice,
     lastPurchasedPrice: rawItem?.lastPurchasedPrice,
     purchasedPricePerItem: rawItem?.purchasedPricePerItem,
-    purchasedStock: `${rawItem?.currentStock} - ${rawItem?.purchasedUnit}`,
+    purchasedStock: `${rawItem?.currentStock?.toFixed(2)} - ${
+      rawItem?.purchasedUnit
+    }`,
     createdAt: rawItem?.createdAt,
   }));
 

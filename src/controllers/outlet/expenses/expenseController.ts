@@ -12,11 +12,9 @@ import {
   PaginationState,
 } from "../../../schema/staff";
 import { redis } from "../../../services/redis";
+import { websocketManager } from "../../../services/ws";
 
 const expenseSchema = z.object({
-  date: z.string({
-    required_error: "A date is required.",
-  }),
   category: z.enum(
     [
       "Ingredients",
@@ -29,6 +27,7 @@ const expenseSchema = z.object({
     ],
     { required_error: "Please select a category." }
   ),
+  restock: z.boolean().optional(),
   purchaseId: z.string().optional(),
   vendorId: z.string().min(1, { message: "Vendor Is Required" }).optional(),
   rawMaterials: z.array(
@@ -57,6 +56,9 @@ const expenseSchema = z.object({
   paymentMethod: z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
     required_error: " Payment Method Required.",
   }),
+  cashRegisterId: z
+    .string()
+    .min(1, { message: "Cash Register ID is Required" }),
 });
 
 export const createExpenses = async (req: Request, res: Response) => {
@@ -71,15 +73,21 @@ export const createExpenses = async (req: Request, res: Response) => {
     );
   }
 
+  if (validateFields?.category === "Ingredients" && !validateFields?.vendorId) {
+    throw new BadRequestsException(
+      "Vendor is required for Ingredients Expenses",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   if (
-    validateFields?.category === "Ingredients" &&
-    (!validateFields?.vendorId ||
-      !validateFields?.rawMaterials ||
+    validateFields?.restock &&
+    (!validateFields?.rawMaterials ||
       validateFields?.rawMaterials.length === 0 ||
       validateFields?.rawMaterials?.some((r) => !r.rawMaterialId))
   ) {
     throw new BadRequestsException(
-      "Vendor & Raw Materials Required for Expenses",
+      "Raw Materials are required for Restocking",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -99,13 +107,26 @@ export const createExpenses = async (req: Request, res: Response) => {
     );
   }
 
+  const cashRegister = await prismaDB.cashRegister.findFirst({
+    where: {
+      id: validateFields?.cashRegisterId,
+      restaurantId: outletId,
+      status: "OPEN",
+    },
+  });
+
+  if (!cashRegister?.id) {
+    throw new NotFoundException("Cash Register Not Found", ErrorCode.NOT_FOUND);
+  }
+
   const result = await prismaDB.$transaction(
     async (tx) => {
       let purchaseId;
 
       if (
         validateFields.category === "Ingredients" &&
-        validateFields?.vendorId
+        validateFields?.vendorId &&
+        validateFields?.restock
       ) {
         const invoiceNo = await generatePurchaseNo(outlet.id);
         const create = await tx.purchase.create({
@@ -135,20 +156,176 @@ export const createExpenses = async (req: Request, res: Response) => {
           },
         });
         purchaseId = create?.id;
+        // Step 1: Restock raw materials and update `RecipeIngredient` costs
+        await Promise.all(
+          validateFields?.rawMaterials?.map(async (item) => {
+            const rawMaterial = await tx.rawMaterial.findFirst({
+              where: {
+                id: item.rawMaterialId,
+                restaurantId: outlet?.id,
+              },
+              include: {
+                RecipeIngredient: true,
+              },
+            });
+
+            if (rawMaterial) {
+              const newStock =
+                Number(rawMaterial?.currentStock ?? 0) + item?.requestQuantity;
+              const newPricePerItem =
+                Number(item.total) / Number(item.requestQuantity);
+
+              await tx.rawMaterial.update({
+                where: {
+                  id: rawMaterial.id,
+                },
+                data: {
+                  currentStock: newStock,
+                  purchasedPrice: item.total,
+                  purchasedPricePerItem: newPricePerItem,
+                  purchasedUnit: item.unitName,
+                  lastPurchasedPrice: rawMaterial?.purchasedPrice ?? 0,
+                  purchasedStock: newStock,
+                },
+              });
+              // Update related alerts to resolved
+              await tx.alert.deleteMany({
+                where: {
+                  restaurantId: outlet.id,
+                  itemId: rawMaterial?.id,
+                  status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                },
+              });
+
+              const findRecipeIngredients = await tx.recipeIngredient.findFirst(
+                {
+                  where: {
+                    rawMaterialId: rawMaterial?.id,
+                  },
+                }
+              );
+              if (findRecipeIngredients) {
+                const recipeCostWithQuantity =
+                  Number(findRecipeIngredients?.quantity) /
+                  Number(rawMaterial?.conversionFactor);
+                const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+                // Update linked `RecipeIngredient` cost
+                await tx.recipeIngredient.updateMany({
+                  where: {
+                    rawMaterialId: rawMaterial.id,
+                  },
+                  data: {
+                    cost: ingredientCost,
+                  },
+                });
+              }
+            }
+          })
+        );
+
+        // Step 2: Recalculate `ItemRecipe` gross margin and related fields
+        const recipesToUpdate = await tx.itemRecipe.findMany({
+          where: {
+            restaurantId: outlet.id,
+          },
+          include: {
+            ingredients: {
+              include: {
+                rawMaterial: true,
+              },
+            },
+          },
+        });
+
+        await Promise.all(
+          recipesToUpdate.map(async (recipe) => {
+            const totalCost = recipe.ingredients.reduce(
+              (sum, ingredient) =>
+                sum +
+                (Number(ingredient.quantity) /
+                  Number(ingredient?.rawMaterial?.conversionFactor)) *
+                  Number(ingredient?.rawMaterial?.purchasedPricePerItem),
+              0
+            );
+            const grossMargin = Number(recipe.itemPrice as number) - totalCost;
+
+            await tx.itemRecipe.update({
+              where: {
+                id: recipe.id,
+              },
+              data: {
+                itemCost: totalCost,
+                grossMargin,
+              },
+            });
+
+            // Update linked entities
+            if (recipe.menuId) {
+              await tx.menuItem.update({
+                where: {
+                  id: recipe.menuId,
+                  restaurantId: outlet.id,
+                },
+                data: {
+                  grossProfit: grossMargin,
+                },
+              });
+            }
+
+            if (recipe.menuVariantId) {
+              await tx.menuItemVariant.update({
+                where: {
+                  id: recipe.menuVariantId,
+                  restaurantId: outlet.id,
+                },
+                data: {
+                  grossProfit: grossMargin,
+                },
+              });
+            }
+
+            if (recipe.addonItemVariantId) {
+              await tx.addOnVariants.update({
+                where: {
+                  id: recipe.addonItemVariantId,
+                  restaurantId: outlet.id,
+                },
+                data: {
+                  grossProfit: grossMargin,
+                },
+              });
+            }
+          })
+        );
       }
 
       const createExpense = await tx.expenses.create({
         data: {
           restaurantId: outlet.id,
-          date: new Date(validateFields?.date),
+          date: new Date(),
           // @ts-ignore
           createdBy: `${req?.user?.name} (${req?.user?.role})`,
+          vendorId: validateFields?.vendorId ? validateFields?.vendorId : null,
+          restock: validateFields?.restock ? validateFields?.restock : false,
           attachments: validateFields?.attachments,
           category: validateFields?.category,
           amount: validateFields?.amount,
           description: validateFields?.description,
           purchaseId: purchaseId,
           paymentMethod: validateFields?.paymentMethod,
+        },
+      });
+
+      // Create cash transaction for the order
+      await prismaDB.cashTransaction.create({
+        data: {
+          registerId: cashRegister?.id,
+          amount: validateFields?.amount,
+          type: "CASH_OUT",
+          source: "EXPENSE",
+          description: validateFields?.description,
+          paymentMethod: validateFields?.paymentMethod,
+          performedBy: cashRegister?.openedBy,
         },
       });
 
@@ -162,6 +339,8 @@ export const createExpenses = async (req: Request, res: Response) => {
 
   if (result?.id) {
     await redis.publish("orderUpdated", JSON.stringify({ outletId }));
+    await redis.del(`alerts-${outletId}`);
+    websocketManager.notifyClients(outletId, "NEW_ALERT");
     return res.json({
       success: true,
       message: "Expense Created ✅",
@@ -316,7 +495,6 @@ export const updateExpenses = async (req: Request, res: Response) => {
           restaurantId: outlet.id,
         },
         data: {
-          date: new Date(validateFields?.date),
           category: validateFields?.category,
           amount: validateFields?.amount,
           description: validateFields?.description,
@@ -439,6 +617,8 @@ export const getAllExpensesForTable = async (req: Request, res: Response) => {
       id: true,
       date: true,
       category: true,
+      restock: true,
+      vendorId: true,
       createdBy: true,
       attachments: true,
       description: true,
@@ -469,7 +649,10 @@ export const getAllExpensesForTable = async (req: Request, res: Response) => {
     attachments: expense?.attachments,
     description: expense?.description,
     amount: expense?.amount,
-    vendorId: expense?.purchase?.vendor?.id,
+    restock: expense?.restock,
+    vendorId: expense?.restock
+      ? expense?.purchase?.vendor?.id
+      : expense?.vendorId,
     purchaseId: expense?.purchase?.id,
     rawMaterials: expense?.purchase?.purchaseItems?.map((item) => ({
       id: item?.rawMaterial?.id,

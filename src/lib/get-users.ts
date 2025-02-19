@@ -5,6 +5,7 @@ import { NotFoundException } from "../exceptions/not-found";
 import { ErrorCode } from "../exceptions/root";
 import { redis } from "../services/redis";
 import { Payroll, CheckInRecord, UserRole } from "@prisma/client";
+import { UnauthorizedException } from "../exceptions/unauthorized";
 
 export const getOwnerUserByEmail = async (email: string) => {
   const user = await prismaDB.user.findFirst({
@@ -197,7 +198,7 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
     })),
   };
 
-  await redis.set(userId, JSON.stringify(formatToSend));
+  await redis.set(userId, JSON.stringify(formatToSend), "EX", 3 * 60 * 60); // 3 hours
 
   return formatToSend;
 };
@@ -216,7 +217,7 @@ export type FStaff = {
   payroll: Payroll[];
   toRenewal: number | null;
 
-  plan: "FREETRIAL" | "STANDARD" | "PREMIUM" | "ENTERPRISE";
+  plan: "FREETRIAL" | "STARTER" | "PREMIUM" | "PRO" | "ENTERPRISE";
   restaurant: {
     id: string;
     name: string;
@@ -322,6 +323,254 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
   await redis.set(findStaff?.id, JSON.stringify(formatToSend));
   return formatToSend;
 };
+
+export interface Transaction {
+  id: string;
+  type: "CASH_IN" | "CASH_OUT";
+  amount: number;
+  description: string;
+  paymentMethod: string;
+  referenceId?: string;
+  performedBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FormattedPOSStaff {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: Date | null;
+  phoneNo: string | null;
+  image: string | null;
+  role: UserRole;
+  isSubscribed: boolean;
+  toRenewal: number;
+  expiryDate: Date | null;
+  plan: "FREETRIAL" | "STARTER" | "PREMIUM" | "PRO" | "ENTERPRISE";
+  checkIns: CheckInRecord | null;
+  payroll: Payroll[];
+  posStatus: {
+    currentRegisterId: string | null;
+    hasActiveSession: boolean;
+    isRestaurantRegisterOpen: boolean;
+    currentOperator: string | null;
+    lastTransaction: Transaction | null;
+    sessionStarted: Date | null;
+    openingBalance: number;
+    currentBalance: number;
+    canAccessPOS: boolean;
+    requiresCheckin: boolean;
+    requiresRegister: boolean;
+    isBlocked: boolean;
+    blockReason: string | null;
+  };
+  restaurant: {
+    id: string;
+    name: string;
+    image: string;
+    adminId: string;
+    address: string;
+    phoneNo: string;
+    email: string;
+    outletType: string;
+    restaurantName: string;
+  };
+}
+
+export const getFormatStaffPOSAndSendToRedis = async (staffId: string) => {
+  const findStaff = await prismaDB.staff.findFirst({
+    where: {
+      id: staffId,
+    },
+    include: {
+      restaurant: true,
+      cashRegisters: {
+        where: {
+          status: "OPEN",
+          openedBy: staffId,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 1,
+        include: {
+          transactions: {
+            orderBy: {
+              createdAt: "desc",
+            },
+            take: 5, // Get last 5 transactions
+          },
+        },
+      },
+      payroll: true,
+      checkIns: {
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 1,
+      },
+    },
+  });
+
+  if (!findStaff?.id) {
+    throw new NotFoundException("Staff not found", ErrorCode.UNAUTHORIZED);
+  }
+
+  if (!findStaff?.posAccess) {
+    throw new UnauthorizedException(
+      "Staff not authorized for POS access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  // Get active cash register for the restaurant
+  const activeRegister = await prismaDB.cashRegister.findFirst({
+    where: {
+      staff: {
+        id: findStaff.id,
+      },
+      restaurantId: findStaff.restaurantId,
+      status: "OPEN",
+    },
+    include: {
+      staff: true,
+    },
+  });
+
+  const getOutlet = await prismaDB.restaurant.findFirst({
+    where: {
+      id: findStaff?.restaurantId,
+    },
+  });
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Subscription checks
+  const findOwner = await prismaDB.user.findFirst({
+    where: {
+      id: getOutlet?.adminId,
+    },
+    include: {
+      restaurant: true,
+      billings: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+    },
+  });
+
+  if (!findOwner?.id) {
+    throw new NotFoundException(
+      "Restaurant Owner not found",
+      ErrorCode.OUTLET_NOT_FOUND
+    );
+  }
+
+  const findSubscription = findOwner?.billings.find(
+    (billing) => billing?.userId === findOwner.id
+  );
+
+  const renewalDay =
+    findSubscription?.userId === findOwner.id
+      ? getDaysRemaining(findSubscription.validDate as Date)
+      : 0;
+
+  // Calculate cash register status and permissions
+  const activeSession = findStaff.cashRegisters[0];
+  const isCheckedIn = findStaff.checkIns[0]?.checkOutTime === null;
+
+  const registerStatus = {
+    currentRegisterId: activeSession?.id || null,
+    hasActiveSession: !!activeSession,
+    isRestaurantRegisterOpen: !!activeRegister,
+    currentOperator: activeRegister?.staff?.name || null,
+    lastTransaction: activeSession?.transactions[0] || null,
+    sessionStarted: activeSession?.openedAt || null,
+    openingBalance: activeSession?.openingBalance || 0,
+    currentBalance: activeSession ? calculateCurrentBalance(activeSession) : 0,
+  };
+
+  const posAccess = {
+    canAccessPOS: findStaff.posAccess,
+    requiresCheckin: !isCheckedIn,
+    requiresRegister: !activeSession && findStaff.posAccess,
+    isBlocked: !isCheckedIn || !findStaff.posAccess || renewalDay <= 0,
+    blockReason: getBlockReason({
+      isCheckedIn,
+      posAccess: findStaff.posAccess,
+      hasValidSubscription: renewalDay > 0,
+      hasActiveRegister: !!activeSession,
+    }),
+  };
+
+  const formatToSend = {
+    id: findStaff?.id,
+    name: findStaff?.name,
+    email: findStaff?.email,
+    emailVerified: findStaff?.emailVerified,
+    phoneNo: findStaff?.phoneNo,
+    image: findStaff?.image,
+    role: findStaff?.role,
+    isSubscribed: renewalDay > 0 ? true : false,
+    toRenewal: renewalDay,
+    expiryDate: findSubscription?.validDate,
+    plan: findSubscription?.subscriptionPlan,
+    checkIns: findStaff?.checkIns[0],
+    payroll: findStaff?.payroll,
+    posStatus: {
+      ...registerStatus,
+      ...posAccess,
+    },
+    restaurant: {
+      id: getOutlet?.id,
+      name: getOutlet?.name,
+      image: getOutlet?.imageUrl,
+      adminId: getOutlet?.adminId,
+      address: getOutlet?.address,
+      phoneNo: getOutlet?.phoneNo,
+      email: getOutlet?.email,
+      outletType: getOutlet?.outletType,
+      restaurantName: getOutlet?.restaurantName,
+    },
+  };
+
+  await redis.set(`pos-${findStaff?.id}`, JSON.stringify(formatToSend));
+  return formatToSend;
+};
+
+// Helper functions
+function calculateCurrentBalance(register: any) {
+  const openingBalance = register.openingBalance || 0;
+  const transactions = register.transactions || [];
+
+  return transactions.reduce((balance: number, transaction: any) => {
+    return transaction.type === "CASH_IN"
+      ? balance + transaction.amount
+      : balance - transaction.amount;
+  }, 0);
+}
+
+function getBlockReason({
+  isCheckedIn,
+  posAccess,
+  hasValidSubscription,
+  hasActiveRegister,
+}: {
+  isCheckedIn: boolean;
+  posAccess: boolean;
+  hasValidSubscription: boolean;
+  hasActiveRegister: boolean;
+}): string | null {
+  if (!isCheckedIn) return "Staff must check-in first";
+  if (!posAccess) return "No POS access permission";
+  if (!hasValidSubscription) return "Subscription expired";
+  if (!hasActiveRegister) return "Cash register not opened";
+  return null;
+}
 
 export const getCustomerById = async (id: string, outletId: string) => {
   const customer = await prismaDB.customerRestaurantAccess.findFirst({

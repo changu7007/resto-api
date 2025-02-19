@@ -24,7 +24,7 @@ import {
 import { getFetchAllNotificationToRedis } from "../../../lib/outlet/get-items";
 import { websocketManager } from "../../../services/ws";
 import { BadRequestsException } from "../../../exceptions/bad-request";
-import { OrderStatus, OrderType } from "@prisma/client";
+import { OrderStatus, OrderType, CashRegister } from "@prisma/client";
 import { getYear } from "date-fns";
 import { getfetchOutletStocksToRedis } from "../../../lib/outlet/get-inventory";
 import { inviteCode, menuCardSchema } from "./orderOutletController";
@@ -68,6 +68,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     staffId,
     username,
     isPaid,
+    cashRegisterId,
     isValid,
     phoneNo,
     orderType,
@@ -99,6 +100,21 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
       "Please Select Payment Mode",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
+  }
+
+  let cashRegister: CashRegister | null = null;
+
+  if (isPaid === true && paymentMethod) {
+    const findCashRegister = await prismaDB.cashRegister.findFirst({
+      where: { id: cashRegisterId, status: "OPEN" },
+    });
+    if (!findCashRegister?.id) {
+      throw new NotFoundException(
+        "Cash Register Not Found",
+        ErrorCode.NOT_FOUND
+      );
+    }
+    cashRegister = findCashRegister;
   }
 
   const [findStaff, getOutlet] = await Promise.all([
@@ -190,6 +206,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
         orderType: orderType,
         username: username ?? findStaff.name,
         phoneNo: phoneNo ?? null,
+
         staffId: findStaff.id,
         customerId: isValid === true ? customer?.id : null,
         paymentMethod: isPaid ? paymentMethod : null,
@@ -371,6 +388,21 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
         },
         data: {
           invoiceNo: { increment: 1 },
+        },
+      });
+    }
+
+    if (isPaid && cashRegister?.id) {
+      // Create cash transaction for the order
+      await prismaDB.cashTransaction.create({
+        data: {
+          registerId: cashRegister?.id,
+          amount: totalAmount,
+          type: "CASH_IN",
+          source: "ORDER",
+          description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
+          paymentMethod: paymentMethod,
+          performedBy: staffId,
         },
       });
     }

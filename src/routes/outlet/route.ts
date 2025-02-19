@@ -8,6 +8,7 @@ import {
   deleteOutlet,
   fetchInvoiceDetails,
   getAllNotifications,
+  getAllOutlets,
   getByOutletId,
   getIntegration,
   getrazorpayConfig,
@@ -219,8 +220,26 @@ import {
   getStaffFavoriteMenu,
   removeStaffFavoriteMenu,
 } from "../../controllers/outlet/items/staffs-items-controller";
+import {
+  getAdminRegisterStatus,
+  getAllCashRegisters,
+  getTransactionHistory,
+  getTransactionHistoryForRegister,
+  recordIncome,
+} from "../../controllers/outlet/cash-registers/registerController";
+import {
+  openAdminRegister,
+  closeAdminRegister,
+} from "../../controllers/outlet/cash-registers/adminRegisterController";
 
 const outletRoute: Router = Router();
+
+outletRoute.get("/get-all-outlets", errorHandler(getAllOutlets));
+outletRoute.get(
+  "/:outletId/get-admin-register-status",
+  isAuthMiddelware,
+  errorHandler(getAdminRegisterStatus)
+);
 
 outletRoute.patch(
   "/:outletId/update-outlet-type",
@@ -1137,6 +1156,49 @@ outletRoute.patch(
   "/:outletId/alerts/acknowledge",
   isAuthMiddelware,
   errorHandler(acknowledgeAlert)
+);
+
+//Cash Register
+outletRoute.get(
+  "/:outletId/cash-registers",
+  isAuthMiddelware,
+  errorHandler(getAllCashRegisters)
+);
+
+outletRoute.get(
+  "/:outletId/transactions",
+  isAuthMiddelware,
+  errorHandler(getTransactionHistory)
+);
+
+outletRoute.post(
+  "/:outletId/admin-register/open",
+  isAuthMiddelware,
+  errorHandler(openAdminRegister)
+);
+
+outletRoute.post(
+  "/:outletId/admin-register/:registerId/close",
+  isAuthMiddelware,
+  errorHandler(closeAdminRegister)
+);
+
+outletRoute.get(
+  "/:outletId/admin-register/status",
+  isAuthMiddelware,
+  errorHandler(getAdminRegisterStatus)
+);
+
+outletRoute.post(
+  "/:outletId/admin-register/record-income",
+  isAuthMiddelware,
+  errorHandler(recordIncome)
+);
+
+outletRoute.get(
+  "/:outletId/admin-register/transactions-for-register",
+  isAuthMiddelware,
+  errorHandler(getTransactionHistoryForRegister)
 );
 
 export default outletRoute;

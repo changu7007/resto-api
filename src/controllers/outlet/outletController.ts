@@ -21,6 +21,20 @@ import { z } from "zod";
 import { generateSlug } from "../../lib/utils";
 import { FoodRole } from "@prisma/client";
 
+export const getAllOutlets = async (req: Request, res: Response) => {
+  const outlets = await prismaDB.restaurant.findMany({
+    select: {
+      id: true,
+    },
+  });
+
+  return res.json({
+    success: true,
+    outlets: outlets,
+    message: "Fetched Successfully",
+  });
+};
+
 export const getStaffOutlet = async (req: Request, res: Response) => {
   //@ts-ignore
   // const getOutlet = await redis.get(`O-${req?.user?.restaurantId}`);
@@ -390,6 +404,12 @@ export const updateOrCreateOperatingHours = async (
     },
   });
   await redis.del(`O-${outlet.id}`);
+
+  if (outlet?.users?.sites?.length > 0) {
+    for (const site of outlet?.users?.sites) {
+      await redis.del(`app-domain-${site?.subdomain}`);
+    }
+  }
 
   return res.json({
     success: true,

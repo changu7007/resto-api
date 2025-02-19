@@ -1,4 +1,9 @@
-import { OrderStatus, OrderType, PaymentMethod } from "@prisma/client";
+import {
+  CashRegister,
+  OrderStatus,
+  OrderType,
+  PaymentMethod,
+} from "@prisma/client";
 import { prismaDB } from "../../..";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
@@ -573,6 +578,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
 
   const {
     adminId,
+    cashRegisterId,
     username,
     isPaid,
     isValid,
@@ -606,6 +612,21 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
       "Please Select Payment Mode",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
+  }
+
+  let cashRegister: CashRegister | null = null;
+
+  if (isPaid === true && paymentMethod) {
+    const findCashRegister = await prismaDB.cashRegister.findFirst({
+      where: { id: cashRegisterId, status: "OPEN" },
+    });
+    if (!findCashRegister?.id) {
+      throw new NotFoundException(
+        "Cash Register Not Found",
+        ErrorCode.NOT_FOUND
+      );
+    }
+    cashRegister = findCashRegister;
   }
 
   const [findUser, getOutlet] = await Promise.all([
@@ -889,6 +910,21 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         },
         data: {
           invoiceNo: { increment: 1 },
+        },
+      });
+    }
+
+    if (isPaid && cashRegister?.id) {
+      // Create cash transaction for the order
+      await prismaDB.cashTransaction.create({
+        data: {
+          registerId: cashRegister?.id,
+          amount: totalAmount,
+          type: "CASH_IN",
+          source: "ORDER",
+          description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
+          paymentMethod: paymentMethod,
+          performedBy: findUser.id,
         },
       });
     }
@@ -1820,27 +1856,6 @@ export const orderStatusPatch = async (req: Request, res: Response) => {
     },
   });
 
-  const alerts = await prismaDB.alert.findMany({
-    where: {
-      restaurantId: outletId,
-      status: {
-        in: ["PENDING"],
-      },
-    },
-    select: {
-      id: true,
-      type: true,
-      status: true,
-      priority: true,
-      href: true,
-      message: true,
-      createdAt: true,
-    },
-  });
-  websocketManager.notifyClients(outletId, "NEW_ALERT");
-
-  await redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
-
   await Promise.all([
     redis.del(`active-os-${outletId}`),
     redis.del(`liv-o-${outletId}`),
@@ -1848,8 +1863,10 @@ export const orderStatusPatch = async (req: Request, res: Response) => {
     redis.del(`a-${outletId}`),
     redis.del(`o-n-${outletId}`),
     redis.del(`${outletId}-stocks`),
+    redis.del(`alerts-${outletId}`),
   ]);
 
+  websocketManager.notifyClients(outletId, "NEW_ALERT");
   websocketManager.notifyClients(outlet?.id, "ORDER_UPDATED");
 
   return res.json({

@@ -9,6 +9,7 @@ const verificationController_1 = require("../controllers/auth/verificationContro
 const outletController_1 = require("../controllers/outlet/outletController");
 const planController_1 = require("../controllers/outlet/plans/planController");
 const orderSessionController_1 = require("../controllers/outlet/order/orderSession/orderSessionController");
+const pos_controller_1 = require("../controllers/auth/pos/pos-controller");
 const authRoute = (0, express_1.Router)();
 authRoute.post("/app-login", (0, error_handler_1.errorHandler)(appAuthController_1.OwnerLogin));
 authRoute.post("/register-app-user", (0, error_handler_1.errorHandler)(appAuthController_1.registerOwner));
@@ -20,6 +21,9 @@ authRoute.get("/staff-user/:id/latest", auth_1.isAuthMiddelware, (0, error_handl
 authRoute.post("/staff-check-in", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.staffCheckIn));
 authRoute.post("/staff-check-out", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.staffCheckOut));
 authRoute.post("/staff-login", (0, error_handler_1.errorHandler)(staffAuthController_1.StaffLogin));
+authRoute.post("/pos-login", (0, error_handler_1.errorHandler)(pos_controller_1.StaffPOSLogin));
+authRoute.post("/pos-logout", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(pos_controller_1.StaffPOSLogout));
+authRoute.get("/pos-user", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(pos_controller_1.GetPOSUser));
 authRoute.post("/staff-logout", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.StaffLogout));
 authRoute.get("/staff-user", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.GetStaff));
 authRoute.get("/staff-refresh-token", (0, error_handler_1.errorHandler)(staffAuthController_1.StaffUpdateAccessToken));

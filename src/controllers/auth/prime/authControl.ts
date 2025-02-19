@@ -99,38 +99,66 @@ export function generateOtp() {
 export const CustomerLogin = async (req: Request, res: Response) => {
   const { phoneNo, name, restaurantId } = req.body;
 
-  const findCustomer = await prismaDB.customer.findFirst({
+  const existingCustomer = await prismaDB.customer.findUnique({
     where: {
       phoneNo: phoneNo,
-      restaurantAccess: {
-        some: {
-          restaurantId: restaurantId,
-        },
-      },
+    },
+    include: {
+      restaurantAccess: true,
     },
   });
 
-  if (findCustomer?.id) {
-    const updateCustomer = await prismaDB.customer.update({
-      where: {
-        id: findCustomer.id,
-      },
-      data: {
-        name: name,
-      },
-    });
+  if (existingCustomer?.id) {
+    // Customer exists, check if they have access to this restaurant
+    const hasRestaurantAccess = existingCustomer.restaurantAccess.some(
+      (access) => access.restaurantId === restaurantId
+    );
 
-    const customerData = {
-      id: updateCustomer?.id,
-      name: updateCustomer?.name,
-      email: updateCustomer?.email,
-      phoneNo: updateCustomer?.phoneNo,
-      image: updateCustomer?.image,
-      role: updateCustomer?.role,
-      restaurantId: restaurantId,
-    };
-    await getOutletCustomerAndFetchToRedis(restaurantId);
-    sendToken(customerData as Customer, 200, res);
+    if (hasRestaurantAccess) {
+      // Update existing customer's name if provided
+      const updateCustomer = await prismaDB.customer.update({
+        where: {
+          id: existingCustomer.id,
+        },
+        data: {
+          name: name || existingCustomer.name,
+        },
+      });
+
+      const customerData = {
+        id: updateCustomer.id,
+        name: updateCustomer.name,
+        email: updateCustomer.email,
+        phoneNo: updateCustomer.phoneNo,
+        image: updateCustomer.image,
+        role: updateCustomer.role,
+        restaurantId: restaurantId,
+      };
+
+      await getOutletCustomerAndFetchToRedis(restaurantId);
+      return sendToken(customerData as Customer, 200, res);
+    } else {
+      // Add access to new restaurant for existing customer
+      await prismaDB.customerRestaurantAccess.create({
+        data: {
+          customerId: existingCustomer.id,
+          restaurantId: restaurantId,
+        },
+      });
+
+      const customerData = {
+        id: existingCustomer.id,
+        name: existingCustomer.name,
+        email: existingCustomer.email,
+        phoneNo: existingCustomer.phoneNo,
+        image: existingCustomer.image,
+        role: existingCustomer.role,
+        restaurantId: restaurantId,
+      };
+
+      await getOutletCustomerAndFetchToRedis(restaurantId);
+      return sendToken(customerData as Customer, 200, res);
+    }
   } else {
     const createCustomer = await prismaDB.customer.create({
       data: {

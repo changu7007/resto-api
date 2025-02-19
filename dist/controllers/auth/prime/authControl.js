@@ -111,36 +111,59 @@ function generateOtp() {
 exports.generateOtp = generateOtp;
 const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { phoneNo, name, restaurantId } = req.body;
-    const findCustomer = yield __1.prismaDB.customer.findFirst({
+    const existingCustomer = yield __1.prismaDB.customer.findUnique({
         where: {
             phoneNo: phoneNo,
-            restaurantAccess: {
-                some: {
-                    restaurantId: restaurantId,
-                },
-            },
+        },
+        include: {
+            restaurantAccess: true,
         },
     });
-    if (findCustomer === null || findCustomer === void 0 ? void 0 : findCustomer.id) {
-        const updateCustomer = yield __1.prismaDB.customer.update({
-            where: {
-                id: findCustomer.id,
-            },
-            data: {
-                name: name,
-            },
-        });
-        const customerData = {
-            id: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.id,
-            name: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.name,
-            email: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.email,
-            phoneNo: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.phoneNo,
-            image: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.image,
-            role: updateCustomer === null || updateCustomer === void 0 ? void 0 : updateCustomer.role,
-            restaurantId: restaurantId,
-        };
-        yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(restaurantId);
-        (0, jwt_1.sendToken)(customerData, 200, res);
+    if (existingCustomer === null || existingCustomer === void 0 ? void 0 : existingCustomer.id) {
+        // Customer exists, check if they have access to this restaurant
+        const hasRestaurantAccess = existingCustomer.restaurantAccess.some((access) => access.restaurantId === restaurantId);
+        if (hasRestaurantAccess) {
+            // Update existing customer's name if provided
+            const updateCustomer = yield __1.prismaDB.customer.update({
+                where: {
+                    id: existingCustomer.id,
+                },
+                data: {
+                    name: name || existingCustomer.name,
+                },
+            });
+            const customerData = {
+                id: updateCustomer.id,
+                name: updateCustomer.name,
+                email: updateCustomer.email,
+                phoneNo: updateCustomer.phoneNo,
+                image: updateCustomer.image,
+                role: updateCustomer.role,
+                restaurantId: restaurantId,
+            };
+            yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(restaurantId);
+            return (0, jwt_1.sendToken)(customerData, 200, res);
+        }
+        else {
+            // Add access to new restaurant for existing customer
+            yield __1.prismaDB.customerRestaurantAccess.create({
+                data: {
+                    customerId: existingCustomer.id,
+                    restaurantId: restaurantId,
+                },
+            });
+            const customerData = {
+                id: existingCustomer.id,
+                name: existingCustomer.name,
+                email: existingCustomer.email,
+                phoneNo: existingCustomer.phoneNo,
+                image: existingCustomer.image,
+                role: existingCustomer.role,
+                restaurantId: restaurantId,
+            };
+            yield (0, outlet_1.getOutletCustomerAndFetchToRedis)(restaurantId);
+            return (0, jwt_1.sendToken)(customerData, 200, res);
+        }
     }
     else {
         const createCustomer = yield __1.prismaDB.customer.create({

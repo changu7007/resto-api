@@ -10,7 +10,7 @@ import { Response } from "express";
 import { redis } from "./redis";
 import { FUser } from "../controllers/auth/owner/appAuthController";
 import { Customer } from "../controllers/auth/prime/authControl";
-import { FStaff } from "../lib/get-users";
+import { FormattedPOSStaff, FStaff } from "../lib/get-users";
 
 interface ITokenOptions {
   expires: Date;
@@ -38,7 +38,7 @@ export const refreshTokenOptions: ITokenOptions = {
 };
 
 export const sendToken = async (
-  user: FStaff | FUser | Customer,
+  user: FStaff | FUser | Customer | FormattedPOSStaff,
   statusCode: number,
   res: Response
 ) => {
@@ -50,7 +50,11 @@ export const sendToken = async (
     expiresIn: "7d",
   });
 
-  await redis.set(user.id, JSON.stringify(user));
+  if (user as FormattedPOSStaff) {
+    await redis.set(`pos-${user.id}`, JSON.stringify(user));
+  } else {
+    await redis.set(user.id, JSON.stringify(user));
+  }
 
   if (process.env.NODE_ENV === "production") {
     accessTokenOptions.secure = true;

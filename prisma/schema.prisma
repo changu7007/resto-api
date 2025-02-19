@@ -73,6 +73,7 @@ model Restaurant {
   Alert                 Alert[]                    @relation("RestaurantToAlert")
   Report                Report[]                   @relation("RestaurantToReports")
   targetMetrics         TargetMetrics?
+  cashRegisters         CashRegister[]             @relation("RestaurantToCashRegister")
 }
 
 model Invite {
@@ -184,31 +185,34 @@ enum StaffActive {
 }
 
 model Staff {
-  id            String          @id @default(auto()) @map("_id") @db.ObjectId
-  active        StaffActive     @default(ACTIVE)
-  name          String
-  email         String          @unique
-  emailVerified Boolean?
-  password      String?
-  image         String?
-  phoneNo       String          @unique
-  role          UserRole
-  restaurantId  String          @db.ObjectId
-  restaurant    Restaurant      @relation("RestaurantToStaffs", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  orderSession  OrderSession[]
-  orders        Order[]
-  table         Table[]
-  shift         Shift[]
-  checkIns      CheckInRecord[]
-  payroll       Payroll[]
-  favoriteMenu  String[]
-  payFrequency  PayFrequency    @default(MONTHLY)
-  allowances    Float?
-  deductions    Float?
-  salary        String
-  joinedDate    DateTime
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  active           StaffActive       @default(ACTIVE)
+  name             String
+  email            String            @unique
+  emailVerified    Boolean?
+  password         String?
+  posAccess        Boolean           @default(false)
+  image            String?
+  phoneNo          String            @unique
+  role             UserRole
+  restaurantId     String            @db.ObjectId
+  restaurant       Restaurant        @relation("RestaurantToStaffs", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderSession     OrderSession[]
+  orders           Order[]
+  table            Table[]
+  shift            Shift[]
+  checkIns         CheckInRecord[]
+  payroll          Payroll[]
+  favoriteMenu     String[]
+  payFrequency     PayFrequency      @default(MONTHLY)
+  allowances       Float?
+  deductions       Float?
+  salary           String
+  joinedDate       DateTime
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  cashRegisters    CashRegister[]    @relation("StaffToCashRegister")
+  cashTransactions CashTransaction[] @relation("StaffToTransaction")
 
   @@index([restaurantId])
 }
@@ -237,14 +241,18 @@ enum ShiftType {
 }
 
 model CheckInRecord {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
-  staff        Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  staffId      String    @db.ObjectId
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  staff        Staff         @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  staffId      String        @db.ObjectId
   checkInTime  DateTime?
   checkOutTime DateTime?
-  date         DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  status       CheckInStatus @default(STALE)
+  notes        String?
+  registerId   String?       @db.ObjectId
+  register     CashRegister? @relation("RegisterToCheckIn", fields: [registerId], references: [id])
+  date         DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Payroll {
@@ -304,6 +312,8 @@ model User {
   orderSession       OrderSession[]
   Invite             Invite[]
   restaurants        UserRestaurantAccess[] @relation("UserToAccess")
+  cashRegisters      CashRegister[]         @relation("UserToCashRegister")
+  cashTransactions   CashTransaction[]      @relation("UserToTransaction")
 }
 
 model UserRestaurantAccess {
@@ -808,31 +818,32 @@ enum OrderSessionStatus {
 }
 
 model OrderSession {
-  id            String                    @id @default(auto()) @map("_id") @db.ObjectId
-  billId        String
-  orders        Order[]
-  username      String
-  phoneNo       String?
-  sessionStatus OrderSessionStatus        @default(ONPROGRESS)
-  orderType     OrderType
-  active        Boolean                   @default(true)
-  restaurantId  String                    @db.ObjectId
-  restaurant    Restaurant                @relation("RestaurantToOrderSession", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  customerId    String?                   @db.ObjectId
-  customer      CustomerRestaurantAccess? @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  tableId       String?                   @db.ObjectId
-  table         Table?                    @relation(fields: [tableId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  staffId       String?                   @db.ObjectId
-  staff         Staff?                    @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  adminId       String?                   @db.ObjectId
-  admin         User?                     @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  createdAt     DateTime                  @default(now())
-  subTotal      Float?
-  isPaid        Boolean?                  @default(false)
-  invoiceUrl    String?
-  createdBy     String?
-  paymentMethod PaymentMethod?
-  updatedAt     DateTime                  @updatedAt
+  id              String                    @id @default(auto()) @map("_id") @db.ObjectId
+  billId          String
+  orders          Order[]
+  username        String
+  phoneNo         String?
+  sessionStatus   OrderSessionStatus        @default(ONPROGRESS)
+  orderType       OrderType
+  active          Boolean                   @default(true)
+  restaurantId    String                    @db.ObjectId
+  restaurant      Restaurant                @relation("RestaurantToOrderSession", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  customerId      String?                   @db.ObjectId
+  customer        CustomerRestaurantAccess? @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tableId         String?                   @db.ObjectId
+  table           Table?                    @relation(fields: [tableId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  staffId         String?                   @db.ObjectId
+  staff           Staff?                    @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  adminId         String?                   @db.ObjectId
+  admin           User?                     @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt       DateTime                  @default(now())
+  subTotal        Float?
+  isPaid          Boolean?                  @default(false)
+  invoiceUrl      String?
+  createdBy       String?
+  paymentMethod   PaymentMethod?
+  updatedAt       DateTime                  @updatedAt
+  CashTransaction CashTransaction[]         @relation("OrderToTransaction")
 
   @@index([customerId])
   @@index([staffId])
@@ -1014,6 +1025,7 @@ model Vendor {
   name         String
   slug         String
   purchases    Purchase[] @relation("PurchaseToVendor")
+  expenses     Expenses[]
 
   @@index([restaurantId])
 }
@@ -1082,20 +1094,24 @@ enum ExpenseCategory {
 }
 
 model Expenses {
-  id            String          @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId  String          @db.ObjectId
-  restaurant    Restaurant      @relation("RestaurantToExpenses", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  purchaseId    String?         @db.ObjectId
-  purchase      Purchase?       @relation(fields: [purchaseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  category      ExpenseCategory
-  createdBy     String?
-  attachments   String?
-  date          DateTime
-  paymentMethod PaymentMethod?
-  amount        Float
-  description   String
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId    String            @db.ObjectId
+  restaurant      Restaurant        @relation("RestaurantToExpenses", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  purchaseId      String?           @db.ObjectId
+  purchase        Purchase?         @relation(fields: [purchaseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  category        ExpenseCategory
+  createdBy       String?
+  attachments     String?
+  date            DateTime
+  restock         Boolean?
+  vendorId        String?           @db.ObjectId
+  vendor          Vendor?           @relation(fields: [vendorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  paymentMethod   PaymentMethod?
+  amount          Float
+  description     String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  CashTransaction CashTransaction[] @relation("ExpenseToTransaction")
 
   @@index([restaurantId])
 }
@@ -1190,19 +1206,115 @@ enum ReportStatus {
 }
 
 model TargetMetrics {
-  id           String     @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId String     @unique @db.ObjectId
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id                      String     @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId            String     @unique @db.ObjectId
+  restaurant              Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  targetGrossProfit       Float      @default(30) // 30% target
+  targetNetProfit         Float      @default(15) // 15% target
+  targetFoodCost          Float      @default(30) // 30% target
+  targetLaborCost         Float      @default(25) // 25% target
+  targetOccupancyRate     Float      @default(70) // 70% target
+  targetServiceTime       Float      @default(30) // 30 minutes target
+  targetInventoryTurnover Float      @default(12) // 12 times per year
+  targetCurrentRatio      Float      @default(1.5) // 1.5:1 target
+  updatedAt               DateTime   @updatedAt
+  createdAt               DateTime   @default(now())
+}
 
-  targetGrossProfit       Float @default(30) // 30% target
-  targetNetProfit         Float @default(15) // 15% target
-  targetFoodCost          Float @default(30) // 30% target
-  targetLaborCost         Float @default(25) // 25% target
-  targetOccupancyRate     Float @default(70) // 70% target
-  targetServiceTime       Float @default(30) // 30 minutes target
-  targetInventoryTurnover Float @default(12) // 12 times per year
-  targetCurrentRatio      Float @default(1.5) // 1.5:1 target
+enum RegisterStatus {
+  OPEN
+  CLOSED
+  FORCE_CLOSED
+}
 
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+enum CheckInStatus {
+  STALE
+  ACTIVE
+  COMPLETED
+  FORCE_CLOSED
+}
+
+enum CashTransactionType {
+  CASH_IN
+  CASH_OUT
+}
+
+enum TransactionSource {
+  ORDER
+  EXPENSE
+  MANUAL
+  SETTLEMENT
+}
+
+model CashRegister {
+  id                 String            @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId       String            @db.ObjectId
+  restaurant         Restaurant        @relation("RestaurantToCashRegister", fields: [restaurantId], references: [id], onDelete: Cascade)
+  openedBy           String            @db.ObjectId
+  staff              Staff?            @relation("StaffToCashRegister", fields: [openedBy], references: [id])
+  user               User?             @relation("UserToCashRegister", fields: [openedBy], references: [id])
+  openingBalance     Float
+  closingBalance     Float?
+  actualBalance      Float?
+  openingUPIBalance  Float?
+  closingUPIBalance  Float?
+  openingCashBalance Float?
+  closingCashBalance Float?
+  openingCardBalance Float?
+  closingCardBalance Float?
+  status             RegisterStatus    @default(OPEN)
+  openingNotes       String?
+  closingNotes       String?
+  openedAt           DateTime          @default(now())
+  closedAt           DateTime?
+  transactions       CashTransaction[] @relation("RegisterToTransactions")
+  checkIns           CheckInRecord[]   @relation("RegisterToCheckIn")
+  denominations      Denomination?     @relation("RegisterToDenomination")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([restaurantId])
+  @@index([openedBy])
+}
+
+model CashTransaction {
+  id            String              @id @default(auto()) @map("_id") @db.ObjectId
+  registerId    String              @db.ObjectId
+  register      CashRegister        @relation("RegisterToTransactions", fields: [registerId], references: [id], onDelete: Cascade)
+  type          CashTransactionType
+  source        TransactionSource   @default(MANUAL)
+  amount        Float
+  description   String
+  orderId       String?             @db.ObjectId
+  order         OrderSession?       @relation("OrderToTransaction", fields: [orderId], references: [id])
+  expenseId     String?             @db.ObjectId
+  expense       Expenses?           @relation("ExpenseToTransaction", fields: [expenseId], references: [id])
+  paymentMethod PaymentMethod // CASH, UPI, CARD, etc.
+  referenceId   String? // For linking to orders or other transactions
+  performedBy   String              @db.ObjectId
+  staff         Staff?              @relation("StaffToTransaction", fields: [performedBy], references: [id])
+  user          User?               @relation("UserToTransaction", fields: [performedBy], references: [id])
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([registerId])
+  @@index([performedBy])
+}
+
+model Denomination {
+  id         String       @id @default(auto()) @map("_id") @db.ObjectId
+  registerId String       @unique @db.ObjectId
+  register   CashRegister @relation("RegisterToDenomination", fields: [registerId], references: [id], onDelete: Cascade)
+  note500    Int?
+  note200    Int?
+  note100    Int?
+  note50     Int?
+  note20     Int?
+  note10     Int?
+  coins      Float?
+  coins2     Float?
+  coins5     Float?
+  total      Float
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 }
