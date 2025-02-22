@@ -48,13 +48,24 @@ export const StaffLogin = async (req: Request, res: Response) => {
 export const GetStaff = async (req: Request, res: Response) => {
   // @ts-ignore
   const staffId = req?.user?.id;
-  const formattedStaff = await getFormatStaffAndSendToRedis(staffId);
 
-  return res.json({
-    success: true,
-    message: "Staff Fetched Successfully",
-    staff: formattedStaff,
-  });
+  const redisStaff = await redis.get(staffId);
+
+  if (redisStaff) {
+    return res.json({
+      success: true,
+      message: "Staff Fetched Successfully",
+      staff: JSON.parse(redisStaff),
+    });
+  } else {
+    const formattedStaff = await getFormatStaffAndSendToRedis(staffId);
+
+    return res.json({
+      success: true,
+      message: "Staff Fetched Successfully",
+      staff: formattedStaff,
+    });
+  }
 };
 
 export const StaffLogout = async (req: Request, res: Response) => {
@@ -81,26 +92,55 @@ export const StaffUpdateAccessToken = async (req: Request, res: Response) => {
   const session = await redis.get(payload.id);
 
   if (!session) {
-    throw new NotFoundException("Staff Not Found", ErrorCode.NOT_FOUND);
+    const user = await prismaDB.staff.findUnique({
+      where: {
+        id: payload.id,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException(
+        "Session expired, please login again",
+        ErrorCode.UNAUTHORIZED
+      );
+    }
+
+    await getFormatStaffAndSendToRedis(user?.id);
+
+    const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+      expiresIn: "5m",
+    });
+
+    const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      success: true,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  } else {
+    const user = JSON.parse(session);
+
+    const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+      expiresIn: "5m",
+    });
+
+    const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      success: true,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
   }
-
-  const user = JSON.parse(session);
-
-  const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
-    expiresIn: "5m",
-  });
-
-  const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
-    expiresIn: "7d",
-  });
-
-  res.status(200).json({
-    success: true,
-    tokens: {
-      accessToken,
-      refreshToken,
-    },
-  });
 };
 
 export const staffCheckIn = async (req: Request, res: Response) => {

@@ -14,6 +14,7 @@ const client_1 = require("@prisma/client");
 const __1 = require("..");
 const bad_request_1 = require("../exceptions/bad-request");
 const root_1 = require("../exceptions/root");
+const redis_1 = require("./redis");
 class StaffCheckInServices {
     handleStaffChecIn(staffId, restaurantId, openingBalance, notes, denominations) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -23,6 +24,10 @@ class StaffCheckInServices {
                     where: {
                         staffId: staffId,
                         status: client_1.CheckInStatus.ACTIVE,
+                        checkOutTime: null,
+                        date: {
+                            gt: new Date(),
+                        },
                     },
                     include: {
                         register: true,
@@ -109,6 +114,7 @@ class StaffCheckInServices {
                         },
                     },
                 });
+                yield redis_1.redis.del(staffId);
                 if (getTodaysStaleCheckIn) {
                     // Create new check-in record
                     const checkIn = yield tx.checkInRecord.update({

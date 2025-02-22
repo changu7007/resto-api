@@ -613,7 +613,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                             : orderStatus,
                         totalNetPrice: totalNetPrice,
                         gstPrice: gstPrice,
-                        totalAmount: totalAmount.toString(),
+                        totalAmount: totalAmount,
                         totalGrossProfit: totalGrossProfit,
                         generatedOrderId: orderId,
                         orderType: orderType,
@@ -821,7 +821,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             orderType,
             totalNetPrice,
             gstPrice,
-            totalAmount: totalAmount.toString(),
+            totalAmount: totalAmount,
             totalGrossProfit,
             orderItems: {
                 create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
@@ -1128,7 +1128,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     orderStatus: orderStatus,
                     totalNetPrice: totalNetPrice,
                     gstPrice: gstPrice,
-                    totalAmount: totalAmount.toString(),
+                    totalAmount: totalAmount,
                     totalGrossProfit: totalGrossProfit,
                     generatedOrderId: generatedId,
                     orderType: getOrder.orderType,
@@ -1668,7 +1668,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 totalGrossProfit,
                 totalNetPrice,
                 gstPrice,
-                totalAmount: totalAmount.toString(),
+                totalAmount: totalAmount,
             },
         });
     }));
@@ -1746,7 +1746,7 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
                     totalGrossProfit,
                     totalNetPrice,
                     gstPrice,
-                    totalAmount: totalAmount.toString(),
+                    totalAmount: totalAmount,
                 },
             });
         }

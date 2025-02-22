@@ -17,6 +17,7 @@ const ws_1 = require("../services/ws");
 class AlertService {
     // Check for low stock items
     checkLowStock(restaurantId) {
+        var _a;
         return __awaiter(this, void 0, void 0, function* () {
             const lowStockItems = yield __1.prismaDB.rawMaterial.findMany({
                 where: {
@@ -25,13 +26,16 @@ class AlertService {
                         lte: __1.prismaDB.rawMaterial.fields.minimumStockLevel,
                     },
                 },
+                include: {
+                    consumptionUnit: true,
+                },
             });
             for (const item of lowStockItems) {
                 yield this.createAlert({
                     restaurantId,
                     type: "LOW_STOCK",
                     priority: "HIGH",
-                    message: `Low stock alert for ${item.name}. Current stock: ${item.currentStock}`,
+                    message: `Low stock alert : ${item.name}. (${(_a = item.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} ${item.consumptionUnit.name}) remaining`,
                     metadata: { itemId: item.id, name: item.name },
                 });
             }

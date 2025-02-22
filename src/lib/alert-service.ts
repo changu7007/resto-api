@@ -14,6 +14,9 @@ export class AlertService {
           lte: prismaDB.rawMaterial.fields.minimumStockLevel,
         },
       },
+      include: {
+        consumptionUnit: true,
+      },
     });
 
     for (const item of lowStockItems) {
@@ -21,7 +24,9 @@ export class AlertService {
         restaurantId,
         type: "LOW_STOCK",
         priority: "HIGH",
-        message: `Low stock alert for ${item.name}. Current stock: ${item.currentStock}`,
+        message: `Low stock alert : ${item.name}. (${item.currentStock?.toFixed(
+          2
+        )} ${item.consumptionUnit.name}) remaining`,
         metadata: { itemId: item.id, name: item.name },
       });
     }

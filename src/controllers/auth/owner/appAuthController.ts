@@ -136,26 +136,55 @@ export const AppUpdateAccessToken = async (req: Request, res: Response) => {
   const session = await redis.get(payload.id);
 
   if (!session) {
-    throw new NotFoundException("User Not Found", ErrorCode.NOT_FOUND);
+    const user = await prismaDB.user.findUnique({
+      where: {
+        id: payload.id,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException(
+        "Session expired, please login again",
+        ErrorCode.UNAUTHORIZED
+      );
+    }
+
+    await getFormatUserAndSendToRedis(user?.id);
+
+    const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+      expiresIn: "5m",
+    });
+
+    const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      success: true,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  } else {
+    const user = JSON.parse(session);
+
+    const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+      expiresIn: "5m",
+    });
+
+    const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      success: true,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
   }
-
-  const user = JSON.parse(session);
-
-  const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
-    expiresIn: "5m",
-  });
-
-  const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
-    expiresIn: "7d",
-  });
-
-  res.status(200).json({
-    success: true,
-    tokens: {
-      accessToken,
-      refreshToken,
-    },
-  });
 };
 
 export const registerOwner = async (req: Request, res: Response) => {

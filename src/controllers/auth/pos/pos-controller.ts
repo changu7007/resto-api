@@ -9,6 +9,9 @@ import {
 } from "../../../lib/get-users";
 import { sendToken } from "../../../services/jwt";
 import { redis } from "../../../services/redis";
+import * as jwt from "jsonwebtoken";
+import { ACCESS_TOKEN, REFRESH_TOKEN } from "../../../secrets";
+import { UnauthorizedException } from "../../../exceptions/unauthorized";
 
 export const StaffPOSLogin = async (req: Request, res: Response) => {
   // staffSchema.parse(req.body);
@@ -66,4 +69,69 @@ export const GetPOSUser = async (req: Request, res: Response) => {
   const GetPOSUser = await getFormatStaffPOSAndSendToRedis(id);
 
   return res.json({ success: true, user: GetPOSUser });
+};
+
+export const POSUpdateAccessToken = async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization as string;
+  const refresh_token = authHeader && authHeader.split(" ")[1];
+  const payload = jwt.verify(refresh_token, REFRESH_TOKEN) as jwt.JwtPayload;
+  if (!payload) {
+    throw new NotFoundException(
+      "Could Not refresh token",
+      ErrorCode.TOKENS_NOT_VALID
+    );
+  }
+
+  const session = await redis.get(`pos-${payload.id}`);
+
+  if (!session) {
+    const user = await prismaDB.staff.findUnique({
+      where: {
+        id: payload.id,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException(
+        "Session expired, please login again",
+        ErrorCode.UNAUTHORIZED
+      );
+    }
+
+    await getFormatStaffPOSAndSendToRedis(user?.id);
+
+    const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+      expiresIn: "5m",
+    });
+
+    const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      success: true,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  } else {
+    const user = JSON.parse(session);
+
+    const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+      expiresIn: "5m",
+    });
+
+    const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+      expiresIn: "7d",
+    });
+
+    res.status(200).json({
+      success: true,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  }
 };

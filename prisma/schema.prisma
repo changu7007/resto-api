@@ -873,7 +873,7 @@ model Order {
   totalGrossProfit Float?
   totalNetPrice    Float?
   gstPrice         Float?
-  totalAmount      String
+  totalAmount      Float
   isPaid           Boolean
   createdBy        String?
   staffId          String?      @db.ObjectId

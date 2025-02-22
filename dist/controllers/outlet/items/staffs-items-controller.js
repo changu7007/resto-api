@@ -16,7 +16,7 @@ const root_1 = require("../../../exceptions/root");
 const not_found_1 = require("../../../exceptions/not-found");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const getStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a;
     const { outletId } = req.params;
     // @ts-ignore
     const staffId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
@@ -32,61 +32,13 @@ const getStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, fun
     const favoriteMenu = (staff === null || staff === void 0 ? void 0 : staff.favoriteMenu) || [];
     const items = JSON.parse(redisItems || "[]");
     const favoriteItems = items.filter((item) => favoriteMenu.includes(item.id));
-    const formattedItems = (_b = favoriteItems === null || favoriteItems === void 0 ? void 0 : favoriteItems.filter((i) => i.isDineIn === true)) === null || _b === void 0 ? void 0 : _b.map((menuItem) => {
-        var _a, _b, _c, _d;
-        return ({
-            id: menuItem.id,
-            shortCode: menuItem.shortCode,
-            categoryId: menuItem.categoryId,
-            categoryName: menuItem.category.name,
-            name: menuItem.name,
-            images: menuItem.images.map((image) => ({
-                id: image.id,
-                url: image.url,
-            })),
-            type: menuItem.type,
-            price: menuItem.price,
-            netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
-            itemRecipe: {
-                id: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _a === void 0 ? void 0 : _a.id,
-                menuId: (_b = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _b === void 0 ? void 0 : _b.menuId,
-                menuVariantId: (_c = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _c === void 0 ? void 0 : _c.menuVariantId,
-                addonItemVariantId: (_d = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _d === void 0 ? void 0 : _d.addonItemVariantId,
-            },
-            gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
-            grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
-            isVariants: menuItem.isVariants,
-            isAddOns: menuItem.isAddons,
-            menuItemVariants: menuItem.menuItemVariants.map((variant) => ({
-                id: variant.id,
-                variantName: variant.variant.name,
-                price: variant.price,
-                netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
-                gst: variant === null || variant === void 0 ? void 0 : variant.gst,
-                grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
-                type: variant.foodType,
-            })),
-            favourite: true,
-            menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns) => ({
-                id: addOns.id,
-                addOnGroupName: addOns.addOnGroups.title,
-                description: addOns.addOnGroups.description,
-                addonVariants: addOns.addOnGroups.addOnVariants.map((addOnVariant) => ({
-                    id: addOnVariant.id,
-                    name: addOnVariant.name,
-                    price: addOnVariant.price,
-                    type: addOnVariant.type,
-                })),
-            })),
-        });
-    });
-    res.json({ success: true, data: formattedItems });
+    res.json({ success: true, data: favoriteItems });
 });
 exports.getStaffFavoriteMenu = getStaffFavoriteMenu;
 const addStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _c;
+    var _b;
     // @ts-ignore
-    const staffId = (_c = req.user) === null || _c === void 0 ? void 0 : _c.id;
+    const staffId = (_b = req.user) === null || _b === void 0 ? void 0 : _b.id;
     const staff = yield __1.prismaDB.staff.findFirst({
         where: {
             id: staffId,
@@ -115,9 +67,9 @@ const addStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, fun
 });
 exports.addStaffFavoriteMenu = addStaffFavoriteMenu;
 const removeStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _d;
+    var _c;
     // @ts-ignore
-    const staffId = (_d = req.user) === null || _d === void 0 ? void 0 : _d.id;
+    const staffId = (_c = req.user) === null || _c === void 0 ? void 0 : _c.id;
     const { itemId } = req.params;
     const staff = yield __1.prismaDB.staff.findFirst({
         where: {

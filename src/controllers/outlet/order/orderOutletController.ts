@@ -750,7 +750,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
                 : orderStatus,
             totalNetPrice: totalNetPrice,
             gstPrice: gstPrice,
-            totalAmount: totalAmount.toString(),
+            totalAmount: totalAmount,
             totalGrossProfit: totalGrossProfit,
             generatedOrderId: orderId,
             orderType: orderType,
@@ -1036,7 +1036,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
       orderType,
       totalNetPrice,
       gstPrice,
-      totalAmount: totalAmount.toString(),
+      totalAmount: totalAmount,
       totalGrossProfit,
       orderItems: {
         create: orderItems?.map((item: any) => ({
@@ -1420,7 +1420,7 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
           orderStatus: orderStatus,
           totalNetPrice: totalNetPrice,
           gstPrice: gstPrice,
-          totalAmount: totalAmount.toString(),
+          totalAmount: totalAmount,
           totalGrossProfit: totalGrossProfit,
           generatedOrderId: generatedId,
           orderType: getOrder.orderType,
@@ -2134,7 +2134,7 @@ export const orderItemModification = async (req: Request, res: Response) => {
         totalGrossProfit,
         totalNetPrice,
         gstPrice,
-        totalAmount: totalAmount.toString(),
+        totalAmount: totalAmount,
       },
     });
   });
@@ -2236,7 +2236,7 @@ export const deleteOrderItem = async (req: Request, res: Response) => {
           totalGrossProfit,
           totalNetPrice,
           gstPrice,
-          totalAmount: totalAmount.toString(),
+          totalAmount: totalAmount,
         },
       });
     }

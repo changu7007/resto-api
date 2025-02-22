@@ -73,12 +73,22 @@ const GetStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     // @ts-ignore
     const staffId = (_a = req === null || req === void 0 ? void 0 : req.user) === null || _a === void 0 ? void 0 : _a.id;
-    const formattedStaff = yield (0, get_users_1.getFormatStaffAndSendToRedis)(staffId);
-    return res.json({
-        success: true,
-        message: "Staff Fetched Successfully",
-        staff: formattedStaff,
-    });
+    const redisStaff = yield redis_1.redis.get(staffId);
+    if (redisStaff) {
+        return res.json({
+            success: true,
+            message: "Staff Fetched Successfully",
+            staff: JSON.parse(redisStaff),
+        });
+    }
+    else {
+        const formattedStaff = yield (0, get_users_1.getFormatStaffAndSendToRedis)(staffId);
+        return res.json({
+            success: true,
+            message: "Staff Fetched Successfully",
+            staff: formattedStaff,
+        });
+    }
 });
 exports.GetStaff = GetStaff;
 const StaffLogout = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -100,22 +110,45 @@ const StaffUpdateAccessToken = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
     const session = yield redis_1.redis.get(payload.id);
     if (!session) {
-        throw new not_found_1.NotFoundException("Staff Not Found", root_1.ErrorCode.NOT_FOUND);
+        const user = yield __1.prismaDB.staff.findUnique({
+            where: {
+                id: payload.id,
+            },
+        });
+        if (!user) {
+            throw new unauthorized_1.UnauthorizedException("Session expired, please login again", root_1.ErrorCode.UNAUTHORIZED);
+        }
+        yield (0, get_users_1.getFormatStaffAndSendToRedis)(user === null || user === void 0 ? void 0 : user.id);
+        const accessToken = jwt.sign({ id: user.id }, secrets_1.ACCESS_TOKEN, {
+            expiresIn: "5m",
+        });
+        const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
+            expiresIn: "7d",
+        });
+        res.status(200).json({
+            success: true,
+            tokens: {
+                accessToken,
+                refreshToken,
+            },
+        });
     }
-    const user = JSON.parse(session);
-    const accessToken = jwt.sign({ id: user.id }, secrets_1.ACCESS_TOKEN, {
-        expiresIn: "5m",
-    });
-    const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
-        expiresIn: "7d",
-    });
-    res.status(200).json({
-        success: true,
-        tokens: {
-            accessToken,
-            refreshToken,
-        },
-    });
+    else {
+        const user = JSON.parse(session);
+        const accessToken = jwt.sign({ id: user.id }, secrets_1.ACCESS_TOKEN, {
+            expiresIn: "5m",
+        });
+        const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
+            expiresIn: "7d",
+        });
+        res.status(200).json({
+            success: true,
+            tokens: {
+                accessToken,
+                refreshToken,
+            },
+        });
+    }
 });
 exports.StaffUpdateAccessToken = StaffUpdateAccessToken;
 const staffCheckIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {

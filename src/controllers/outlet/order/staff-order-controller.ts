@@ -228,7 +228,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
                 : orderStatus,
             totalNetPrice: totalNetPrice,
             gstPrice: gstPrice,
-            totalAmount: totalAmount.toString(),
+            totalAmount: totalAmount,
             totalGrossProfit: totalGrossProfit,
             generatedOrderId: orderId,
             orderType: orderType,
@@ -512,7 +512,7 @@ export const existingOrderPatchForStaff = async (
           orderStatus: orderStatus,
           totalNetPrice: totalNetPrice,
           gstPrice: gstPrice,
-          totalAmount: totalAmount.toString(),
+          totalAmount: totalAmount,
           totalGrossProfit: totalGrossProfit,
           generatedOrderId: generatedId,
           orderType: getOrder.orderType,
@@ -840,7 +840,7 @@ export const orderItemModificationByStaff = async (
         totalGrossProfit,
         totalNetPrice,
         gstPrice,
-        totalAmount: totalAmount.toString(),
+        totalAmount: totalAmount,
       },
     });
   });

@@ -492,7 +492,7 @@ export const getRevenueAndExpenses = async (req: Request, res: Response) => {
     if (!monthlyData[month]) {
       monthlyData[month] = { revenue: 0, expenses: 0 };
     }
-    monthlyData[month].revenue += parseFloat(order.totalAmount || "0");
+    monthlyData[month].revenue += Number(order.totalAmount || 0);
   });
 
   // Aggregate purchase expenses by month
@@ -604,7 +604,7 @@ export const orderStatsForOutlet = async (req: Request, res: Response) => {
   orders
     .filter((o) => o.isPaid === true)
     ?.forEach((order) => {
-      const amount = parseFloat(order.totalAmount);
+      const amount = Number(order.totalAmount);
 
       // Calculate gross profit for this order
       let orderGrossProfit = 0;
@@ -765,7 +765,7 @@ export const orderStatsForOutletByStaff = async (
 
   // Sum up the revenue and order counts for each category and the total
   orders.forEach((order) => {
-    const amount = parseFloat(order.totalAmount);
+    const amount = Number(order.totalAmount);
 
     // Sum for all orders
     totals.all.revenue += amount;
@@ -1499,7 +1499,7 @@ export const expenseMetrics = async (req: Request, res: Response) => {
     0
   );
   const totalCashIn = ordersCashIn.reduce(
-    (sum, order) => sum + parseFloat(order?.totalAmount),
+    (sum, order) => sum + Number(order?.totalAmount),
     0
   );
   const totalCashOut = expensesCashOut.reduce(

@@ -369,7 +369,7 @@ const getRevenueAndExpenses = (req, res) => __awaiter(void 0, void 0, void 0, fu
         if (!monthlyData[month]) {
             monthlyData[month] = { revenue: 0, expenses: 0 };
         }
-        monthlyData[month].revenue += parseFloat(order.totalAmount || "0");
+        monthlyData[month].revenue += Number(order.totalAmount || 0);
     });
     // Aggregate purchase expenses by month
     purchases.forEach((purchase) => {
@@ -466,7 +466,7 @@ const orderStatsForOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
     // Calculate revenue, orders, and gross profit
     (_a = orders
         .filter((o) => o.isPaid === true)) === null || _a === void 0 ? void 0 : _a.forEach((order) => {
-        const amount = parseFloat(order.totalAmount);
+        const amount = Number(order.totalAmount);
         // Calculate gross profit for this order
         let orderGrossProfit = 0;
         order.orderItems.forEach((item) => {
@@ -611,7 +611,7 @@ const orderStatsForOutletByStaff = (req, res) => __awaiter(void 0, void 0, void 
     };
     // Sum up the revenue and order counts for each category and the total
     orders.forEach((order) => {
-        const amount = parseFloat(order.totalAmount);
+        const amount = Number(order.totalAmount);
         // Sum for all orders
         totals.all.revenue += amount;
         totals.all.orders++;
@@ -1203,7 +1203,7 @@ const expenseMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function*
     ]);
     const totalCurrExpenses = currExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
     const totalPrevExpenses = prevExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
-    const totalCashIn = ordersCashIn.reduce((sum, order) => sum + parseFloat(order === null || order === void 0 ? void 0 : order.totalAmount), 0);
+    const totalCashIn = ordersCashIn.reduce((sum, order) => sum + Number(order === null || order === void 0 ? void 0 : order.totalAmount), 0);
     const totalCashOut = expensesCashOut.reduce((sum, expense) => sum + (expense.amount || 0), 0);
     const percentageChange = totalPrevExpenses
         ? ((totalCurrExpenses - totalPrevExpenses) / totalPrevExpenses) * 100

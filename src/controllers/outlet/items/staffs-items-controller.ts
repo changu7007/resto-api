@@ -28,57 +28,7 @@ const getStaffFavoriteMenu = async (req: Request, res: Response) => {
 
   const favoriteItems = items.filter((item) => favoriteMenu.includes(item.id));
 
-  const formattedItems = favoriteItems
-    ?.filter((i: any) => i.isDineIn === true)
-    ?.map((menuItem: any) => ({
-      id: menuItem.id,
-      shortCode: menuItem.shortCode,
-      categoryId: menuItem.categoryId,
-      categoryName: menuItem.category.name,
-      name: menuItem.name,
-      images: menuItem.images.map((image: any) => ({
-        id: image.id,
-        url: image.url,
-      })),
-      type: menuItem.type,
-      price: menuItem.price,
-      netPrice: menuItem?.netPrice,
-      itemRecipe: {
-        id: menuItem?.itemRecipe?.id,
-        menuId: menuItem?.itemRecipe?.menuId,
-        menuVariantId: menuItem?.itemRecipe?.menuVariantId,
-        addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId,
-      },
-      gst: menuItem?.gst,
-      grossProfit: menuItem?.grossProfit,
-      isVariants: menuItem.isVariants,
-      isAddOns: menuItem.isAddons,
-      menuItemVariants: menuItem.menuItemVariants.map((variant: any) => ({
-        id: variant.id,
-        variantName: variant.variant.name,
-        price: variant.price,
-        netPrice: variant?.netPrice,
-        gst: variant?.gst,
-        grossProfit: variant?.grossProfit,
-        type: variant.foodType,
-      })),
-      favourite: true,
-      menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns: any) => ({
-        id: addOns.id,
-        addOnGroupName: addOns.addOnGroups.title,
-        description: addOns.addOnGroups.description,
-        addonVariants: addOns.addOnGroups.addOnVariants.map(
-          (addOnVariant: any) => ({
-            id: addOnVariant.id,
-            name: addOnVariant.name,
-            price: addOnVariant.price,
-            type: addOnVariant.type,
-          })
-        ),
-      })),
-    }));
-
-  res.json({ success: true, data: formattedItems });
+  res.json({ success: true, data: favoriteItems });
 };
 
 const addStaffFavoriteMenu = async (req: Request, res: Response) => {

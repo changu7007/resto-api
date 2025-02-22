@@ -209,7 +209,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     total: roundedTotal,
   };
 
-  await billQueueProducer.addJob(
+  billQueueProducer.addJob(
     {
       invoiceData,
       outletId: outlet.id,
@@ -363,7 +363,7 @@ export const generatePdfInvoice = async (invoiceData: any) => {
 };
 
 type Orders = {
-  totalAmount: string;
+  totalAmount: number;
   gstPrice: number;
   totalNetPrice: number;
   orderStatus: OrderStatus;

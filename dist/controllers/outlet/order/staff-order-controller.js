@@ -168,7 +168,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                             : orderStatus,
                         totalNetPrice: totalNetPrice,
                         gstPrice: gstPrice,
-                        totalAmount: totalAmount.toString(),
+                        totalAmount: totalAmount,
                         totalGrossProfit: totalGrossProfit,
                         generatedOrderId: orderId,
                         orderType: orderType,
@@ -374,7 +374,7 @@ const existingOrderPatchForStaff = (req, res) => __awaiter(void 0, void 0, void 
                     orderStatus: orderStatus,
                     totalNetPrice: totalNetPrice,
                     gstPrice: gstPrice,
-                    totalAmount: totalAmount.toString(),
+                    totalAmount: totalAmount,
                     totalGrossProfit: totalGrossProfit,
                     generatedOrderId: generatedId,
                     orderType: getOrder.orderType,
@@ -609,7 +609,7 @@ const orderItemModificationByStaff = (req, res) => __awaiter(void 0, void 0, voi
                 totalGrossProfit,
                 totalNetPrice,
                 gstPrice,
-                totalAmount: totalAmount.toString(),
+                totalAmount: totalAmount,
             },
         });
     }));

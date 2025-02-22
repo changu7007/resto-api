@@ -6,6 +6,7 @@ import {
 import { prismaDB } from "..";
 import { BadRequestsException } from "../exceptions/bad-request";
 import { ErrorCode } from "../exceptions/root";
+import { redis } from "./redis";
 
 export class StaffCheckInServices {
   async handleStaffChecIn(
@@ -31,6 +32,10 @@ export class StaffCheckInServices {
         where: {
           staffId: staffId,
           status: CheckInStatus.ACTIVE,
+          checkOutTime: null,
+          date: {
+            gt: new Date(),
+          },
         },
         include: {
           register: true,
@@ -129,7 +134,7 @@ export class StaffCheckInServices {
           },
         },
       });
-
+      await redis.del(staffId);
       if (getTodaysStaleCheckIn) {
         // Create new check-in record
         const checkIn = await tx.checkInRecord.update({

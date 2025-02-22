@@ -124,22 +124,45 @@ const AppUpdateAccessToken = (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
     const session = yield redis_1.redis.get(payload.id);
     if (!session) {
-        throw new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND);
+        const user = yield __1.prismaDB.user.findUnique({
+            where: {
+                id: payload.id,
+            },
+        });
+        if (!user) {
+            throw new unauthorized_1.UnauthorizedException("Session expired, please login again", root_1.ErrorCode.UNAUTHORIZED);
+        }
+        yield (0, get_users_1.getFormatUserAndSendToRedis)(user === null || user === void 0 ? void 0 : user.id);
+        const accessToken = jwt.sign({ id: user.id }, secrets_1.ACCESS_TOKEN, {
+            expiresIn: "5m",
+        });
+        const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
+            expiresIn: "7d",
+        });
+        res.status(200).json({
+            success: true,
+            tokens: {
+                accessToken,
+                refreshToken,
+            },
+        });
     }
-    const user = JSON.parse(session);
-    const accessToken = jwt.sign({ id: user.id }, secrets_1.ACCESS_TOKEN, {
-        expiresIn: "5m",
-    });
-    const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
-        expiresIn: "7d",
-    });
-    res.status(200).json({
-        success: true,
-        tokens: {
-            accessToken,
-            refreshToken,
-        },
-    });
+    else {
+        const user = JSON.parse(session);
+        const accessToken = jwt.sign({ id: user.id }, secrets_1.ACCESS_TOKEN, {
+            expiresIn: "5m",
+        });
+        const refreshToken = jwt.sign({ id: user === null || user === void 0 ? void 0 : user.id }, secrets_1.REFRESH_TOKEN, {
+            expiresIn: "7d",
+        });
+        res.status(200).json({
+            success: true,
+            tokens: {
+                accessToken,
+                refreshToken,
+            },
+        });
+    }
 });
 exports.AppUpdateAccessToken = AppUpdateAccessToken;
 const registerOwner = (req, res) => __awaiter(void 0, void 0, void 0, function* () {

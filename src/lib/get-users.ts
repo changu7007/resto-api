@@ -241,7 +241,7 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
       payroll: true,
       checkIns: {
         orderBy: {
-          createdAt: "desc",
+          checkInTime: "desc",
         },
       },
     },
@@ -406,7 +406,7 @@ export const getFormatStaffPOSAndSendToRedis = async (staffId: string) => {
       payroll: true,
       checkIns: {
         orderBy: {
-          createdAt: "desc",
+          checkInTime: "desc",
         },
         take: 1,
       },

@@ -51,6 +51,7 @@ import {
 import { generatePdfInvoice } from "../controllers/outlet/order/orderSession/orderSessionController";
 import {
   GetPOSUser,
+  POSUpdateAccessToken,
   StaffPOSLogin,
   StaffPOSLogout,
 } from "../controllers/auth/pos/pos-controller";
@@ -83,6 +84,7 @@ authRoute.get("/pos-user", isAuthMiddelware, errorHandler(GetPOSUser));
 authRoute.post("/staff-logout", isAuthMiddelware, errorHandler(StaffLogout));
 authRoute.get("/staff-user", isAuthMiddelware, errorHandler(GetStaff));
 authRoute.get("/staff-refresh-token", errorHandler(StaffUpdateAccessToken));
+authRoute.get("/pos-refresh-token", errorHandler(POSUpdateAccessToken));
 authRoute.post("/social-auth", errorHandler(socialAuthLogin));
 
 authRoute.get("/outlet/:userId", isAuthMiddelware, errorHandler(getMainOutlet));

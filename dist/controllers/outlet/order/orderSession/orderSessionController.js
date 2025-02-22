@@ -180,7 +180,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         rounded: roundedDifference,
         total: roundedTotal,
     };
-    yield producer_1.billQueueProducer.addJob({
+    producer_1.billQueueProducer.addJob({
         invoiceData,
         outletId: outlet.id,
         phoneNumber: (_d = result === null || result === void 0 ? void 0 : result.phoneNo) !== null && _d !== void 0 ? _d : undefined,

@@ -102,36 +102,48 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
         pageIndex: 0,
         pageSize: 8,
     };
+    console.log(`Search: ${search}`);
+    console.log(`Sorting: ${JSON.stringify(sorting)}`);
+    console.log(`Filters: ${JSON.stringify(filters)}`);
+    console.log(`Pagination: ${JSON.stringify(pagination)}`);
     // Get today's date range
     const today = new Date();
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+    // Build where conditions for staff query
+    const whereConditions = Object.assign(Object.assign({ restaurantId: outletId }, (search &&
+        search.length > 0 && {
+        OR: [{ name: { contains: search, mode: "insensitive" } }],
+    })), (filters.length > 0 && {
+        AND: filters.map((filter) => ({
+            [filter.id]: { in: filter.value },
+        })),
+    }));
+    console.log("Where Conditions:", JSON.stringify(whereConditions, null, 2));
+    // Get total count first
+    const totalCount = yield __1.prismaDB.staff.count({
+        where: whereConditions,
+    });
+    // Calculate pagination parameters
+    const take = pagination.pageSize || 8;
+    const skip = (pagination.pageIndex || 0) * take;
     // Build orderBy for Prisma query
     const orderBy = (sorting === null || sorting === void 0 ? void 0 : sorting.length) > 0
         ? sorting.map((sort) => ({
             [sort.id]: sort.desc ? "desc" : "asc",
         }))
         : [{ createdAt: "desc" }];
-    // Calculate pagination parameters
-    const take = pagination.pageSize || 8;
-    const skip = pagination.pageIndex * take;
-    // Build filters dynamically
-    const filterConditions = filters.map((filter) => ({
-        [filter.id]: { in: filter.value },
-    }));
+    // Fetch paginated staff list
     const getStaffs = yield __1.prismaDB.staff.findMany({
-        // skip,
-        // take,
-        where: {
-            restaurantId: outletId,
-            OR: [{ name: { contains: search, mode: "insensitive" } }],
-            AND: filterConditions,
-        },
+        where: whereConditions,
         include: {
             orders: true,
         },
         orderBy,
+        skip,
+        take,
     });
+    console.log(`Outlet Staffs: ${getStaffs.length}`);
     // Get or create check-in records for today
     const checkInRecords = yield Promise.all(getStaffs.map((staff) => __awaiter(void 0, void 0, void 0, function* () {
         const todayRecords = yield __1.prismaDB.checkInRecord.findMany({
@@ -146,21 +158,43 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 checkInTime: "asc",
             },
         });
+        console.log(`Today Records: ${todayRecords.length}`);
         if (todayRecords.length === 0) {
-            // Create a default record for staff with no check-in
-            const defaultRecord = yield __1.prismaDB.checkInRecord.create({
-                data: {
+            // Check if a default record already exists
+            const existingDefaultRecord = yield __1.prismaDB.checkInRecord.findFirst({
+                where: {
                     staffId: staff.id,
-                    date: startOfDay,
-                    checkInTime: undefined,
-                    checkOutTime: undefined,
+                    date: {
+                        gte: startOfDay,
+                        lte: endOfDay,
+                    },
+                    checkInTime: null,
+                    checkOutTime: null,
                 },
             });
-            return {
-                staff,
-                records: [defaultRecord],
-                totalWorkingHours: 0,
-            };
+            if (!existingDefaultRecord) {
+                // Create a default record only if no record exists
+                const defaultRecord = yield __1.prismaDB.checkInRecord.create({
+                    data: {
+                        staffId: staff.id,
+                        date: startOfDay,
+                        checkInTime: null,
+                        checkOutTime: null,
+                    },
+                });
+                return {
+                    staff,
+                    records: [defaultRecord],
+                    totalWorkingHours: 0,
+                };
+            }
+            else {
+                return {
+                    staff,
+                    records: [existingDefaultRecord],
+                    totalWorkingHours: 0,
+                };
+            }
         }
         console.log("Total Workinh hour calculate INitiated");
         // Calculate total working hours from multiple check-ins
@@ -170,6 +204,7 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 totalWorkingMinutes += (0, date_fns_1.differenceInMinutes)(record.checkOutTime, record.checkInTime);
             }
         });
+        console.log(`Today Records: ${todayRecords.length}`);
         return {
             staff,
             records: todayRecords,
@@ -204,13 +239,20 @@ const getStaffAttendance = (req, res) => __awaiter(void 0, void 0, void 0, funct
             checkInHistory,
         };
     });
-    // Apply pagination
-    const paginatedRecords = formattedAttendance.slice(pagination.pageIndex * pagination.pageSize, (pagination.pageIndex + 1) * pagination.pageSize);
+    console.log({
+        totalRecords: totalCount,
+        pageSize: take,
+        pageIndex: pagination.pageIndex,
+        skip,
+        fetchedRecords: getStaffs.length,
+        formattedRecords: formattedAttendance.length,
+    });
+    console.log(`Paginated Records: ${formattedAttendance.length}`);
     return res.json({
         success: true,
         data: {
-            totalCount: checkInRecords.length,
-            attendance: paginatedRecords,
+            totalCount: totalCount,
+            attendance: formattedAttendance,
         },
         message: "Staff attendance fetched successfully ✅",
     });

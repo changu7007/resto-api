@@ -30,7 +30,7 @@ export const getAllOutlets = async (req: Request, res: Response) => {
 
   return res.json({
     success: true,
-    outlets: outlets,
+    outlets: outlets || [],
     message: "Fetched Successfully",
   });
 };

@@ -199,7 +199,7 @@ const getFormatStaffAndSendToRedis = (staffId) => __awaiter(void 0, void 0, void
             payroll: true,
             checkIns: {
                 orderBy: {
-                    createdAt: "desc",
+                    checkInTime: "desc",
                 },
             },
         },
@@ -296,7 +296,7 @@ const getFormatStaffPOSAndSendToRedis = (staffId) => __awaiter(void 0, void 0, v
             payroll: true,
             checkIns: {
                 orderBy: {
-                    createdAt: "desc",
+                    checkInTime: "desc",
                 },
                 take: 1,
             },
