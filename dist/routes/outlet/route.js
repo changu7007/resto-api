@@ -32,6 +32,7 @@ outletRoute.get("/get-all-outlets", (0, error_handler_1.errorHandler)(outletCont
 outletRoute.get("/:outletId/get-admin-register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
 outletRoute.patch("/:outletId/update-outlet-type", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.updateOutletType));
 outletRoute.get("/staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getStaffOutlet));
+outletRoute.get("/pos-staff-outlet", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getPOSStaffOutlet));
 outletRoute.get("/:outletId/get-razorpay-config", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getrazorpayConfig));
 outletRoute.post("/:outletId/create-outlet-from-copy", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.createOutletFromOutletHub));
 outletRoute.get("/:outletId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getByOutletId));

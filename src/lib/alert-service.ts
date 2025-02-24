@@ -309,7 +309,7 @@ export function initializeAlertCrons() {
 
   // Check low stock every hour
   new // Check low stock every hour
-  Cron("0 * * * *", async () => {
+  Cron("* * * * *", async () => {
     console.log("Checked Low Stock every hour");
     await processAllRestaurants((id) => alertService.checkLowStock(id));
   });

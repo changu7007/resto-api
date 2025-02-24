@@ -383,6 +383,7 @@ const getFormatStaffPOSAndSendToRedis = (staffId) => __awaiter(void 0, void 0, v
         phoneNo: findStaff === null || findStaff === void 0 ? void 0 : findStaff.phoneNo,
         image: findStaff === null || findStaff === void 0 ? void 0 : findStaff.image,
         role: findStaff === null || findStaff === void 0 ? void 0 : findStaff.role,
+        favItems: findStaff === null || findStaff === void 0 ? void 0 : findStaff.favoriteMenu,
         isSubscribed: renewalDay > 0 ? true : false,
         toRenewal: renewalDay,
         expiryDate: findSubscription === null || findSubscription === void 0 ? void 0 : findSubscription.validDate,

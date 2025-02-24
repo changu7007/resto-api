@@ -12,6 +12,10 @@ import {
   getPosStats,
   getStaffPerformance,
 } from "../controllers/outlet/stats/posStatsController";
+import {
+  getPOSTableAllOrders,
+  getPOSTableAllSessionOrders,
+} from "../controllers/outlet/order/posController";
 
 const posRoute: Router = Router();
 
@@ -55,6 +59,18 @@ posRoute.get(
   "/:outletId/pos-stats/staff-performance",
   isAuthMiddelware,
   errorHandler(getStaffPerformance)
+);
+
+posRoute.post(
+  "/:outletId/pos-table/table-session-orders",
+  isAuthMiddelware,
+  errorHandler(getPOSTableAllSessionOrders)
+);
+
+posRoute.post(
+  "/:outletId/pos-table/table-orders",
+  isAuthMiddelware,
+  errorHandler(getPOSTableAllOrders)
 );
 
 export default posRoute;

@@ -31,14 +31,27 @@ export const isAuthMiddelware = async (
       );
     }
 
-    const user = await redis.get(payload?.id);
-
-    if (!user) {
-      throw next(new NotFoundException("User Not Found", ErrorCode.NOT_FOUND));
+    // Try to get regular user first
+    const user = await redis.get(payload.id);
+    if (user) {
+      // @ts-ignore
+      req.user = JSON.parse(user);
+      return next();
     }
-    // @ts-ignore
-    req.user = JSON.parse(user);
-    next();
+
+    // If no regular user, try to get POS user
+    const posUser = await redis.get(`pos-${payload.id}`);
+    if (posUser) {
+      // @ts-ignore
+      req.user = JSON.parse(posUser);
+      return next();
+    }
+
+    // If neither user type is found
+    throw new NotFoundException(
+      "No user found for this token",
+      ErrorCode.NOT_FOUND
+    );
   } catch (error) {
     next(
       new UnauthorizedException(

@@ -11,6 +11,7 @@ import {
   getAllOutlets,
   getByOutletId,
   getIntegration,
+  getPOSStaffOutlet,
   getrazorpayConfig,
   getStaffOutlet,
   patchOutletDetails,
@@ -251,6 +252,11 @@ outletRoute.get(
   "/staff-outlet",
   isAuthMiddelware,
   errorHandler(getStaffOutlet)
+);
+outletRoute.get(
+  "/pos-staff-outlet",
+  isAuthMiddelware,
+  errorHandler(getPOSStaffOutlet)
 );
 outletRoute.get(
   "/:outletId/get-razorpay-config",

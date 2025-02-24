@@ -86,17 +86,17 @@ const closeRegisterSchema = zod_1.z.object({
             const value = parseInt(key.replace("note", "")) || 1; // Use 1 for coins
             return sum + value * (count || 0);
         }, 0);
-        return total > 0;
+        return total >= 0;
     }, "At least one denomination must be entered"),
 });
 const posStaffCheckOut = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b, _c;
     const { outletId } = req.params;
     // @ts-ignore
     const id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
     const validatedBody = closeRegisterSchema.safeParse(req.body);
     if (!validatedBody.success) {
-        throw new bad_request_1.BadRequestsException("Invalid Request Body", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        throw new bad_request_1.BadRequestsException((_c = (_b = validatedBody.error) === null || _b === void 0 ? void 0 : _b.errors[0]) === null || _c === void 0 ? void 0 : _c.message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!outlet) {
@@ -117,10 +117,10 @@ const posStaffCheckOut = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.posStaffCheckOut = posStaffCheckOut;
 const posGetRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b;
+    var _d;
     const { outletId } = req.params;
     // @ts-ignore
-    const id = (_b = req.user) === null || _b === void 0 ? void 0 : _b.id;
+    const id = (_d = req.user) === null || _d === void 0 ? void 0 : _d.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!outlet) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
@@ -129,6 +129,7 @@ const posGetRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, fun
         where: {
             restaurantId: outletId,
             status: "OPEN",
+            openedBy: id,
         },
         include: {
             transactions: {

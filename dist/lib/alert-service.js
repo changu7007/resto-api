@@ -274,7 +274,7 @@ function initializeAlertCrons() {
     const alertService = new AlertService();
     // Check low stock every hour
     new // Check low stock every hour
-     croner_1.Cron("0 * * * *", () => __awaiter(this, void 0, void 0, function* () {
+     croner_1.Cron("* * * * *", () => __awaiter(this, void 0, void 0, function* () {
         console.log("Checked Low Stock every hour");
         yield processAllRestaurants((id) => alertService.checkLowStock(id));
     }));

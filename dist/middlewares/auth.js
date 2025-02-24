@@ -50,13 +50,22 @@ const isAuthMiddelware = (req, res, next) => __awaiter(void 0, void 0, void 0, f
         if (!payload) {
             throw next(new not_found_1.NotFoundException("Access Token is not valid", root_1.ErrorCode.TOKENS_NOT_VALID));
         }
-        const user = yield redis_1.redis.get(payload === null || payload === void 0 ? void 0 : payload.id);
-        if (!user) {
-            throw next(new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND));
+        // Try to get regular user first
+        const user = yield redis_1.redis.get(payload.id);
+        if (user) {
+            // @ts-ignore
+            req.user = JSON.parse(user);
+            return next();
         }
-        // @ts-ignore
-        req.user = JSON.parse(user);
-        next();
+        // If no regular user, try to get POS user
+        const posUser = yield redis_1.redis.get(`pos-${payload.id}`);
+        if (posUser) {
+            // @ts-ignore
+            req.user = JSON.parse(posUser);
+            return next();
+        }
+        // If neither user type is found
+        throw new not_found_1.NotFoundException("No user found for this token", root_1.ErrorCode.NOT_FOUND);
     }
     catch (error) {
         next(new unauthorized_1.UnauthorizedException("Something Went Wrong", root_1.ErrorCode.UNAUTHORIZED, error));

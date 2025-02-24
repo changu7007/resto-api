@@ -515,6 +515,7 @@ export const getFormatStaffPOSAndSendToRedis = async (staffId: string) => {
     phoneNo: findStaff?.phoneNo,
     image: findStaff?.image,
     role: findStaff?.role,
+    favItems: findStaff?.favoriteMenu,
     isSubscribed: renewalDay > 0 ? true : false,
     toRenewal: renewalDay,
     expiryDate: findSubscription?.validDate,

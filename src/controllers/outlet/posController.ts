@@ -100,7 +100,7 @@ const closeRegisterSchema = z.object({
         const value = parseInt(key.replace("note", "")) || 1; // Use 1 for coins
         return sum + value * (count || 0);
       }, 0);
-      return total > 0;
+      return total >= 0;
     }, "At least one denomination must be entered"),
 });
 
@@ -113,7 +113,7 @@ export const posStaffCheckOut = async (req: Request, res: Response) => {
 
   if (!validatedBody.success) {
     throw new BadRequestsException(
-      "Invalid Request Body",
+      validatedBody.error?.errors[0]?.message,
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -159,6 +159,7 @@ export const posGetRegisterStatus = async (req: Request, res: Response) => {
     where: {
       restaurantId: outletId,
       status: "OPEN",
+      openedBy: id,
     },
     include: {
       transactions: {

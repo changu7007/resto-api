@@ -36,19 +36,53 @@ export const getAllOutlets = async (req: Request, res: Response) => {
 };
 
 export const getStaffOutlet = async (req: Request, res: Response) => {
-  //@ts-ignore
-  // const getOutlet = await redis.get(`O-${req?.user?.restaurantId}`);
+  console.log("Request Initiated");
 
-  // if (getOutlet) {
-  //   return res.status(200).json({
-  //     success: true,
-  //     outlet: JSON.parse(getOutlet),
-  //     message: "Fetched Successfully from Redis",
-  //   });
-  // }
+  // @ts-ignore
+  console.log(req?.user?.restaurantId);
+  // @ts-ignore
+  const getOutlet = await redis.get(`O-${req?.user?.restaurantId}`);
+  console.log(getOutlet);
+  if (getOutlet) {
+    return res.status(200).json({
+      success: true,
+      outlet: JSON.parse(getOutlet),
+      message: "Fetched Successfully from Redis",
+    });
+  }
 
   //@ts-ignore
   const outlet = await getOutletByIdForStaff(req?.user?.restaurantId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  await redis.set(`O-${outlet.id}`, JSON.stringify(outlet));
+
+  return res.status(200).json({
+    success: true,
+    outlet,
+    message: "Fetched Successfully from DB",
+  });
+};
+
+export const getPOSStaffOutlet = async (req: Request, res: Response) => {
+  // @ts-ignore
+  console.log(req?.user?.restaurant?.id);
+  // @ts-ignore
+  const getOutlet = await redis.get(`O-${req?.user?.restaurant?.id}`);
+
+  if (getOutlet) {
+    return res.status(200).json({
+      success: true,
+      outlet: JSON.parse(getOutlet),
+      message: "Fetched Successfully from Redis",
+    });
+  }
+
+  //@ts-ignore
+  const outlet = await getOutletByIdForStaff(req?.user?.restaurant?.id);
 
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
