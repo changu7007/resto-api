@@ -44,9 +44,25 @@ export const createCategory = async (req: Request, res: Response) => {
 
   const { name } = req.body;
 
+  const slug = generateSlug(name);
+
   if (!name) {
     throw new BadRequestsException(
-      "Outlet Not Found",
+      "Name Required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const checkSlug = await prismaDB.category.findFirst({
+    where: {
+      restaurantId: outlet.id,
+      slug,
+    },
+  });
+
+  if (checkSlug) {
+    throw new BadRequestsException(
+      "Category already exists",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -54,7 +70,7 @@ export const createCategory = async (req: Request, res: Response) => {
   await prismaDB.category.create({
     data: {
       name,
-      slug: generateSlug(name),
+      slug,
       restaurantId: outlet.id,
     },
   });
@@ -78,9 +94,25 @@ export const updateCategory = async (req: Request, res: Response) => {
 
   const { name } = req.body;
 
+  const slug = generateSlug(name);
+
   if (!name) {
     throw new BadRequestsException(
-      "Outlet Not Found",
+      "Name Required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const checkSlug = await prismaDB.category.findFirst({
+    where: {
+      restaurantId: outlet.id,
+      slug,
+    },
+  });
+
+  if (checkSlug) {
+    throw new BadRequestsException(
+      "Category already exists",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -94,6 +126,7 @@ export const updateCategory = async (req: Request, res: Response) => {
     },
     data: {
       name,
+      slug,
     },
   });
 

@@ -22,8 +22,12 @@ const fetchOutletRawMaterialsToRedis = (outletId) => __awaiter(void 0, void 0, v
             consumptionUnit: true,
             minimumStockUnit: true,
         },
+        orderBy: {
+            createdAt: "desc",
+        },
     });
-    yield redis_1.redis.set(`${outletId}-raw-materials`, JSON.stringify(rawMaterials));
+    yield redis_1.redis.set(`${outletId}-raw-materials`, JSON.stringify(rawMaterials), "EX", 60 * 60 * 12 // 12 hours
+    );
     return rawMaterials;
 });
 exports.fetchOutletRawMaterialsToRedis = fetchOutletRawMaterialsToRedis;
@@ -32,8 +36,12 @@ const fetchOutletRawMaterialCAtegoryToRedis = (outletId) => __awaiter(void 0, vo
         where: {
             restaurantId: outletId,
         },
+        orderBy: {
+            createdAt: "desc",
+        },
     });
-    yield redis_1.redis.set(`${outletId}-raw-materials-category`, JSON.stringify(rawMaterialsCategory));
+    yield redis_1.redis.set(`${outletId}-raw-materials-category`, JSON.stringify(rawMaterialsCategory), "EX", 60 * 60 * 12 // 12 hours
+    );
     return rawMaterialsCategory;
 });
 exports.fetchOutletRawMaterialCAtegoryToRedis = fetchOutletRawMaterialCAtegoryToRedis;
@@ -42,8 +50,12 @@ const fetchOutletRawMaterialUnitToRedis = (outletId) => __awaiter(void 0, void 0
         where: {
             restaurantId: outletId,
         },
+        orderBy: {
+            createdAt: "desc",
+        },
     });
-    yield redis_1.redis.set(`${outletId}-raw-materials-unit`, JSON.stringify(rawMaterialsUnit));
+    yield redis_1.redis.set(`${outletId}-raw-materials-unit`, JSON.stringify(rawMaterialsUnit), "EX", 60 * 60 * 12 // 12 hours
+    );
     return rawMaterialsUnit;
 });
 exports.fetchOutletRawMaterialUnitToRedis = fetchOutletRawMaterialUnitToRedis;
@@ -56,6 +68,9 @@ const getfetchOutletStocksToRedis = (outletId) => __awaiter(void 0, void 0, void
             rawMaterialCategory: true,
             consumptionUnit: true,
             minimumStockUnit: true,
+        },
+        orderBy: {
+            createdAt: "desc",
         },
     });
     const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
@@ -73,7 +88,8 @@ const getfetchOutletStocksToRedis = (outletId) => __awaiter(void 0, void 0, void
             createdAt: rawItem.createdAt,
         });
     });
-    yield redis_1.redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks));
+    yield redis_1.redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks), "EX", 60 * 60 * 12 // 12 hours
+    );
     return formattedStocks;
 });
 exports.getfetchOutletStocksToRedis = getfetchOutletStocksToRedis;

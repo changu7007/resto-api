@@ -454,7 +454,7 @@ async function formatInventoryData(
     categoryWise: purchases.reduce((acc, purchase) => {
       purchase.purchaseItems.forEach((item) => {
         const category = item.rawMaterial.rawMaterialCategory.name;
-        acc[category] = (acc[category] || 0) + (item.totalPrice || 0);
+        acc[category] = (acc[category] || 0) + (item.purchasePrice || 0);
       });
       return acc;
     }, {} as Record<string, number>),

@@ -196,6 +196,19 @@ export const registerOwner = async (req: Request, res: Response) => {
     },
   });
 
+  const userPhoneNo = await prismaDB.user.findFirst({
+    where: {
+      phoneNo,
+    },
+  });
+
+  if (userPhoneNo?.id) {
+    throw new BadRequestsException(
+      "This Phone No. is already Registered",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   if (!user?.id) {
     const hashedPassword = await bcrypt.hash(password, 12);
     await prismaDB.user.create({

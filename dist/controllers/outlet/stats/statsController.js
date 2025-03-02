@@ -895,15 +895,18 @@ const totalInventory = (req, res) => __awaiter(void 0, void 0, void 0, function*
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
     }
-    // Fetch raw materials
+    // Fetch raw materials with their categories
     const rawMaterials = yield __1.prismaDB.rawMaterial.findMany({
         where: {
             restaurantId: outlet.id,
         },
         include: {
             consumptionUnit: true,
+            rawMaterialCategory: true,
         },
     });
+    // Calculate wastage analytics
+    const wastageAnalytics = yield calculateWastageAnalytics(outlet.id);
     // Fetch purchases
     const purchase = yield __1.prismaDB.purchase.findMany({
         where: {
@@ -951,9 +954,137 @@ const totalInventory = (req, res) => __awaiter(void 0, void 0, void 0, function*
             totalAmount: true,
         },
     });
+    // Get stock movement trend (last 6 months)
+    const sixMonthsAgo = (0, date_fns_1.subMonths)(new Date(), 6);
+    const stockMovement = yield __1.prismaDB.purchase.groupBy({
+        by: ["createdAt"],
+        where: {
+            restaurantId: outletId,
+            purchaseStatus: "COMPLETED",
+            createdAt: {
+                gte: (0, date_fns_1.startOfMonth)(sixMonthsAgo),
+            },
+        },
+        _sum: {
+            totalAmount: true,
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+    // Get recent purchase orders
+    const recentPurchases = yield __1.prismaDB.purchase.findMany({
+        where: {
+            restaurantId: outletId,
+            purchaseStatus: {
+                in: ["PROCESSED", "REQUESTED", "SETTLEMENT"],
+            },
+        },
+        include: {
+            vendor: {
+                select: {
+                    name: true,
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+        take: 3,
+    });
+    // Get top vendors by purchase volume
+    const topVendors = yield __1.prismaDB.purchase.groupBy({
+        by: ["vendorId"],
+        where: {
+            restaurantId: outletId,
+            // purchaseStatus: "COMPLETED",
+        },
+        _sum: {
+            totalAmount: true,
+        },
+        orderBy: {
+            _sum: {
+                totalAmount: "desc",
+            },
+        },
+        // take: 3,
+    });
+    // Get vendor details with contracts
+    const topVendorDetails = yield Promise.all(topVendors.map((vendor) => __awaiter(void 0, void 0, void 0, function* () {
+        var _d;
+        const [vendorInfo, latestContract] = yield Promise.all([
+            __1.prismaDB.vendor.findFirst({
+                where: { id: vendor.vendorId },
+                include: {
+                    category: true,
+                },
+                orderBy: {
+                    createdAt: "desc",
+                },
+            }),
+            __1.prismaDB.vendorContractRate.findFirst({
+                where: {
+                    vendorId: vendor.vendorId,
+                    isActive: true,
+                },
+                orderBy: {
+                    createdAt: "desc",
+                },
+            }),
+        ]);
+        return {
+            name: (vendorInfo === null || vendorInfo === void 0 ? void 0 : vendorInfo.name) || "Missing Vendor Name",
+            category: ((_d = vendorInfo === null || vendorInfo === void 0 ? void 0 : vendorInfo.category) === null || _d === void 0 ? void 0 : _d.name) || "Missing Category",
+            contractedRate: `${(latestContract === null || latestContract === void 0 ? void 0 : latestContract.totalRate) || 0}/${latestContract === null || latestContract === void 0 ? void 0 : latestContract.unitName}`,
+            marketRate: (latestContract === null || latestContract === void 0 ? void 0 : latestContract.totalRate)
+                ? `${(latestContract.totalRate * 1.2).toFixed(2)}/${latestContract.unitName}`
+                : "N/A",
+            expiryDate: (latestContract === null || latestContract === void 0 ? void 0 : latestContract.validTo)
+                ? `Expires in ${Math.ceil((new Date(latestContract.validTo).getTime() -
+                    new Date().getTime()) /
+                    (1000 * 60 * 60 * 24 * 30))} months`
+                : "No expiry date",
+            status: (latestContract === null || latestContract === void 0 ? void 0 : latestContract.isActive) ? "Active" : "Renewal Due",
+        };
+    })));
+    // Get low stock items with detailed information
+    const lowStockItems = yield __1.prismaDB.rawMaterial.findMany({
+        where: {
+            restaurantId: outletId,
+            currentStock: {
+                lte: __1.prismaDB.rawMaterial.fields.minimumStockLevel,
+            },
+        },
+        include: {
+            consumptionUnit: true,
+        },
+        take: 5,
+        orderBy: {
+            currentStock: "asc",
+        },
+    });
+    const formattedLowStockItems = lowStockItems.map((item) => ({
+        name: item.name,
+        currentStock: Number(item.currentStock || 0).toFixed(2),
+        minimumStock: Number(item.minimumStockLevel || 0).toFixed(2),
+        unit: item.consumptionUnit.name,
+        status: !item.currentStock
+            ? "Out of Stock"
+            : item.currentStock <= (item.minimumStockLevel || 0) / 2
+                ? "Critical"
+                : "Low Stock",
+    }));
+    // Format recent purchases
+    const formattedRecentPurchases = recentPurchases.map((purchase) => ({
+        id: purchase.invoiceNo,
+        vendorName: purchase.vendor.name,
+        amount: purchase.totalAmount || 0,
+        status: purchase.purchaseStatus,
+        date: (0, date_fns_1.format)(purchase.createdAt, "dd MMM yyyy"),
+    }));
     // Step 1: Calculate COGS for each raw material
     const rawMaterialCOGS = yield Promise.all(rawMaterials.map((material) => __awaiter(void 0, void 0, void 0, function* () {
-        var _d;
+        var _e;
         // Step 2: Fetch all orders that consumed this raw material
         const ordersWithMaterial = yield __1.prismaDB.orderItem.findMany({
             where: {
@@ -1001,13 +1132,23 @@ const totalInventory = (req, res) => __awaiter(void 0, void 0, void 0, function*
             rawMaterialId: material.id,
             name: material.name,
             purchasedStock: material.purchasedStock,
-            consumedStock: `${consumedStock.toFixed(2)} - ${(_d = material === null || material === void 0 ? void 0 : material.consumptionUnit) === null || _d === void 0 ? void 0 : _d.name}`,
+            consumedStock: `${consumedStock.toFixed(2)} - ${(_e = material === null || material === void 0 ? void 0 : material.consumptionUnit) === null || _e === void 0 ? void 0 : _e.name}`,
             cogs: cogs.toFixed(2),
         };
     })));
     const inventoryTurnover = cogs._sum.totalAmount && totalInventoryStats.totalValue > 0
         ? cogs._sum.totalAmount / totalInventoryStats.totalValue
         : 0;
+    // Format stock movement data
+    const formattedStockMovement = Array.from({ length: 6 }, (_, i) => {
+        const month = (0, date_fns_1.subMonths)(new Date(), i);
+        const monthData = stockMovement.find((entry) => new Date(entry.createdAt).getMonth() === month.getMonth() &&
+            new Date(entry.createdAt).getFullYear() === month.getFullYear());
+        return {
+            month: month.toLocaleString("default", { month: "short" }),
+            value: (monthData === null || monthData === void 0 ? void 0 : monthData._sum.totalAmount) || 0,
+        };
+    }).reverse();
     // Format the result
     const formatted = {
         totalRawMaterials: rawMaterials.length,
@@ -1019,6 +1160,11 @@ const totalInventory = (req, res) => __awaiter(void 0, void 0, void 0, function*
             : `${purchaseDifference}`,
         inventoryTurnover: inventoryTurnover.toFixed(2),
         rawMaterialCOGS,
+        stockMovement: formattedStockMovement,
+        recentPurchases: formattedRecentPurchases,
+        topVendors: topVendorDetails,
+        lowStockItems: formattedLowStockItems,
+        wastageAnalytics,
     };
     return res.json({
         success: true,
@@ -1026,6 +1172,86 @@ const totalInventory = (req, res) => __awaiter(void 0, void 0, void 0, function*
     });
 });
 exports.totalInventory = totalInventory;
+// Add this helper function to calculate wastage
+const calculateWastageAnalytics = (restaurantId) => __awaiter(void 0, void 0, void 0, function* () {
+    // Get the start of the current month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    // Fetch all completed orders for the current month
+    const orders = yield __1.prismaDB.order.findMany({
+        where: {
+            restaurantId: restaurantId,
+            orderStatus: "COMPLETED",
+            createdAt: {
+                gte: startOfMonth,
+            },
+        },
+        include: {
+            orderItems: {
+                include: {
+                    menuItem: {
+                        include: {
+                            itemRecipe: {
+                                include: {
+                                    ingredients: {
+                                        include: {
+                                            rawMaterial: {
+                                                include: {
+                                                    rawMaterialCategory: true,
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+    // Initialize wastage tracking by category
+    const wastageByCategory = {};
+    // Process each order and calculate wastage
+    orders.forEach((order) => {
+        order.orderItems.forEach((orderItem) => {
+            var _a;
+            const recipe = (_a = orderItem.menuItem) === null || _a === void 0 ? void 0 : _a.itemRecipe;
+            if (recipe) {
+                recipe.ingredients.forEach((ingredient) => {
+                    const category = ingredient.rawMaterial.rawMaterialCategory.name;
+                    const quantity = Number(orderItem.quantity);
+                    const wastageAmount = (ingredient.wastage / 100) * ingredient.quantity * quantity;
+                    const wastageValue = wastageAmount * (ingredient.rawMaterial.purchasedPricePerItem || 0);
+                    if (!wastageByCategory[category]) {
+                        wastageByCategory[category] = {
+                            totalWastage: 0,
+                            totalValue: 0,
+                            itemCount: 0,
+                        };
+                    }
+                    wastageByCategory[category].totalWastage += wastageAmount;
+                    wastageByCategory[category].totalValue += wastageValue;
+                    wastageByCategory[category].itemCount += 1;
+                });
+            }
+        });
+    });
+    // Calculate total value for percentage calculations
+    const totalWastageValue = Object.values(wastageByCategory).reduce((sum, category) => sum + category.totalValue, 0);
+    // Format the results
+    const wastageAnalytics = Object.entries(wastageByCategory).map(([category, data]) => ({
+        category,
+        amount: Math.round(data.totalValue * 100) / 100, // Round to 2 decimal places
+        percentage: Math.round((data.totalValue / totalWastageValue) * 1000) / 10, // Round to 1 decimal place
+        totalWastageQuantity: Math.round(data.totalWastage * 100) / 100,
+        affectedItems: data.itemCount,
+    }));
+    // Sort by amount in descending order
+    wastageAnalytics.sort((a, b) => b.amount - a.amount);
+    return wastageAnalytics;
+});
 const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const { period } = req.query;
@@ -1227,7 +1453,7 @@ const expenseMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.expenseMetrics = expenseMetrics;
 const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _e;
+    var _f;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
@@ -1249,7 +1475,7 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
         .startOf("day")
         .toUTC()
         .toISO();
-    const todayEnd = (_e = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO()) !== null && _e !== void 0 ? _e : new Date().toISOString();
+    const todayEnd = (_f = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO()) !== null && _f !== void 0 ? _f : new Date().toISOString();
     if (!todayStart || !todayEnd) {
         throw new Error("Failed to calculate today's date range.");
     }
@@ -1319,11 +1545,11 @@ const generateVibrantColor = () => {
     return `#${randomColor.padStart(6, "0")}`;
 };
 const getCategoryContributionStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _f;
+    var _g;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_f = req.user) === null || _f === void 0 ? void 0 : _f.id;
+    let userId = (_g = req.user) === null || _g === void 0 ? void 0 : _g.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }

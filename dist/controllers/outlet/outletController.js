@@ -408,7 +408,7 @@ const createInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, fun
             prefix: isPrefix ? prefix : "",
         },
     });
-    yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    yield redis_1.redis.del(`O-${outlet === null || outlet === void 0 ? void 0 : outlet.id}`);
     return res.json({
         success: true,
         message: "Created Tax & Invoice Details",
@@ -433,7 +433,7 @@ const updateInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, fun
             prefix: isPrefix ? prefix : "",
         },
     });
-    yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
+    yield redis_1.redis.del(`O-${outlet === null || outlet === void 0 ? void 0 : outlet.id}`);
     return res.json({
         success: true,
         message: "Updated Tax & Invoice Details",

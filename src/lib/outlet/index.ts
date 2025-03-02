@@ -156,7 +156,7 @@ const getTotalOrderSession = async (outletId: string) => {
 
 export const generatePurchaseNo = async (outletId: string) => {
   const orderCount = await getTotalPurchase(outletId);
-  const billId = `#${orderCount + 1}/${getYear(new Date())}`;
+  const billId = `PO-${orderCount + 1}/${getYear(new Date())}`;
   return billId;
 };
 

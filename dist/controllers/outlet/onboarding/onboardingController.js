@@ -153,6 +153,15 @@ const createOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                     restaurantId: outlet.id,
                 },
             });
+            yield __1.prismaDB.invoice.create({
+                data: {
+                    restaurantId: outlet.id,
+                    isGSTEnabled: true,
+                    isPrefix: false,
+                    invoiceNo: 1,
+                    prefix: "",
+                },
+            });
             yield (0, get_users_1.getFormatUserAndSendToRedis)(userId);
             return res.json({
                 success: true,

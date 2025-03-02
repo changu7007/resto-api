@@ -12,6 +12,8 @@ import {
   PaginationState,
 } from "../../../schema/staff";
 import { differenceInMinutes } from "date-fns";
+import { BadRequestsException } from "../../../exceptions/bad-request";
+import { UnauthorizedException } from "../../../exceptions/unauthorized";
 
 export const getStaffsForTable = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -77,6 +79,7 @@ export const getStaffsForTable = async (req: Request, res: Response) => {
     email: staff?.email,
     role: staff?.role,
     salary: staff?.salary,
+    posAccess: staff?.posAccess,
     orders: staff?.orders?.length,
     phoneNo: staff?.phoneNo,
     joinedDate: staff?.joinedDate,
@@ -369,6 +372,32 @@ export const createStaff = async (req: Request, res: Response) => {
 
   const { name, email, phoneNo, role, salary, joinedDate } = req.body;
 
+  const checkEmail = await prismaDB.staff.findFirst({
+    where: {
+      email,
+    },
+  });
+
+  if (checkEmail) {
+    throw new BadRequestsException(
+      "This Email is already Registered with another Staff",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const checkPhoneNo = await prismaDB.staff.findFirst({
+    where: {
+      phoneNo,
+    },
+  });
+
+  if (checkPhoneNo) {
+    throw new BadRequestsException(
+      "This Phone Number is already Registered with another Staff",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   await prismaDB.staff.create({
     data: {
       restaurantId: getOutlet.id,
@@ -493,5 +522,101 @@ export const getStaffIds = async (req: Request, res: Response) => {
     success: true,
     staffs: staff,
     message: "Staffs Fetched",
+  });
+};
+
+export const bulkPosAccessEnable = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { selectedId } = req.body;
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  // Validate input
+  if (!Array.isArray(selectedId) || selectedId?.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Please select neccessarry staff",
+    });
+  }
+
+  // Perform status update within a transaction
+  await prismaDB.$transaction(async (tx) => {
+    // Update related orders' statuses to "CANCELLED"
+    await tx.staff.updateMany({
+      where: {
+        id: {
+          in: selectedId,
+        },
+        restaurantId: outlet.id,
+      },
+      data: {
+        posAccess: true,
+      },
+    });
+  });
+
+  return res.json({
+    success: true,
+    message: "Selected Staff Pos Access Updated ✅",
+  });
+};
+
+export const bulkPosAccessDisable = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { selectedId } = req.body;
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  // Validate input
+  if (!Array.isArray(selectedId) || selectedId?.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Please select neccessarry staff",
+    });
+  }
+
+  // Perform status update within a transaction
+  await prismaDB.$transaction(async (tx) => {
+    // Update related orders' statuses to "CANCELLED"
+    await tx.staff.updateMany({
+      where: {
+        id: {
+          in: selectedId,
+        },
+        restaurantId: outlet.id,
+      },
+      data: {
+        posAccess: false,
+      },
+    });
+  });
+
+  return res.json({
+    success: true,
+    message: "Selected Staff Pos Access Disabled ✅",
   });
 };

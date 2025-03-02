@@ -146,7 +146,7 @@ const getTotalOrderSession = (outletId) => __awaiter(void 0, void 0, void 0, fun
 });
 const generatePurchaseNo = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
     const orderCount = yield getTotalPurchase(outletId);
-    const billId = `#${orderCount + 1}/${(0, date_fns_1.getYear)(new Date())}`;
+    const billId = `PO-${orderCount + 1}/${(0, date_fns_1.getYear)(new Date())}`;
     return billId;
 });
 exports.generatePurchaseNo = generatePurchaseNo;

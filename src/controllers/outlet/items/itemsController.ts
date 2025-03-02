@@ -243,61 +243,104 @@ export const getItemsByCategory = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  let sendItems: MenuItem[] = [];
   let items: MenuItem[];
 
+  // Get items either from Redis or DB
   if (redisItems) {
+    console.log("Fetching items from Redis");
     items = JSON.parse(redisItems);
   } else {
+    console.log("Fetching items from Database");
     items = await getOAllItems(outletId);
-    // Cache the items in Redis with a reasonable TTL
-    await redis.set(`${outletId}-all-items`, JSON.stringify(items), "EX", 300); // 5 minutes TTL
+    // Cache items in Redis with 5 minutes TTL
+    await redis.set(`${outletId}-all-items`, JSON.stringify(items), "EX", 300);
   }
 
-  // Early return for "all" category to avoid unnecessary processing
-  if (categoryId === "all") {
-    return res.json({
-      success: true,
-      data: items,
-    });
-  }
+  // Handle different category scenarios
+  let sendItems: MenuItem[] = [];
 
-  // For favorites, cache the user's favItems to avoid repeated DB calls
-  if (categoryId === "favourites") {
+  if (!categoryId || categoryId === "all") {
+    sendItems = items;
+  } else if (categoryId === "favourites") {
+    // Get user's favorite items
     const userCacheKey = `user-favitems-${outlet.adminId}`;
-    let favItems = await redis.get(userCacheKey);
+    let favItemIds = await redis.get(userCacheKey);
 
-    if (!favItems) {
+    if (!favItemIds) {
       const user = await prismaDB.user.findUnique({
         where: { id: outlet.adminId },
         select: { favItems: true },
       });
-      favItems = JSON.stringify(user?.favItems || []);
-      await redis.set(userCacheKey, favItems, "EX", 300); // 5 minutes TTL
+      favItemIds = JSON.stringify(user?.favItems || []);
+      await redis.set(userCacheKey, favItemIds, "EX", 300);
     }
 
-    const userFavItems = JSON.parse(favItems);
+    const userFavItems = JSON.parse(favItemIds);
     sendItems = items.filter((item) => userFavItems.includes(item.id));
   } else {
-    // For specific category, use direct array filtering
-    const categoryIdCacheKey = `${outletId}-category-${categoryId}`;
-    const categoryIdCache = await redis.get(categoryIdCacheKey);
-    if (categoryIdCache) {
-      sendItems = JSON.parse(categoryIdCache);
+    // Get items for specific category
+    const categoryKey = `${outletId}-category-${categoryId}`;
+    const cachedCategoryItems = await redis.get(categoryKey);
+
+    if (cachedCategoryItems) {
+      sendItems = JSON.parse(cachedCategoryItems);
     } else {
       sendItems = items.filter((item) => item.categoryId === categoryId);
-      await redis.set(
-        `${outletId}-category-${categoryId}`,
-        JSON.stringify(sendItems),
-        "EX",
-        300
-      );
+      await redis.set(categoryKey, JSON.stringify(sendItems), "EX", 300);
     }
   }
 
+  const formattedItems = sendItems?.map((menuItem: any) => ({
+    id: menuItem?.id,
+    shortCode: menuItem?.shortCode,
+    categoryId: menuItem?.categoryId,
+    categoryName: menuItem?.category?.name,
+    name: menuItem?.name,
+    images: menuItem?.images?.map((image: any) => ({
+      id: image?.id,
+      url: image?.url,
+    })),
+    type: menuItem?.type,
+    price: menuItem?.price,
+    netPrice: menuItem?.netPrice,
+    itemRecipe: {
+      id: menuItem?.itemRecipe?.id,
+      menuId: menuItem?.itemRecipe?.menuId,
+      menuVariantId: menuItem?.itemRecipe?.menuVariantId,
+      addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId,
+    },
+    gst: menuItem?.gst,
+    grossProfit: menuItem?.grossProfit,
+    isVariants: menuItem?.isVariants,
+    isAddOns: menuItem?.isAddons,
+    menuItemVariants: menuItem?.menuItemVariants?.map((variant: any) => ({
+      id: variant?.id,
+      variantName: variant?.variant?.name,
+      price: variant?.price,
+      netPrice: variant?.netPrice,
+      gst: variant?.gst,
+      grossProfit: variant?.grossProfit,
+      type: variant?.foodType,
+    })),
+    favourite: true,
+    menuGroupAddOns: menuItem?.menuGroupAddOns?.map((addOns: any) => ({
+      id: addOns?.id,
+      addOnGroupName: addOns?.addOnGroups?.title,
+      description: addOns?.addOnGroups?.description,
+      addonVariants: addOns?.addOnGroups?.addOnVariants?.map(
+        (addOnVariant: any) => ({
+          id: addOnVariant?.id,
+          name: addOnVariant?.name,
+          price: addOnVariant?.price,
+          type: addOnVariant?.type,
+        })
+      ),
+    })),
+  }));
+
   return res.json({
     success: true,
-    data: sendItems,
+    data: formattedItems,
   });
 };
 
@@ -1346,9 +1389,11 @@ export const deleteItem = async (req: Request, res: Response) => {
     },
   });
 
-  await getOAllItems(outlet.id);
-  await getOAllMenuCategoriesToRedis(outlet.id);
-  await getOAllItemsForOnlineAndDelivery(outletId);
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
 
   return res.json({
     success: true,
@@ -1484,5 +1529,115 @@ export const getSingleAddons = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     addOnItems: formattedAddOns,
+  });
+};
+
+export const enablePosStatus = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+  const { enabled } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const item = await getItemByOutletId(outlet.id, itemId);
+
+  if (!item?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.menuItem.update({
+    where: {
+      restaurantId: outlet.id,
+      id: item?.id,
+    },
+    data: {
+      isDineIn: true,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Item Updated",
+  });
+};
+
+export const disablePosStatus = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+  const { enabled } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const item = await getItemByOutletId(outlet.id, itemId);
+
+  if (!item?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.menuItem.update({
+    where: {
+      restaurantId: outlet.id,
+      id: item?.id,
+    },
+    data: {
+      isDineIn: false,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Item Updated",
+  });
+};
+
+export const deleteItems = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const item = await getItemByOutletId(outlet.id, itemId);
+
+  if (!item?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.menuItem.delete({
+    where: {
+      restaurantId: outlet.id,
+      id: item?.id,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Item Deleted",
   });
 };

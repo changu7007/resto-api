@@ -208,7 +208,12 @@ export const getOAllItems = async (outletId: string) => {
       })),
     }));
 
-  await redis.set(`${outletId}-all-items`, JSON.stringify(formattedItems));
+  await redis.set(
+    `${outletId}-all-items`,
+    JSON.stringify(formattedItems),
+    "EX",
+    300
+  );
 
   return getItems;
 };

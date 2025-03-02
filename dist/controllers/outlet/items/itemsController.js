@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = exports.getItemsBySearchForOnlineAndDelivery = exports.getItemsByCategoryForOnlineAndDelivery = exports.getItemsForOnlineAndDelivery = void 0;
+exports.deleteItems = exports.disablePosStatus = exports.enablePosStatus = exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = exports.getItemsBySearchForOnlineAndDelivery = exports.getItemsByCategoryForOnlineAndDelivery = exports.getItemsForOnlineAndDelivery = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -198,53 +198,107 @@ const getItemsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, funct
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    let sendItems = [];
     let items;
+    // Get items either from Redis or DB
     if (redisItems) {
+        console.log("Fetching items from Redis");
         items = JSON.parse(redisItems);
     }
     else {
+        console.log("Fetching items from Database");
         items = yield (0, get_items_1.getOAllItems)(outletId);
-        // Cache the items in Redis with a reasonable TTL
-        yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(items), "EX", 300); // 5 minutes TTL
+        // Cache items in Redis with 5 minutes TTL
+        yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(items), "EX", 300);
     }
-    // Early return for "all" category to avoid unnecessary processing
-    if (categoryId === "all") {
-        return res.json({
-            success: true,
-            data: items,
-        });
+    // Handle different category scenarios
+    let sendItems = [];
+    if (!categoryId || categoryId === "all") {
+        sendItems = items;
     }
-    // For favorites, cache the user's favItems to avoid repeated DB calls
-    if (categoryId === "favourites") {
+    else if (categoryId === "favourites") {
+        // Get user's favorite items
         const userCacheKey = `user-favitems-${outlet.adminId}`;
-        let favItems = yield redis_1.redis.get(userCacheKey);
-        if (!favItems) {
+        let favItemIds = yield redis_1.redis.get(userCacheKey);
+        if (!favItemIds) {
             const user = yield __1.prismaDB.user.findUnique({
                 where: { id: outlet.adminId },
                 select: { favItems: true },
             });
-            favItems = JSON.stringify((user === null || user === void 0 ? void 0 : user.favItems) || []);
-            yield redis_1.redis.set(userCacheKey, favItems, "EX", 300); // 5 minutes TTL
+            favItemIds = JSON.stringify((user === null || user === void 0 ? void 0 : user.favItems) || []);
+            yield redis_1.redis.set(userCacheKey, favItemIds, "EX", 300);
         }
-        const userFavItems = JSON.parse(favItems);
+        const userFavItems = JSON.parse(favItemIds);
         sendItems = items.filter((item) => userFavItems.includes(item.id));
     }
     else {
-        // For specific category, use direct array filtering
-        const categoryIdCacheKey = `${outletId}-category-${categoryId}`;
-        const categoryIdCache = yield redis_1.redis.get(categoryIdCacheKey);
-        if (categoryIdCache) {
-            sendItems = JSON.parse(categoryIdCache);
+        // Get items for specific category
+        const categoryKey = `${outletId}-category-${categoryId}`;
+        const cachedCategoryItems = yield redis_1.redis.get(categoryKey);
+        if (cachedCategoryItems) {
+            sendItems = JSON.parse(cachedCategoryItems);
         }
         else {
             sendItems = items.filter((item) => item.categoryId === categoryId);
-            yield redis_1.redis.set(`${outletId}-category-${categoryId}`, JSON.stringify(sendItems), "EX", 300);
+            yield redis_1.redis.set(categoryKey, JSON.stringify(sendItems), "EX", 300);
         }
     }
+    const formattedItems = sendItems === null || sendItems === void 0 ? void 0 : sendItems.map((menuItem) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h;
+        return ({
+            id: menuItem === null || menuItem === void 0 ? void 0 : menuItem.id,
+            shortCode: menuItem === null || menuItem === void 0 ? void 0 : menuItem.shortCode,
+            categoryId: menuItem === null || menuItem === void 0 ? void 0 : menuItem.categoryId,
+            categoryName: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.category) === null || _a === void 0 ? void 0 : _a.name,
+            name: menuItem === null || menuItem === void 0 ? void 0 : menuItem.name,
+            images: (_b = menuItem === null || menuItem === void 0 ? void 0 : menuItem.images) === null || _b === void 0 ? void 0 : _b.map((image) => ({
+                id: image === null || image === void 0 ? void 0 : image.id,
+                url: image === null || image === void 0 ? void 0 : image.url,
+            })),
+            type: menuItem === null || menuItem === void 0 ? void 0 : menuItem.type,
+            price: menuItem === null || menuItem === void 0 ? void 0 : menuItem.price,
+            netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
+            itemRecipe: {
+                id: (_c = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _c === void 0 ? void 0 : _c.id,
+                menuId: (_d = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _d === void 0 ? void 0 : _d.menuId,
+                menuVariantId: (_e = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _e === void 0 ? void 0 : _e.menuVariantId,
+                addonItemVariantId: (_f = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _f === void 0 ? void 0 : _f.addonItemVariantId,
+            },
+            gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
+            grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
+            isVariants: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isVariants,
+            isAddOns: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isAddons,
+            menuItemVariants: (_g = menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuItemVariants) === null || _g === void 0 ? void 0 : _g.map((variant) => {
+                var _a;
+                return ({
+                    id: variant === null || variant === void 0 ? void 0 : variant.id,
+                    variantName: (_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.name,
+                    price: variant === null || variant === void 0 ? void 0 : variant.price,
+                    netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
+                    gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                    grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
+                    type: variant === null || variant === void 0 ? void 0 : variant.foodType,
+                });
+            }),
+            favourite: true,
+            menuGroupAddOns: (_h = menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuGroupAddOns) === null || _h === void 0 ? void 0 : _h.map((addOns) => {
+                var _a, _b, _c, _d;
+                return ({
+                    id: addOns === null || addOns === void 0 ? void 0 : addOns.id,
+                    addOnGroupName: (_a = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _a === void 0 ? void 0 : _a.title,
+                    description: (_b = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _b === void 0 ? void 0 : _b.description,
+                    addonVariants: (_d = (_c = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _c === void 0 ? void 0 : _c.addOnVariants) === null || _d === void 0 ? void 0 : _d.map((addOnVariant) => ({
+                        id: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                        name: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.name,
+                        price: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.price,
+                        type: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.type,
+                    })),
+                });
+            }),
+        });
+    });
     return res.json({
         success: true,
-        data: sendItems,
+        data: formattedItems,
     });
 });
 exports.getItemsByCategory = getItemsByCategory;
@@ -1101,9 +1155,11 @@ const deleteItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             id: item === null || item === void 0 ? void 0 : item.id,
         },
     });
-    yield (0, get_items_1.getOAllItems)(outlet.id);
-    yield (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id);
-    yield (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId);
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
     return res.json({
         success: true,
         message: "Item Deleted ",
@@ -1227,3 +1283,92 @@ const getSingleAddons = (req, res) => __awaiter(void 0, void 0, void 0, function
     });
 });
 exports.getSingleAddons = getSingleAddons;
+const enablePosStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, itemId } = req.params;
+    const { enabled } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const item = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
+    if (!(item === null || item === void 0 ? void 0 : item.id)) {
+        throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.menuItem.update({
+        where: {
+            restaurantId: outlet.id,
+            id: item === null || item === void 0 ? void 0 : item.id,
+        },
+        data: {
+            isDineIn: true,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
+    return res.json({
+        success: true,
+        message: "Item Updated",
+    });
+});
+exports.enablePosStatus = enablePosStatus;
+const disablePosStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, itemId } = req.params;
+    const { enabled } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const item = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
+    if (!(item === null || item === void 0 ? void 0 : item.id)) {
+        throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.menuItem.update({
+        where: {
+            restaurantId: outlet.id,
+            id: item === null || item === void 0 ? void 0 : item.id,
+        },
+        data: {
+            isDineIn: false,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
+    return res.json({
+        success: true,
+        message: "Item Updated",
+    });
+});
+exports.disablePosStatus = disablePosStatus;
+const deleteItems = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, itemId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const item = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
+    if (!(item === null || item === void 0 ? void 0 : item.id)) {
+        throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.menuItem.delete({
+        where: {
+            restaurantId: outlet.id,
+            id: item === null || item === void 0 ? void 0 : item.id,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
+    return res.json({
+        success: true,
+        message: "Item Deleted",
+    });
+});
+exports.deleteItems = deleteItems;

@@ -16,4 +16,10 @@ posRoute.get("/:outletId/pos-stats/popular-items", auth_1.isAuthMiddelware, (0, 
 posRoute.get("/:outletId/pos-stats/staff-performance", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getStaffPerformance));
 posRoute.post("/:outletId/pos-table/table-session-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posController_2.getPOSTableAllSessionOrders));
 posRoute.post("/:outletId/pos-table/table-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posController_2.getPOSTableAllOrders));
+posRoute.get("/:outletId/pos-stats/inventory-overview", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getInventoryOverview));
+posRoute.get("/:outletId/pos-stats/inventory-stock-levels", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getStockLevels));
+posRoute.get("/:outletId/pos-stats/purchase-order-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getPurchaseOrderStats));
+posRoute.get("/:outletId/pos-stats/vendor-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getVendorStats));
+posRoute.get("/:outletId/pos-stats/dashboard", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getPOSDashboardStats));
+posRoute.get("/:outletId/pos-stats/stock-deductions", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.orderAndStockDeduction));
 exports.default = posRoute;

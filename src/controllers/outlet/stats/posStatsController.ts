@@ -3,8 +3,17 @@ import { getOutletById } from "../../../lib/outlet";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
-import { endOfDay, set, startOfDay, subDays } from "date-fns";
+import {
+  endOfDay,
+  set,
+  startOfDay,
+  startOfMonth,
+  subDays,
+  subMonths,
+} from "date-fns";
 import { DateTime } from "luxon";
+import { ColumnFilters } from "../../../schema/staff";
+import { ColumnSort } from "../../../schema/staff";
 
 // Helper function to calculate percentage change
 const calculatePercentageChange = (
@@ -571,6 +580,833 @@ export const getInventoryAlerts = async (req: Request, res: Response) => {
         pages: Math.ceil(total / limit),
         currentPage: page,
       },
+    },
+  });
+};
+
+// Get Inventory Overview Statistics
+export const getInventoryOverview = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  // Get total inventory value
+  const totalInventoryValue = await prismaDB.rawMaterial.aggregate({
+    where: {
+      restaurantId: outletId,
+    },
+    _sum: {
+      purchasedPricePerItem: true,
+    },
+  });
+
+  // Get low stock items count
+  const lowStockItems = await prismaDB.rawMaterial.count({
+    where: {
+      restaurantId: outletId,
+      currentStock: {
+        lte: prismaDB.rawMaterial.fields.minimumStockLevel,
+      },
+    },
+  });
+
+  // Get active vendors count
+  const activeVendors = await prismaDB.vendor.count({
+    where: {
+      restaurantId: outletId,
+    },
+  });
+
+  // Calculate inventory turnover
+  // First, get total purchases in last 30 days
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const monthlyPurchases = await prismaDB.purchase.aggregate({
+    where: {
+      restaurantId: outletId,
+      createdAt: {
+        gte: thirtyDaysAgo,
+      },
+      purchaseStatus: "COMPLETED",
+    },
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  // Calculate turnover rate (monthly purchases / current inventory value)
+  const turnoverRate =
+    monthlyPurchases._sum.totalAmount &&
+    totalInventoryValue._sum.purchasedPricePerItem
+      ? (
+          monthlyPurchases._sum.totalAmount /
+          totalInventoryValue._sum.purchasedPricePerItem
+        ).toFixed(1)
+      : 0;
+
+  // Get stock movement trend (last 6 months)
+  const sixMonthsAgo = subMonths(new Date(), 6);
+  const stockMovement = await prismaDB.purchase.groupBy({
+    by: ["createdAt"],
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "COMPLETED",
+      createdAt: {
+        gte: startOfMonth(sixMonthsAgo),
+      },
+    },
+    _sum: {
+      totalAmount: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  // Get category distribution
+  const categoryDistribution = await prismaDB.rawMaterialCategory.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    include: {
+      ramMaterial: {
+        select: {
+          purchasedPricePerItem: true,
+          currentStock: true,
+        },
+      },
+    },
+  });
+
+  const formattedCategoryDistribution = categoryDistribution.map(
+    (category) => ({
+      category: category.name,
+      value: category.ramMaterial.reduce(
+        (sum, item) =>
+          sum + (item.purchasedPricePerItem || 0) * (item.currentStock || 0),
+        0
+      ),
+    })
+  );
+
+  // Format stock movement data
+  const formattedStockMovement = Array.from({ length: 6 }, (_, i) => {
+    const month = subMonths(new Date(), i);
+    const monthData = stockMovement.find(
+      (entry) =>
+        new Date(entry.createdAt).getMonth() === month.getMonth() &&
+        new Date(entry.createdAt).getFullYear() === month.getFullYear()
+    );
+    return {
+      month: month.toLocaleString("default", { month: "short" }),
+      value: monthData?._sum.totalAmount || 0,
+    };
+  }).reverse();
+
+  res.json({
+    success: true,
+    data: {
+      totalValue: totalInventoryValue._sum.purchasedPricePerItem || 0,
+      lowStockItems,
+      turnoverRate: Number(turnoverRate),
+      activeVendors,
+      stockMovementData: formattedStockMovement,
+      categoryDistributionData: formattedCategoryDistribution,
+    },
+  });
+};
+interface ColumnFilter {
+  id: string;
+  value: string;
+}
+// Get Stock Levels with search, category filter and pagination
+export const getStockLevels = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { search = "" as string, pageIndex, pageSize } = req.query;
+
+  try {
+    const take = Number(pageSize) || 4;
+    const skip = Number(pageIndex) * take;
+
+    // Parse the filters from the nested query format
+    let categoryFilters: string[] = [];
+    if (req.query.filters && typeof req.query.filters === "object") {
+      const filtersObj = req.query.filters as Record<string, any>;
+      // Check if we have category filter
+      if (
+        filtersObj[0] &&
+        filtersObj[0].id === "category" &&
+        Array.isArray(filtersObj[0].value)
+      ) {
+        categoryFilters = filtersObj[0].value;
+      }
+    }
+
+    // Base query conditions
+    const baseWhere = {
+      restaurantId: outletId,
+      ...(search
+        ? {
+            name: {
+              contains: search as string,
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+      ...(categoryFilters.length > 0
+        ? {
+            OR: categoryFilters.map((category) => ({
+              rawMaterialCategory: {
+                name: category,
+              },
+            })),
+          }
+        : {}),
+    };
+
+    // Get categories for filter
+    const categories = await prismaDB.rawMaterialCategory.findMany({
+      where: {
+        restaurantId: outletId,
+      },
+      select: {
+        name: true,
+      },
+    });
+
+    const formattedCategories = [...categories.map((c) => c.name)];
+
+    // Get stock items with pagination
+    const [items, total] = await Promise.all([
+      prismaDB.rawMaterial.findMany({
+        where: baseWhere,
+        include: {
+          rawMaterialCategory: true,
+          consumptionUnit: true,
+          minimumStockUnit: true,
+          purchaseItems: {
+            orderBy: {
+              purchase: {
+                createdAt: "desc",
+              },
+            },
+            take: 1,
+            include: {
+              purchase: {
+                select: {
+                  createdAt: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          name: "asc",
+        },
+        skip,
+        take,
+      }),
+      prismaDB.rawMaterial.count({
+        where: baseWhere,
+      }),
+    ]);
+
+    // Format the response data
+    const formattedItems = items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.rawMaterialCategory.name,
+      currentStock: item.currentStock?.toFixed(2) || 0,
+      unit: item.consumptionUnit.name,
+      minStockLevel: item.minimumStockLevel || 0,
+      minStockUnit: item.minimumStockUnit.name,
+      lastPurchasePrice:
+        item.lastPurchasedPrice || item.purchasedPricePerItem || 0,
+      lastPurchaseDate: item.purchaseItems[0]?.purchase.createdAt
+        ? new Date(item.purchaseItems[0].purchase.createdAt)
+            .toISOString()
+            .split("T")[0]
+        : null,
+      status:
+        (item.currentStock || 0) <= (item.minimumStockLevel || 0)
+          ? "Critical"
+          : (item.currentStock || 0) <= (item.minimumStockLevel || 0) * 0.5
+          ? "Low"
+          : "Good",
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        totalCount: total,
+        items: formattedItems,
+        categories: formattedCategories,
+        pagination: {
+          total,
+          pages: Math.ceil(total / take),
+          currentPage: pageIndex,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error in getStockLevels:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch stock levels",
+    });
+  }
+};
+
+// Get Purchase Order Statistics and Recent Orders
+export const getPurchaseOrderStats = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const today = new Date();
+  const thirtyDaysAgo = subDays(today, 30);
+  const previousMonth = subMonths(today, 1);
+
+  // Get pending orders count and value
+  const pendingOrders = await prismaDB.purchase.aggregate({
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "REQUESTED",
+    },
+    _count: true,
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  // Get completed orders this month
+  const completedOrders = await prismaDB.purchase.aggregate({
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "COMPLETED",
+      createdAt: {
+        gte: thirtyDaysAgo,
+      },
+    },
+    _count: true,
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  // Calculate average order value for last 30 days
+  const averageOrderValue =
+    completedOrders._count > 0
+      ? (completedOrders._sum.totalAmount || 0) / completedOrders._count
+      : 0;
+
+  // Get purchase trends for last 6 months
+  const purchaseTrends = await prismaDB.purchase.groupBy({
+    by: ["createdAt"],
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "COMPLETED",
+      createdAt: {
+        gte: subMonths(today, 6),
+      },
+    },
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  // Format purchase trends by month
+  const monthlyTrends = Array.from({ length: 6 }, (_, i) => {
+    const month = subMonths(today, i);
+    const monthData = purchaseTrends.find(
+      (p) => new Date(p.createdAt).getMonth() === month.getMonth()
+    );
+    return {
+      month: month.toLocaleString("default", { month: "short" }),
+      amount: monthData?._sum.totalAmount || 0,
+    };
+  }).reverse();
+
+  // Get recent purchase orders
+  const recentOrders = await prismaDB.purchase.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    include: {
+      vendor: true,
+      purchaseItems: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 10,
+  });
+
+  // Format recent orders
+  const formattedOrders = recentOrders.map((order) => ({
+    id: order.invoiceNo,
+    vendor: order.vendor.name,
+    items: order.purchaseItems.length,
+    total: order.totalAmount || 0,
+    status: order.purchaseStatus,
+    date: order.createdAt.toISOString().split("T")[0],
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      stats: {
+        pendingOrders: {
+          count: pendingOrders._count,
+          value: pendingOrders._sum.totalAmount || 0,
+        },
+        completedOrders: {
+          count: completedOrders._count,
+          value: completedOrders._sum.totalAmount || 0,
+        },
+        averageOrderValue,
+      },
+      purchaseTrends: monthlyTrends,
+      recentOrders: formattedOrders,
+    },
+  });
+};
+
+// Create new purchase order
+export const createPurchaseOrder = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { vendorId, items } = req.body;
+
+  try {
+    // Generate invoice number
+    const latestPO = await prismaDB.purchase.findFirst({
+      where: { restaurantId: outletId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const poNumber = latestPO
+      ? `PO${String(parseInt(latestPO.invoiceNo.slice(2)) + 1).padStart(
+          3,
+          "0"
+        )}`
+      : "PO001";
+
+    // Create purchase order with items
+    const purchaseOrder = await prismaDB.purchase.create({
+      data: {
+        restaurantId: outletId,
+        vendorId,
+        invoiceNo: poNumber,
+        purchaseStatus: "REQUESTED",
+        purchaseItems: {
+          create: items.map((item: any) => ({
+            rawMaterialId: item.rawMaterialId,
+            rawMaterialName: item.name,
+            purchaseUnitId: item.unitId,
+            purchaseUnitName: item.unit,
+            purchaseQuantity: item.quantity,
+            purchasePrice: item.price,
+            totalPrice: item.quantity * item.price,
+          })),
+        },
+      },
+      include: {
+        vendor: true,
+        purchaseItems: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: purchaseOrder,
+    });
+  } catch (error) {
+    console.error("Error in createPurchaseOrder:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create purchase order",
+    });
+  }
+};
+
+// Get purchase order details
+export const getPurchaseOrderDetails = async (req: Request, res: Response) => {
+  const { outletId, orderId } = req.params;
+
+  try {
+    const order = await prismaDB.purchase.findFirst({
+      where: {
+        restaurantId: outletId,
+        invoiceNo: orderId,
+      },
+      include: {
+        vendor: true,
+        purchaseItems: {
+          include: {
+            purchaseUnit: true,
+            rawMaterial: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: "Purchase order not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    console.error("Error in getPurchaseOrderDetails:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch purchase order details",
+    });
+  }
+};
+
+export const getVendorStats = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { search = "" } = req.query;
+  // Get total vendors count
+  const totalVendors = await prismaDB.vendor.count({
+    where: {
+      restaurantId: outletId,
+    },
+  });
+
+  // Get active orders count
+  const activeOrders = await prismaDB.purchase.count({
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: {
+        in: ["REQUESTED", "PROCESSED", "ACCEPTED"],
+      },
+    },
+  });
+
+  // Calculate average response time (time between REQUESTED and ACCEPTED status)
+  const orders = await prismaDB.purchase.findMany({
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "ACCEPTED",
+      createdAt: {
+        gte: subDays(new Date(), 30), // Last 30 days
+      },
+    },
+    select: {
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  const avgResponseTime =
+    orders.length > 0
+      ? orders.reduce((acc, order) => {
+          const diff = order.updatedAt.getTime() - order.createdAt.getTime();
+          return acc + diff;
+        }, 0) /
+        orders.length /
+        (1000 * 60 * 60 * 24) // Convert to days
+      : 0;
+
+  // Get monthly spend
+  const monthlySpend = await prismaDB.purchase.aggregate({
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "COMPLETED",
+      createdAt: {
+        gte: startOfMonth(new Date()),
+      },
+    },
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  // Get purchase history for last 6 months
+  const purchaseHistory = await prismaDB.purchase.groupBy({
+    by: ["createdAt"],
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "COMPLETED",
+      createdAt: {
+        gte: subMonths(new Date(), 6),
+      },
+    },
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  // Format purchase history
+  const formattedHistory = Array.from({ length: 6 }, (_, i) => {
+    const month = subMonths(new Date(), i);
+    const monthData = purchaseHistory.find(
+      (p) => new Date(p.createdAt).getMonth() === month.getMonth()
+    );
+    return {
+      month: month.toLocaleString("default", { month: "short" }),
+      amount: monthData?._sum.totalAmount || 0,
+    };
+  }).reverse();
+
+  // Get vendors list with their performance metrics
+  const vendors = await prismaDB.vendor.findMany({
+    where: {
+      restaurantId: outletId,
+      name: {
+        contains: search as string,
+        mode: "insensitive",
+      },
+    },
+    include: {
+      purchases: {
+        where: {
+          purchaseStatus: "COMPLETED",
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 1,
+      },
+    },
+  });
+
+  // Calculate vendor metrics
+  const vendorsWithMetrics = await Promise.all(
+    vendors.map(async (vendor) => {
+      // Get total orders
+      const totalOrders = await prismaDB.purchase.count({
+        where: {
+          vendorId: vendor.id,
+          purchaseStatus: "COMPLETED",
+        },
+      });
+
+      // Calculate average rating (you might need to add a rating system to your schema)
+      const rating = 4.5; // Placeholder - implement actual rating logic
+
+      return {
+        id: vendor.id,
+        name: vendor.name,
+        category: "Missing", // You might want to add category to your vendor schema
+        contact: "Missing", // Add to schema if needed
+        phone: "Missing", // Add to schema if needed
+        email: "Missing", // Add to schema if needed
+        totalOrders,
+        lastOrder:
+          vendor.purchases[0]?.createdAt.toISOString().split("T")[0] || null,
+        rating,
+        status: "ACTIVE", // Add status field to schema if needed
+        createdAt: vendor.createdAt,
+        updatedAt: vendor.updatedAt,
+      };
+    })
+  );
+
+  res.json({
+    success: true,
+    data: {
+      stats: {
+        totalVendors,
+        activeOrders,
+        avgResponseTime: Number(avgResponseTime.toFixed(1)),
+        monthlySpend: monthlySpend._sum.totalAmount || 0,
+      },
+      purchaseHistory: formattedHistory,
+      vendors: vendorsWithMetrics,
+    },
+  });
+};
+
+export const getPOSDashboardStats = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const totalRawMaterials = await prismaDB.rawMaterial.count({
+    where: {
+      restaurantId: outletId,
+      currentStock: {
+        gt: 0,
+      },
+    },
+  });
+
+  const totalCategories = await prismaDB.rawMaterialCategory.count({
+    where: {
+      restaurantId: outletId,
+    },
+  });
+
+  const totalSales = await prismaDB.order.aggregate({
+    where: {
+      restaurantId: outletId,
+      orderStatus: "COMPLETED",
+      createdAt: {
+        gte: new Date(new Date().setHours(0, 0, 0, 0)),
+        lt: new Date(new Date().setHours(23, 59, 59, 999)),
+      },
+    },
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  const yesterdaySales = await prismaDB.order.aggregate({
+    where: {
+      restaurantId: outletId,
+      orderStatus: "COMPLETED",
+      createdAt: {
+        gte: subDays(new Date(), 1),
+        lt: new Date(),
+      },
+    },
+    _sum: {
+      totalAmount: true,
+    },
+  });
+
+  const recentStockPurchases = await prismaDB.purchase.findMany({
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "COMPLETED",
+      createdAt: {
+        gte: subDays(new Date(), 1),
+        lte: new Date(),
+      },
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+  });
+
+  res.json({
+    success: true,
+    data: {
+      inventory: {
+        totalRawMaterials,
+        totalCategories,
+      },
+      sales: {
+        totalSales: totalSales._sum.totalAmount || 0,
+        yesterdayChange: calculatePercentageChange(
+          yesterdaySales._sum.totalAmount || 0,
+          totalSales._sum.totalAmount || 0
+        ),
+        yesterdaySales: yesterdaySales._sum.totalAmount || 0,
+      },
+      stock: {
+        recentStockPurchases: recentStockPurchases.length,
+        lastUpdateTime: recentStockPurchases[0]?.updatedAt.toISOString(),
+      },
+    },
+  });
+};
+
+export const orderAndStockDeduction = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const page = parseInt((req.query.page as string) || "0");
+  const pageSize = parseInt((req.query.pageSize as string) || "3");
+  const skip = page * pageSize;
+
+  // Get orders with their items and recipes
+  const orders = await prismaDB.order.findMany({
+    where: {
+      restaurantId: outletId,
+      active: true,
+    },
+    select: {
+      id: true,
+      generatedOrderId: true,
+      createdAt: true,
+      totalAmount: true,
+      orderItems: {
+        select: {
+          id: true,
+          quantity: true,
+          menuItem: {
+            select: {
+              name: true,
+              itemRecipe: {
+                select: {
+                  ingredients: {
+                    select: {
+                      quantity: true,
+                      rawMaterial: {
+                        select: {
+                          name: true,
+                          currentStock: true,
+                          consumptionUnit: {
+                            select: {
+                              name: true,
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: pageSize,
+    skip: skip,
+  });
+
+  // Transform the data to include stock deductions
+  const stockDeductions = orders.map((order) => ({
+    id: order.id,
+    orderId: order.generatedOrderId,
+    totalAmount: order.totalAmount,
+    createdAt: order.createdAt,
+    items: order.orderItems.map((item) => ({
+      name: item.menuItem.name,
+      quantity: item.quantity,
+      ingredients:
+        item.menuItem.itemRecipe?.ingredients.map((ingredient) => ({
+          name: ingredient.rawMaterial.name,
+          deductedAmount: ingredient.quantity * item.quantity,
+          currentStock: ingredient.rawMaterial.currentStock,
+          unit: ingredient.rawMaterial.consumptionUnit.name,
+        })) || [],
+    })),
+  }));
+
+  // Get total count for pagination
+  const totalCount = await prismaDB.order.count({
+    where: {
+      restaurantId: outletId,
+      active: true,
+    },
+  });
+
+  res.json({
+    items: stockDeductions,
+    pagination: {
+      total: totalCount,
+      pageSize,
+      page,
     },
   });
 };

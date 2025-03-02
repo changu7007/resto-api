@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getStaffIds = exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = exports.getStaffAttendance = exports.getStaffsForTable = void 0;
+exports.bulkPosAccessDisable = exports.bulkPosAccessEnable = exports.getStaffIds = exports.deleteStaff = exports.updateStaff = exports.createStaff = exports.getStaffId = exports.getAllStaffs = exports.getStaffAttendance = exports.getStaffsForTable = void 0;
 const redis_1 = require("../../../services/redis");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -18,6 +18,8 @@ const outlet_1 = require("../../../lib/outlet");
 const get_staffs_1 = require("../../../lib/outlet/get-staffs");
 const get_users_1 = require("../../../lib/get-users");
 const date_fns_1 = require("date-fns");
+const bad_request_1 = require("../../../exceptions/bad-request");
+const unauthorized_1 = require("../../../exceptions/unauthorized");
 const getStaffsForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -73,6 +75,7 @@ const getStaffsForTable = (req, res) => __awaiter(void 0, void 0, void 0, functi
             email: staff === null || staff === void 0 ? void 0 : staff.email,
             role: staff === null || staff === void 0 ? void 0 : staff.role,
             salary: staff === null || staff === void 0 ? void 0 : staff.salary,
+            posAccess: staff === null || staff === void 0 ? void 0 : staff.posAccess,
             orders: (_a = staff === null || staff === void 0 ? void 0 : staff.orders) === null || _a === void 0 ? void 0 : _a.length,
             phoneNo: staff === null || staff === void 0 ? void 0 : staff.phoneNo,
             joinedDate: staff === null || staff === void 0 ? void 0 : staff.joinedDate,
@@ -316,6 +319,22 @@ const createStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     const { name, email, phoneNo, role, salary, joinedDate } = req.body;
+    const checkEmail = yield __1.prismaDB.staff.findFirst({
+        where: {
+            email,
+        },
+    });
+    if (checkEmail) {
+        throw new bad_request_1.BadRequestsException("This Email is already Registered with another Staff", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const checkPhoneNo = yield __1.prismaDB.staff.findFirst({
+        where: {
+            phoneNo,
+        },
+    });
+    if (checkPhoneNo) {
+        throw new bad_request_1.BadRequestsException("This Phone Number is already Registered with another Staff", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     yield __1.prismaDB.staff.create({
         data: {
             restaurantId: getOutlet.id,
@@ -422,3 +441,85 @@ const getStaffIds = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     });
 });
 exports.getStaffIds = getStaffIds;
+const bulkPosAccessEnable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const { outletId } = req.params;
+    const { selectedId } = req.body;
+    // @ts-ignore
+    const userId = (_a = req === null || req === void 0 ? void 0 : req.user) === null || _a === void 0 ? void 0 : _a.id;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    // Validate input
+    if (!Array.isArray(selectedId) || (selectedId === null || selectedId === void 0 ? void 0 : selectedId.length) === 0) {
+        return res.status(400).json({
+            success: false,
+            message: "Please select neccessarry staff",
+        });
+    }
+    // Perform status update within a transaction
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        // Update related orders' statuses to "CANCELLED"
+        yield tx.staff.updateMany({
+            where: {
+                id: {
+                    in: selectedId,
+                },
+                restaurantId: outlet.id,
+            },
+            data: {
+                posAccess: true,
+            },
+        });
+    }));
+    return res.json({
+        success: true,
+        message: "Selected Staff Pos Access Updated ✅",
+    });
+});
+exports.bulkPosAccessEnable = bulkPosAccessEnable;
+const bulkPosAccessDisable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _b;
+    const { outletId } = req.params;
+    const { selectedId } = req.body;
+    // @ts-ignore
+    const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    // Validate input
+    if (!Array.isArray(selectedId) || (selectedId === null || selectedId === void 0 ? void 0 : selectedId.length) === 0) {
+        return res.status(400).json({
+            success: false,
+            message: "Please select neccessarry staff",
+        });
+    }
+    // Perform status update within a transaction
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        // Update related orders' statuses to "CANCELLED"
+        yield tx.staff.updateMany({
+            where: {
+                id: {
+                    in: selectedId,
+                },
+                restaurantId: outlet.id,
+            },
+            data: {
+                posAccess: false,
+            },
+        });
+    }));
+    return res.json({
+        success: true,
+        message: "Selected Staff Pos Access Disabled ✅",
+    });
+});
+exports.bulkPosAccessDisable = bulkPosAccessDisable;

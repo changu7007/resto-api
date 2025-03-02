@@ -551,7 +551,9 @@ const getAllExpensesForTable = (req, res) => __awaiter(void 0, void 0, void 0, f
                     unitName: (_d = item === null || item === void 0 ? void 0 : item.purchaseUnit) === null || _d === void 0 ? void 0 : _d.name,
                     requestUnitId: (_e = item === null || item === void 0 ? void 0 : item.purchaseUnit) === null || _e === void 0 ? void 0 : _e.id,
                     requestQuantity: item === null || item === void 0 ? void 0 : item.purchaseQuantity,
-                    gst: Number((item === null || item === void 0 ? void 0 : item.cgst) || 0) + Number((item === null || item === void 0 ? void 0 : item.sgst) || 0),
+                    gstType: item === null || item === void 0 ? void 0 : item.gstType,
+                    netRate: item === null || item === void 0 ? void 0 : item.netRate,
+                    taxAmount: item === null || item === void 0 ? void 0 : item.taxAmount,
                     total: item === null || item === void 0 ? void 0 : item.purchasePrice,
                 });
             }),

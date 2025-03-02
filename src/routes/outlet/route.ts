@@ -45,6 +45,8 @@ import {
 import {
   addItemToUserFav,
   deleteItem,
+  disablePosStatus,
+  enablePosStatus,
   getAddONById,
   getAddonsForTable,
   getAllItem,
@@ -121,6 +123,8 @@ import {
   getDomain,
 } from "../../controllers/outlet/domains/domainController";
 import {
+  bulkPosAccessDisable,
+  bulkPosAccessEnable,
   createStaff,
   deleteStaff,
   getAllStaffs,
@@ -152,22 +156,27 @@ import {
   createRequestPurchase,
   createUnit,
   createVendor,
+  createVendorCategory,
   deleteCategoryById,
   deleteRawMaterialById,
   deleteRequestPurchase,
   deleteUnitById,
   deleteVendor,
+  getAllCompletedTablePurcahses,
   getAllItemRecipe,
   getAllPurcahses,
   getAllRawMaterialCategory,
   getAllRawMaterials,
   getAllRawMaterialUnit,
+  getAllRequestedTablePurcahses,
+  getAllSettledTablePurcahses,
   getAllTableItemRecipe,
-  getAllTablePurcahses,
   getAllTableRawMaterialCategory,
   getAllTableRawMaterials,
   getAllTableRawMaterialUnit,
+  getAllVendorCategories,
   getAllVendors,
+  getAllVendorsForTable,
   getCategoryById,
   getPurchaseId,
   getRawMaterialById,
@@ -537,7 +546,16 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getTableCurrentOrders)
 );
-
+outletRoute.patch(
+  "/:outletId/bulk-pos-access-enable",
+  isAuthMiddelware,
+  errorHandler(bulkPosAccessEnable)
+);
+outletRoute.patch(
+  "/:outletId/bulk-pos-access-disable",
+  isAuthMiddelware,
+  errorHandler(bulkPosAccessDisable)
+);
 //Items Route
 outletRoute.post(
   "/:outletId/create-item",
@@ -597,6 +615,16 @@ outletRoute.patch(
   "/:outletId/items/:itemId",
   isAuthMiddelware,
   errorHandler(updateItembyId)
+);
+outletRoute.patch(
+  "/:outletId/items/:itemId/enable-pos",
+  isAuthMiddelware,
+  errorHandler(enablePosStatus)
+);
+outletRoute.patch(
+  "/:outletId/items/:itemId/disable-pos",
+  isAuthMiddelware,
+  errorHandler(disablePosStatus)
 );
 outletRoute.delete(
   "/:outletId/items/:itemId",
@@ -977,6 +1005,25 @@ outletRoute.delete(
 );
 //Unit POST,PATCH,DELETE END
 
+//Vendor Categories GET,CREATE START
+outletRoute.get(
+  "/:outletId/inventory/get-all-vendor-categories",
+  isAuthMiddelware,
+  errorHandler(getAllVendorCategories)
+);
+
+outletRoute.post(
+  "/:outletId/inventory/vendor-category",
+  isAuthMiddelware,
+  errorHandler(createVendorCategory)
+);
+
+outletRoute.post(
+  "/:outletId/inventory/get-all-vendors-for-table",
+  isAuthMiddelware,
+  errorHandler(getAllVendorsForTable)
+);
+
 //Purchase GET,CREATE START
 outletRoute.get(
   "/:outletId/inventory/get-all-purchases",
@@ -984,10 +1031,21 @@ outletRoute.get(
   errorHandler(getAllPurcahses)
 );
 outletRoute.post(
-  "/:outletId/inventory/get-all-table-purchases",
+  "/:outletId/inventory/get-all-settled-purchases",
   isAuthMiddelware,
-  errorHandler(getAllTablePurcahses)
+  errorHandler(getAllSettledTablePurcahses)
 );
+outletRoute.post(
+  "/:outletId/inventory/get-all-completed-purchases",
+  isAuthMiddelware,
+  errorHandler(getAllCompletedTablePurcahses)
+);
+outletRoute.post(
+  "/:outletId/inventory/get-all-requested-purchases",
+  isAuthMiddelware,
+  errorHandler(getAllRequestedTablePurcahses)
+);
+
 outletRoute.get(
   "/:outletId/inventory/get-purchase/:id",
   isAuthMiddelware,

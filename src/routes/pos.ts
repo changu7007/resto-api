@@ -8,9 +8,15 @@ import {
 } from "../controllers/outlet/posController";
 import {
   getInventoryAlerts,
+  getInventoryOverview,
   getPopularItems,
+  getPOSDashboardStats,
   getPosStats,
+  getPurchaseOrderStats,
   getStaffPerformance,
+  getStockLevels,
+  getVendorStats,
+  orderAndStockDeduction,
 } from "../controllers/outlet/stats/posStatsController";
 import {
   getPOSTableAllOrders,
@@ -71,6 +77,42 @@ posRoute.post(
   "/:outletId/pos-table/table-orders",
   isAuthMiddelware,
   errorHandler(getPOSTableAllOrders)
+);
+
+posRoute.get(
+  "/:outletId/pos-stats/inventory-overview",
+  isAuthMiddelware,
+  errorHandler(getInventoryOverview)
+);
+
+posRoute.get(
+  "/:outletId/pos-stats/inventory-stock-levels",
+  isAuthMiddelware,
+  errorHandler(getStockLevels)
+);
+
+posRoute.get(
+  "/:outletId/pos-stats/purchase-order-stats",
+  isAuthMiddelware,
+  errorHandler(getPurchaseOrderStats)
+);
+
+posRoute.get(
+  "/:outletId/pos-stats/vendor-stats",
+  isAuthMiddelware,
+  errorHandler(getVendorStats)
+);
+
+posRoute.get(
+  "/:outletId/pos-stats/dashboard",
+  isAuthMiddelware,
+  errorHandler(getPOSDashboardStats)
+);
+
+posRoute.get(
+  "/:outletId/pos-stats/stock-deductions",
+  isAuthMiddelware,
+  errorHandler(orderAndStockDeduction)
 );
 
 export default posRoute;

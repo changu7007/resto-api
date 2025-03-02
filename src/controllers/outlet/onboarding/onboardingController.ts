@@ -113,6 +113,7 @@ export const createOutlet = async (req: Request, res: Response) => {
           outletType: body.type,
         },
       });
+
       await getFormatUserAndSendToRedis(userId);
       return res.json({
         success: true,
@@ -167,6 +168,16 @@ export const createOutlet = async (req: Request, res: Response) => {
           logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/fea654c0a9447f453c5142377b23e594b73c29dc435822363627e3743e7f0dc3",
           status: false,
           restaurantId: outlet.id,
+        },
+      });
+
+      await prismaDB.invoice.create({
+        data: {
+          restaurantId: outlet.id,
+          isGSTEnabled: true,
+          isPrefix: false,
+          invoiceNo: 1,
+          prefix: "",
         },
       });
 

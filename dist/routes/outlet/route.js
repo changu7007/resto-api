@@ -95,6 +95,8 @@ outletRoute.post("/:outletId/all-table-session-orders", auth_1.isAuthMiddelware,
 outletRoute.post("/:outletId/all-table-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllOrders));
 outletRoute.get("/:outletId/all-staff-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllOrderByStaff));
 outletRoute.get("/:outletId/table/:tableId/customer/:customerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.getTableCurrentOrders));
+outletRoute.patch("/:outletId/bulk-pos-access-enable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessEnable));
+outletRoute.patch("/:outletId/bulk-pos-access-disable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessDisable));
 //Items Route
 outletRoute.post("/:outletId/create-item", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.postItem));
 outletRoute.get("/:outletId/get-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getAllItem));
@@ -110,6 +112,8 @@ outletRoute.get("/:outletId/get-menu-variants", (0, error_handler_1.errorHandler
 outletRoute.get("/:outletId/get-addons-items", (0, error_handler_1.errorHandler)(itemsController_1.getSingleAddons));
 outletRoute.get("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemById));
 outletRoute.patch("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.updateItembyId));
+outletRoute.patch("/:outletId/items/:itemId/enable-pos", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enablePosStatus));
+outletRoute.patch("/:outletId/items/:itemId/disable-pos", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.disablePosStatus));
 outletRoute.delete("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.deleteItem));
 outletRoute.post("/:outletId/check-short-code", (0, error_handler_1.errorHandler)(itemsController_1.getShortCodeStatus));
 //categories
@@ -198,9 +202,15 @@ outletRoute.post("/:outletId/inventory/create-raw-material-unit", auth_1.isAuthM
 outletRoute.patch("/:outletId/inventory/update-raw-material-unit/:unitId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateUnitById));
 outletRoute.delete("/:outletId/inventory/delete-raw-material-unit/:unitId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.deleteUnitById));
 //Unit POST,PATCH,DELETE END
+//Vendor Categories GET,CREATE START
+outletRoute.get("/:outletId/inventory/get-all-vendor-categories", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllVendorCategories));
+outletRoute.post("/:outletId/inventory/vendor-category", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.createVendorCategory));
+outletRoute.post("/:outletId/inventory/get-all-vendors-for-table", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllVendorsForTable));
 //Purchase GET,CREATE START
 outletRoute.get("/:outletId/inventory/get-all-purchases", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllPurcahses));
-outletRoute.post("/:outletId/inventory/get-all-table-purchases", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllTablePurcahses));
+outletRoute.post("/:outletId/inventory/get-all-settled-purchases", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllSettledTablePurcahses));
+outletRoute.post("/:outletId/inventory/get-all-completed-purchases", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllCompletedTablePurcahses));
+outletRoute.post("/:outletId/inventory/get-all-requested-purchases", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllRequestedTablePurcahses));
 outletRoute.get("/:outletId/inventory/get-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getPurchaseId));
 outletRoute.post("/:outletId/inventory/create-request-purchase", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.createRequestPurchase));
 outletRoute.patch("/:outletId/inventory/update-request-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateRequestPurchase));

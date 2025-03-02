@@ -74,6 +74,7 @@ model Restaurant {
   Report                Report[]                   @relation("RestaurantToReports")
   targetMetrics         TargetMetrics?
   cashRegisters         CashRegister[]             @relation("RestaurantToCashRegister")
+  vendorCategories      VendorCategory[]           @relation("RestaurantToVendorCategory")
 }
 
 model Invite {
@@ -515,33 +516,33 @@ model RawMaterialCategory {
 }
 
 model Unit {
-  id                String          @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId      String          @db.ObjectId
-  restaurant        Restaurant      @relation("RestaurantToUnit", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  name              String
-  slug              String
-  description       String?
-  purchaseUnits     PurchaseItems[] @relation("PurchaseItemToUnit")
-  consumptionUnits  RawMaterial[]   @relation("UnitToConsumption")
-  minimumStockUnits RawMaterial[]   @relation("UnitToMinimumStock")
-
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  RecipeIngredient RecipeIngredient[]
+  id                  String               @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId        String               @db.ObjectId
+  restaurant          Restaurant           @relation("RestaurantToUnit", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name                String
+  slug                String
+  description         String?
+  purchaseUnits       PurchaseItems[]      @relation("PurchaseItemToUnit")
+  consumptionUnits    RawMaterial[]        @relation("UnitToConsumption")
+  minimumStockUnits   RawMaterial[]        @relation("UnitToMinimumStock")
+  vendorContractRates VendorContractRate[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  RecipeIngredient    RecipeIngredient[]
 
   @@index([restaurantId])
 }
 
 model RawMaterial {
-  id                    String              @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId          String              @db.ObjectId
-  restaurant            Restaurant          @relation("RestaurantToRawMaterial", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  categoryId            String              @db.ObjectId
-  rawMaterialCategory   RawMaterialCategory @relation("RawCategoryToRawMaterial", fields: [categoryId], references: [id])
-  consumptionUnitId     String              @db.ObjectId
-  consumptionUnit       Unit                @relation("UnitToConsumption", fields: [consumptionUnitId], references: [id])
-  minimumStockLevelUnit String              @db.ObjectId
-  minimumStockUnit      Unit                @relation("UnitToMinimumStock", fields: [minimumStockLevelUnit], references: [id])
+  id                    String               @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId          String               @db.ObjectId
+  restaurant            Restaurant           @relation("RestaurantToRawMaterial", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  categoryId            String               @db.ObjectId
+  rawMaterialCategory   RawMaterialCategory  @relation("RawCategoryToRawMaterial", fields: [categoryId], references: [id])
+  consumptionUnitId     String               @db.ObjectId
+  consumptionUnit       Unit                 @relation("UnitToConsumption", fields: [consumptionUnitId], references: [id])
+  minimumStockLevelUnit String               @db.ObjectId
+  minimumStockUnit      Unit                 @relation("UnitToMinimumStock", fields: [minimumStockLevelUnit], references: [id])
   // Basic fields
   name                  String
   slug                  String
@@ -549,16 +550,17 @@ model RawMaterial {
   currentStock          Float?
   minimumStockLevel     Float?
   conversionFactor      Float?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
   purchasedPrice        Float?
   purchasedUnit         String?
   purchasedStock        Float?
   purchasedPricePerItem Float?
   lastPurchasedPrice    Float?
   activePurchaseId      String?
-  purchaseItems         PurchaseItems[]     @relation("PurchaseItemToRawMaterial")
+  purchaseItems         PurchaseItems[]      @relation("PurchaseItemToRawMaterial")
   RecipeIngredient      RecipeIngredient[]
+  vendorContractRates   VendorContractRate[] @relation("RawMaterialToContractRate")
 
   @@index([consumptionUnitId])
   @@index([minimumStockLevelUnit])
@@ -686,6 +688,7 @@ model RecipeIngredient {
   quantity      Float
   unitId        String      @db.ObjectId
   unit          Unit        @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  wastage       Float       @default(0)
   cost          Float
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -1018,16 +1021,73 @@ model Notification {
   @@index([restaurantId])
 }
 
-model Vendor {
+model VendorCategory {
   id           String     @id @default(auto()) @map("_id") @db.ObjectId
   restaurantId String     @db.ObjectId
-  restaurant   Restaurant @relation("RestaurantToVendor", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  restaurant   Restaurant @relation("RestaurantToVendorCategory", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name         String
   slug         String
-  purchases    Purchase[] @relation("PurchaseToVendor")
-  expenses     Expenses[]
+  vendors      Vendor[]   @relation("VendorToVendorCategory")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([restaurantId])
+}
+
+model Vendor {
+  id            String               @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId  String               @db.ObjectId
+  restaurant    Restaurant           @relation("RestaurantToVendor", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name          String
+  slug          String
+  categoryId    String?              @db.ObjectId
+  contactName   String?
+  phone         String?
+  email         String?
+  status        String               @default("ACTIVE")
+  rating        Float?               @default(0)
+  isContract    Boolean              @default(false)
+  category      VendorCategory?      @relation("VendorToVendorCategory", fields: [categoryId], references: [id])
+  contractRates VendorContractRate[] @relation("VendorToContractRate")
+  expenses      Expenses[]
+  purchases     Purchase[]           @relation("PurchaseToVendor")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([restaurantId])
+}
+
+model VendorContractRate {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  vendorId        String      @db.ObjectId
+  vendor          Vendor      @relation("VendorToContractRate", fields: [vendorId], references: [id], onDelete: Cascade)
+  rawMaterialId   String      @db.ObjectId
+  rawMaterial     RawMaterial @relation("RawMaterialToContractRate", fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  rawMaterialName String
+  unitId          String      @db.ObjectId
+  unit            Unit        @relation(fields: [unitId], references: [id])
+  unitName        String
+  netRate         Float
+  gstType         GstType
+  taxAmount       Float
+  totalRate       Float
+  validFrom       DateTime
+  validTo         DateTime
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([vendorId])
+  @@index([rawMaterialId])
+  @@index([unitId])
+}
+
+enum GstType {
+  GST_0
+  GST_5
+  GST_12
+  GST_18
+  GST_28
 }
 
 enum PurchaseStatus {
@@ -1075,11 +1135,9 @@ model PurchaseItems {
   purchaseQuantity Float
   purchaseUnit     Unit        @relation("PurchaseItemToUnit", fields: [purchaseUnitId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   purchaseUnitName String
-  sgst             Float?
-  sgstPrice        Float?
-  cgstPice         Float?
-  cgst             Float?
-  totalPrice       Float?
+  netRate          Float?
+  gstType          GstType?
+  taxAmount        Float?
   purchasePrice    Float?
 }
 

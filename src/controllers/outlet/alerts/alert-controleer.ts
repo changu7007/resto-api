@@ -38,6 +38,9 @@ export const getAlerts = async (req: Request, res: Response) => {
       message: true,
       createdAt: true,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
   await redis.set(`alerts-${outletId}`, JSON.stringify(alerts));

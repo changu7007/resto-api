@@ -493,7 +493,8 @@ export const createInvoiceDetails = async (req: Request, res: Response) => {
       prefix: isPrefix ? prefix : "",
     },
   });
-  await fetchOutletByIdToRedis(outlet?.id);
+
+  await redis.del(`O-${outlet?.id}`);
 
   return res.json({
     success: true,
@@ -523,7 +524,7 @@ export const updateInvoiceDetails = async (req: Request, res: Response) => {
       prefix: isPrefix ? prefix : "",
     },
   });
-  await fetchOutletByIdToRedis(outlet?.id);
+  await redis.del(`O-${outlet?.id}`);
 
   return res.json({
     success: true,

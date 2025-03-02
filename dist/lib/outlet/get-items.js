@@ -209,7 +209,7 @@ const getOAllItems = (outletId) => __awaiter(void 0, void 0, void 0, function* (
             })),
         });
     });
-    yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(formattedItems));
+    yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(formattedItems), "EX", 300);
     return getItems;
 });
 exports.getOAllItems = getOAllItems;

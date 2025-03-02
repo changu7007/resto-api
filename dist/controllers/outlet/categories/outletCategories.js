@@ -47,13 +47,23 @@ const createCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     const { name } = req.body;
+    const slug = (0, utils_1.generateSlug)(name);
     if (!name) {
-        throw new bad_request_1.BadRequestsException("Outlet Not Found", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        throw new bad_request_1.BadRequestsException("Name Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const checkSlug = yield __1.prismaDB.category.findFirst({
+        where: {
+            restaurantId: outlet.id,
+            slug,
+        },
+    });
+    if (checkSlug) {
+        throw new bad_request_1.BadRequestsException("Category already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     yield __1.prismaDB.category.create({
         data: {
             name,
-            slug: (0, utils_1.generateSlug)(name),
+            slug,
             restaurantId: outlet.id,
         },
     });
@@ -71,8 +81,18 @@ const updateCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     const { name } = req.body;
+    const slug = (0, utils_1.generateSlug)(name);
     if (!name) {
-        throw new bad_request_1.BadRequestsException("Outlet Not Found", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        throw new bad_request_1.BadRequestsException("Name Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const checkSlug = yield __1.prismaDB.category.findFirst({
+        where: {
+            restaurantId: outlet.id,
+            slug,
+        },
+    });
+    if (checkSlug) {
+        throw new bad_request_1.BadRequestsException("Category already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const category = yield (0, outlet_1.getCategoryByOutletId)(outlet.id, categoryId);
     yield __1.prismaDB.category.update({
@@ -82,6 +102,7 @@ const updateCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
         },
         data: {
             name,
+            slug,
         },
     });
     const getCategories = yield __1.prismaDB.category.findMany({

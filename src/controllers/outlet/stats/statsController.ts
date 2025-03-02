@@ -5,7 +5,7 @@ import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { getPeriodDates } from "../../../lib/utils";
 import { getStaffById } from "../../../lib/get-users";
-import { subMonths, format, parse } from "date-fns";
+import { subMonths, format, parse, startOfMonth } from "date-fns";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { DateTime } from "luxon";
@@ -1107,15 +1107,19 @@ export const totalInventory = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
   }
 
-  // Fetch raw materials
+  // Fetch raw materials with their categories
   const rawMaterials = await prismaDB.rawMaterial.findMany({
     where: {
       restaurantId: outlet.id,
     },
     include: {
       consumptionUnit: true,
+      rawMaterialCategory: true,
     },
   });
+
+  // Calculate wastage analytics
+  const wastageAnalytics = await calculateWastageAnalytics(outlet.id);
 
   // Fetch purchases
   const purchase = await prismaDB.purchase.findMany({
@@ -1176,6 +1180,149 @@ export const totalInventory = async (req: Request, res: Response) => {
       totalAmount: true,
     },
   });
+
+  // Get stock movement trend (last 6 months)
+  const sixMonthsAgo = subMonths(new Date(), 6);
+  const stockMovement = await prismaDB.purchase.groupBy({
+    by: ["createdAt"],
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: "COMPLETED",
+      createdAt: {
+        gte: startOfMonth(sixMonthsAgo),
+      },
+    },
+    _sum: {
+      totalAmount: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  // Get recent purchase orders
+  const recentPurchases = await prismaDB.purchase.findMany({
+    where: {
+      restaurantId: outletId,
+      purchaseStatus: {
+        in: ["PROCESSED", "REQUESTED", "SETTLEMENT"],
+      },
+    },
+    include: {
+      vendor: {
+        select: {
+          name: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 3,
+  });
+
+  // Get top vendors by purchase volume
+  const topVendors = await prismaDB.purchase.groupBy({
+    by: ["vendorId"],
+    where: {
+      restaurantId: outletId,
+      // purchaseStatus: "COMPLETED",
+    },
+    _sum: {
+      totalAmount: true,
+    },
+    orderBy: {
+      _sum: {
+        totalAmount: "desc",
+      },
+    },
+    // take: 3,
+  });
+
+  // Get vendor details with contracts
+  const topVendorDetails = await Promise.all(
+    topVendors.map(async (vendor) => {
+      const [vendorInfo, latestContract] = await Promise.all([
+        prismaDB.vendor.findFirst({
+          where: { id: vendor.vendorId },
+          include: {
+            category: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        }),
+        prismaDB.vendorContractRate.findFirst({
+          where: {
+            vendorId: vendor.vendorId,
+            isActive: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        }),
+      ]);
+
+      return {
+        name: vendorInfo?.name || "Missing Vendor Name",
+        category: vendorInfo?.category?.name || "Missing Category",
+        contractedRate: `${latestContract?.totalRate || 0}/${
+          latestContract?.unitName
+        }`,
+        marketRate: latestContract?.totalRate
+          ? `${(latestContract.totalRate * 1.2).toFixed(2)}/${
+              latestContract.unitName
+            }`
+          : "N/A",
+        expiryDate: latestContract?.validTo
+          ? `Expires in ${Math.ceil(
+              (new Date(latestContract.validTo).getTime() -
+                new Date().getTime()) /
+                (1000 * 60 * 60 * 24 * 30)
+            )} months`
+          : "No expiry date",
+        status: latestContract?.isActive ? "Active" : "Renewal Due",
+      };
+    })
+  );
+
+  // Get low stock items with detailed information
+  const lowStockItems = await prismaDB.rawMaterial.findMany({
+    where: {
+      restaurantId: outletId,
+      currentStock: {
+        lte: prismaDB.rawMaterial.fields.minimumStockLevel,
+      },
+    },
+    include: {
+      consumptionUnit: true,
+    },
+    take: 5,
+    orderBy: {
+      currentStock: "asc",
+    },
+  });
+
+  const formattedLowStockItems = lowStockItems.map((item) => ({
+    name: item.name,
+    currentStock: Number(item.currentStock || 0).toFixed(2),
+    minimumStock: Number(item.minimumStockLevel || 0).toFixed(2),
+    unit: item.consumptionUnit.name,
+    status: !item.currentStock
+      ? "Out of Stock"
+      : item.currentStock <= (item.minimumStockLevel || 0) / 2
+      ? "Critical"
+      : "Low Stock",
+  }));
+
+  // Format recent purchases
+  const formattedRecentPurchases = recentPurchases.map((purchase) => ({
+    id: purchase.invoiceNo,
+    vendorName: purchase.vendor.name,
+    amount: purchase.totalAmount || 0,
+    status: purchase.purchaseStatus,
+    date: format(purchase.createdAt, "dd MMM yyyy"),
+  }));
 
   // Step 1: Calculate COGS for each raw material
   const rawMaterialCOGS = await Promise.all(
@@ -1247,6 +1394,20 @@ export const totalInventory = async (req: Request, res: Response) => {
       ? cogs._sum.totalAmount / totalInventoryStats.totalValue
       : 0;
 
+  // Format stock movement data
+  const formattedStockMovement = Array.from({ length: 6 }, (_, i) => {
+    const month = subMonths(new Date(), i);
+    const monthData = stockMovement.find(
+      (entry) =>
+        new Date(entry.createdAt).getMonth() === month.getMonth() &&
+        new Date(entry.createdAt).getFullYear() === month.getFullYear()
+    );
+    return {
+      month: month.toLocaleString("default", { month: "short" }),
+      value: monthData?._sum.totalAmount || 0,
+    };
+  }).reverse();
+
   // Format the result
   const formatted = {
     totalRawMaterials: rawMaterials.length,
@@ -1259,12 +1420,120 @@ export const totalInventory = async (req: Request, res: Response) => {
         : `${purchaseDifference}`,
     inventoryTurnover: inventoryTurnover.toFixed(2),
     rawMaterialCOGS,
+    stockMovement: formattedStockMovement,
+    recentPurchases: formattedRecentPurchases,
+    topVendors: topVendorDetails,
+    lowStockItems: formattedLowStockItems,
+    wastageAnalytics,
   };
 
   return res.json({
     success: true,
     formattedInventoryStats: formatted,
   });
+};
+
+// Add this helper function to calculate wastage
+const calculateWastageAnalytics = async (restaurantId: string) => {
+  // Get the start of the current month
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  // Fetch all completed orders for the current month
+  const orders = await prismaDB.order.findMany({
+    where: {
+      restaurantId: restaurantId,
+      orderStatus: "COMPLETED",
+      createdAt: {
+        gte: startOfMonth,
+      },
+    },
+    include: {
+      orderItems: {
+        include: {
+          menuItem: {
+            include: {
+              itemRecipe: {
+                include: {
+                  ingredients: {
+                    include: {
+                      rawMaterial: {
+                        include: {
+                          rawMaterialCategory: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Initialize wastage tracking by category
+  const wastageByCategory: Record<
+    string,
+    {
+      totalWastage: number;
+      totalValue: number;
+      itemCount: number;
+    }
+  > = {};
+
+  // Process each order and calculate wastage
+  orders.forEach((order) => {
+    order.orderItems.forEach((orderItem) => {
+      const recipe = orderItem.menuItem?.itemRecipe;
+      if (recipe) {
+        recipe.ingredients.forEach((ingredient) => {
+          const category = ingredient.rawMaterial.rawMaterialCategory.name;
+          const quantity = Number(orderItem.quantity);
+          const wastageAmount =
+            (ingredient.wastage / 100) * ingredient.quantity * quantity;
+          const wastageValue =
+            wastageAmount * (ingredient.rawMaterial.purchasedPricePerItem || 0);
+
+          if (!wastageByCategory[category]) {
+            wastageByCategory[category] = {
+              totalWastage: 0,
+              totalValue: 0,
+              itemCount: 0,
+            };
+          }
+
+          wastageByCategory[category].totalWastage += wastageAmount;
+          wastageByCategory[category].totalValue += wastageValue;
+          wastageByCategory[category].itemCount += 1;
+        });
+      }
+    });
+  });
+
+  // Calculate total value for percentage calculations
+  const totalWastageValue = Object.values(wastageByCategory).reduce(
+    (sum, category) => sum + category.totalValue,
+    0
+  );
+
+  // Format the results
+  const wastageAnalytics = Object.entries(wastageByCategory).map(
+    ([category, data]) => ({
+      category,
+      amount: Math.round(data.totalValue * 100) / 100, // Round to 2 decimal places
+      percentage: Math.round((data.totalValue / totalWastageValue) * 1000) / 10, // Round to 1 decimal place
+      totalWastageQuantity: Math.round(data.totalWastage * 100) / 100,
+      affectedItems: data.itemCount,
+    })
+  );
+
+  // Sort by amount in descending order
+  wastageAnalytics.sort((a, b) => b.amount - a.amount);
+
+  return wastageAnalytics;
 };
 
 export const getFinancialMetrics = async (req: Request, res: Response) => {

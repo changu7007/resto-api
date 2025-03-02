@@ -172,6 +172,14 @@ const registerOwner = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             email,
         },
     });
+    const userPhoneNo = yield __1.prismaDB.user.findFirst({
+        where: {
+            phoneNo,
+        },
+    });
+    if (userPhoneNo === null || userPhoneNo === void 0 ? void 0 : userPhoneNo.id) {
+        throw new bad_request_1.BadRequestsException("This Phone No. is already Registered", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     if (!(user === null || user === void 0 ? void 0 : user.id)) {
         const hashedPassword = yield bcryptjs_1.default.hash(password, 12);
         yield __1.prismaDB.user.create({

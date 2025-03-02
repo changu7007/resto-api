@@ -11,9 +11,17 @@ export const fetchOutletRawMaterialsToRedis = async (outletId: string) => {
       consumptionUnit: true,
       minimumStockUnit: true,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
-  await redis.set(`${outletId}-raw-materials`, JSON.stringify(rawMaterials));
+  await redis.set(
+    `${outletId}-raw-materials`,
+    JSON.stringify(rawMaterials),
+    "EX",
+    60 * 60 * 12 // 12 hours
+  );
   return rawMaterials;
 };
 
@@ -24,11 +32,16 @@ export const fetchOutletRawMaterialCAtegoryToRedis = async (
     where: {
       restaurantId: outletId,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
   await redis.set(
     `${outletId}-raw-materials-category`,
-    JSON.stringify(rawMaterialsCategory)
+    JSON.stringify(rawMaterialsCategory),
+    "EX",
+    60 * 60 * 12 // 12 hours
   );
 
   return rawMaterialsCategory;
@@ -39,11 +52,16 @@ export const fetchOutletRawMaterialUnitToRedis = async (outletId: string) => {
     where: {
       restaurantId: outletId,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
   await redis.set(
     `${outletId}-raw-materials-unit`,
-    JSON.stringify(rawMaterialsUnit)
+    JSON.stringify(rawMaterialsUnit),
+    "EX",
+    60 * 60 * 12 // 12 hours
   );
 
   return rawMaterialsUnit;
@@ -58,6 +76,9 @@ export const getfetchOutletStocksToRedis = async (outletId: string) => {
       rawMaterialCategory: true,
       consumptionUnit: true,
       minimumStockUnit: true,
+    },
+    orderBy: {
+      createdAt: "desc",
     },
   });
 
@@ -76,6 +97,11 @@ export const getfetchOutletStocksToRedis = async (outletId: string) => {
     createdAt: rawItem.createdAt,
   }));
 
-  await redis.set(`${outletId}-stocks`, JSON.stringify(formattedStocks));
+  await redis.set(
+    `${outletId}-stocks`,
+    JSON.stringify(formattedStocks),
+    "EX",
+    60 * 60 * 12 // 12 hours
+  );
   return formattedStocks;
 };
