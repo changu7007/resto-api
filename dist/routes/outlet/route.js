@@ -213,8 +213,10 @@ outletRoute.post("/:outletId/inventory/get-all-completed-purchases", auth_1.isAu
 outletRoute.post("/:outletId/inventory/get-all-requested-purchases", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getAllRequestedTablePurcahses));
 outletRoute.get("/:outletId/inventory/get-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getPurchaseId));
 outletRoute.post("/:outletId/inventory/create-request-purchase", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.createRequestPurchase));
+outletRoute.post("/:outletId/inventory/raise-request-purchase", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.createRaiseRequestPurchase));
 outletRoute.patch("/:outletId/inventory/update-request-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateRequestPurchase));
 outletRoute.delete("/:outletId/inventory/delete-request-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.deleteRequestPurchase));
+outletRoute.patch("/:outletId/inventory/cancel-request-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.cancelRequestPurchase));
 outletRoute.post("/:outletId/inventory/validate-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.validatePurchasenRestock));
 outletRoute.post("/:outletId/inventory/validate-purchase-for-settlement/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.restockPurchase));
 outletRoute.post("/:outletId/inventory/settle-validate-purchase/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.settlePayForRaisedPurchase));
@@ -235,6 +237,7 @@ outletRoute.post("/:outletId/inventory/all-table-recipes",
 (0, error_handler_1.errorHandler)(inventory_controller_1.getAllTableItemRecipe));
 outletRoute.get("/:outletId/inventory/get-recipe/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.getRecipeById));
 outletRoute.patch("/:outletId/inventory/update-recipe/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.updateItemRecipe));
+outletRoute.delete("/:outletId/inventory/delete-recipe/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(inventory_controller_1.deleteItemRecipe));
 outletRoute.post("/:outletId/post-invite-email", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.InviteUserToDashboard));
 outletRoute.get("/:outletId/get-invites", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.getDashboardInvite));
 outletRoute.get("/:outletId/verify-invite/:token", (0, error_handler_1.errorHandler)(appAuthController_1.verifyInvite));

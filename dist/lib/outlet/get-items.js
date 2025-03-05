@@ -162,7 +162,7 @@ const getOAllItems = (outletId) => __awaiter(void 0, void 0, void 0, function* (
         },
     });
     const formattedItems = (_b = getItems === null || getItems === void 0 ? void 0 : getItems.filter((i) => i.isDineIn === true)) === null || _b === void 0 ? void 0 : _b.map((menuItem) => {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f;
         return ({
             id: menuItem.id,
             shortCode: menuItem.shortCode,
@@ -184,29 +184,35 @@ const getOAllItems = (outletId) => __awaiter(void 0, void 0, void 0, function* (
             },
             gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
             grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
-            isVariants: menuItem.isVariants,
-            isAddOns: menuItem.isAddons,
-            menuItemVariants: menuItem.menuItemVariants.map((variant) => ({
-                id: variant.id,
-                variantName: variant.variant.name,
-                price: variant.price,
-                netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
-                gst: variant === null || variant === void 0 ? void 0 : variant.gst,
-                grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
-                type: variant.foodType,
-            })),
+            isVariants: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isVariants,
+            isAddOns: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isAddons,
+            menuItemVariants: (_e = menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuItemVariants) === null || _e === void 0 ? void 0 : _e.map((variant) => {
+                var _a;
+                return ({
+                    id: variant === null || variant === void 0 ? void 0 : variant.id,
+                    variantName: (_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.name,
+                    price: variant === null || variant === void 0 ? void 0 : variant.price,
+                    netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
+                    gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                    grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
+                    type: variant === null || variant === void 0 ? void 0 : variant.foodType,
+                });
+            }),
             favourite: true,
-            menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns) => ({
-                id: addOns.id,
-                addOnGroupName: addOns.addOnGroups.title,
-                description: addOns.addOnGroups.description,
-                addonVariants: addOns.addOnGroups.addOnVariants.map((addOnVariant) => ({
-                    id: addOnVariant.id,
-                    name: addOnVariant.name,
-                    price: addOnVariant.price,
-                    type: addOnVariant.type,
-                })),
-            })),
+            menuGroupAddOns: (_f = menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuGroupAddOns) === null || _f === void 0 ? void 0 : _f.map((addOns) => {
+                var _a, _b, _c, _d;
+                return ({
+                    id: addOns === null || addOns === void 0 ? void 0 : addOns.id,
+                    addOnGroupName: (_a = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _a === void 0 ? void 0 : _a.title,
+                    description: (_b = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _b === void 0 ? void 0 : _b.description,
+                    addonVariants: (_d = (_c = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _c === void 0 ? void 0 : _c.addOnVariants) === null || _d === void 0 ? void 0 : _d.map((addOnVariant) => ({
+                        id: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                        name: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.name,
+                        price: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.price,
+                        type: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.type,
+                    })),
+                });
+            }),
         });
     });
     yield redis_1.redis.set(`${outletId}-all-items`, JSON.stringify(formattedItems), "EX", 300);

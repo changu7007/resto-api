@@ -22,6 +22,7 @@ import {
   getPOSTableAllOrders,
   getPOSTableAllSessionOrders,
 } from "../controllers/outlet/order/posController";
+import { getVendorsForPOS } from "../controllers/outlet/inventory/pos";
 
 const posRoute: Router = Router();
 
@@ -113,6 +114,12 @@ posRoute.get(
   "/:outletId/pos-stats/stock-deductions",
   isAuthMiddelware,
   errorHandler(orderAndStockDeduction)
+);
+
+posRoute.get(
+  "/:outletId/get-vendors",
+  isAuthMiddelware,
+  errorHandler(getVendorsForPOS)
 );
 
 export default posRoute;

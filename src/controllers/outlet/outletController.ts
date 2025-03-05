@@ -343,7 +343,7 @@ export const patchOutletOnlinePOrtalDetails = async (
 
   if (!validateFields.success) {
     throw new BadRequestsException(
-      validateFields.error.message,
+      validateFields.error.errors[0].message,
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -356,42 +356,44 @@ export const patchOutletOnlinePOrtalDetails = async (
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  await prismaDB.restaurant.update({
-    where: {
-      id: outlet.id,
-    },
-    data: {
-      onlinePortal: true,
-      openTime: validateFields.data.openTime.time,
-      closeTime: validateFields.data.closeTime.time,
-      areaLat: validateFields.data.areaLat,
-      areaLong: validateFields.data.areaLong,
-      orderRadius: Number(validateFields.data.orderRadius),
-      isDelivery: validateFields.data.isDelivery,
-      isDineIn: validateFields.data.isDineIn,
-      isPickUp: validateFields.data.isPickUp,
-    },
-  });
+  await prismaDB.$transaction(async (tx) => {
+    await tx.restaurant.update({
+      where: {
+        id: outlet.id,
+      },
+      data: {
+        onlinePortal: true,
+        openTime: validateFields.data.openTime.time,
+        closeTime: validateFields.data.closeTime.time,
+        areaLat: validateFields.data.areaLat,
+        areaLong: validateFields.data.areaLong,
+        orderRadius: Number(validateFields.data.orderRadius),
+        isDelivery: validateFields.data.isDelivery,
+        isDineIn: validateFields.data.isDineIn,
+        isPickUp: validateFields.data.isPickUp,
+      },
+    });
 
-  if (!outlet.integrations.find((outlet) => outlet?.name === "ONLINEHUB")) {
-    await prismaDB.integration.create({
-      data: {
-        restaurantId: outlet.id,
-        name: "ONLINEHUB",
-        connected: true,
-        status: true,
-        link: validateFields.data.subdomain,
-      },
-    });
-    await prismaDB.site.create({
-      data: {
-        // @ts-ignore
-        adminId: req?.user?.id,
-        restaurantId: outlet?.id,
-        subdomain: validateFields.data.subdomain,
-      },
-    });
-  }
+    if (!outlet.integrations.find((outlet) => outlet?.name === "ONLINEHUB")) {
+      await prismaDB.integration.create({
+        data: {
+          restaurantId: outlet.id,
+          name: "ONLINEHUB",
+          connected: true,
+          status: true,
+          link: validateFields.data.subdomain,
+        },
+      });
+      await prismaDB.site.create({
+        data: {
+          // @ts-ignore
+          adminId: req?.user?.id,
+          restaurantId: outlet?.id,
+          subdomain: validateFields.data.subdomain,
+        },
+      });
+    }
+  });
 
   await fetchOutletByIdToRedis(outlet?.id);
   await getFormatUserAndSendToRedis(outlet?.adminId);
@@ -779,7 +781,7 @@ export const createOutletFromOutletHub = async (
         description: string;
         status: string;
         minSelect: number;
-        maxSelectString: string;
+        maxSelect: number;
         variants: { name: string; price: number; type: string }[];
       };
 
@@ -794,7 +796,7 @@ export const createOutletFromOutletHub = async (
                 description: groupAddon.addOnGroups.description || "",
                 status: groupAddon.addOnGroups.status ? "true" : "false",
                 minSelect: Number(groupAddon.addOnGroups.minSelect) || 0,
-                maxSelectString: groupAddon.addOnGroups.maxSelectString || "",
+                maxSelect: Number(groupAddon.addOnGroups.maxSelect) || 0,
                 variants: groupAddon.addOnGroups.addOnVariants.map(
                   (variant) => ({
                     name: variant.name,
@@ -818,8 +820,8 @@ export const createOutletFromOutletHub = async (
             slug: generateSlug(groupData.title),
             description: groupData.description,
             status: groupData.status === "true" ? true : false,
-            minSelect: groupData.minSelect.toString(),
-            maxSelectString: groupData.maxSelectString,
+            minSelect: groupData.minSelect,
+            maxSelect: groupData.maxSelect,
           },
         });
 

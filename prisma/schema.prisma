@@ -616,6 +616,7 @@ model MenuItem {
   netPrice         String?
   price            String            @default("")
   gst              Float?
+  gstType          GstType?
   chooseProfit     ChooseProfit?
   grossProfit      Float?
   grossProfitType  GrossProfitType?
@@ -720,6 +721,7 @@ model MenuItemVariant {
   netPrice        String?
   price           String           @default("")
   gst             Float?
+  gstType         GstType?
   chooseProfit    ChooseProfit?
   grossProfit     Float?
   grossProfitType GrossProfitType?
@@ -763,8 +765,8 @@ model AddOns {
   description     String?
   status          Boolean           @default(true)
   addOnVariants   AddOnVariants[]
-  minSelect       String?
-  maxSelectString String?
+  minSelect       Float?
+  maxSelect       Float?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -782,6 +784,7 @@ model AddOnVariants {
   netPrice        String?
   price           String           @default("")
   gst             Float?
+  gstType         GstType          @default(GST_0)
   type            FoodRole
   chooseProfit    ChooseProfit?
   grossProfit     Float?
@@ -845,6 +848,10 @@ model OrderSession {
   invoiceUrl      String?
   createdBy       String?
   paymentMethod   PaymentMethod?
+  amountReceived  Float? // Amount received in single payment
+  change          Float? // Change amount in single payment
+  isSplitPayment  Boolean                   @default(false) // Flag indicating if payment is split
+  splitPayments   SplitPayment[] // Relation to split payments
   updatedAt       DateTime                  @updatedAt
   CashTransaction CashTransaction[]         @relation("OrderToTransaction")
 
@@ -855,22 +862,38 @@ model OrderSession {
   @@index([restaurantId])
 }
 
+// Model for split payments
+model SplitPayment {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  method         PaymentMethod // Payment method used
+  amount         Float // Amount paid with this method
+  orderSessionId String        @db.ObjectId
+  orderSession   OrderSession  @relation(fields: [orderSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  note           String? // Optional note about this payment portion
+  createdBy      String? // Who processed this payment
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([orderSessionId])
+}
+
 enum PaymentMethod {
   CASH
   UPI
   DEBIT
   CREDIT
+  SPLIT
 }
 
 model Order {
-  id               String       @id @default(auto()) @map("_id") @db.ObjectId
+  id               String         @id @default(auto()) @map("_id") @db.ObjectId
   active           Boolean
-  orderSessionId   String       @db.ObjectId
-  orderSession     OrderSession @relation(fields: [orderSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  orderSessionId   String         @db.ObjectId
+  orderSession     OrderSession   @relation(fields: [orderSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   generatedOrderId String
   orderType        OrderType
-  restaurantId     String       @db.ObjectId
-  restaurant       Restaurant   @relation("RestaurantToOrder", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  restaurantId     String         @db.ObjectId
+  restaurant       Restaurant     @relation("RestaurantToOrder", fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   orderItems       OrderItem[]
   note             String?
   totalGrossProfit Float?
@@ -878,12 +901,13 @@ model Order {
   gstPrice         Float?
   totalAmount      Float
   isPaid           Boolean
+  paymentMethod    PaymentMethod? // The payment method if not split
   createdBy        String?
-  staffId          String?      @db.ObjectId
-  staff            Staff?       @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  orderStatus      OrderStatus  @default(INCOMMING)
+  staffId          String?        @db.ObjectId
+  staff            Staff?         @relation(fields: [staffId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  orderStatus      OrderStatus    @default(INCOMMING)
 
   @@index([restaurantId])
   @@index([staffId])

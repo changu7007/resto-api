@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAllTableRawMaterialUnit = exports.getAllSettledTablePurcahses = exports.getAllRequestedTablePurcahses = exports.getAllCompletedTablePurcahses = exports.getTableAllRawMaterialUnit = exports.getAllTableItemRecipe = exports.allTableStocks = exports.getAllTableRawMaterialCategory = exports.getAllVendorsForTable = exports.getAllTableRawMaterials = exports.updateStockRawMaterial = exports.settlePayForRaisedPurchase = exports.restockPurchase = exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.createVendorCategory = exports.getAllVendorCategories = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
+exports.deleteItemRecipe = exports.getAllTableRawMaterialUnit = exports.getAllSettledTablePurcahses = exports.getAllRequestedTablePurcahses = exports.getAllCompletedTablePurcahses = exports.getTableAllRawMaterialUnit = exports.getAllTableItemRecipe = exports.allTableStocks = exports.getAllTableRawMaterialCategory = exports.getAllVendorsForTable = exports.getAllTableRawMaterials = exports.updateStockRawMaterial = exports.settlePayForRaisedPurchase = exports.restockPurchase = exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.createVendorCategory = exports.getAllVendorCategories = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.cancelRequestPurchase = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRaiseRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -582,8 +582,70 @@ const createRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, fu
     });
 });
 exports.createRequestPurchase = createRequestPurchase;
-const updateRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const createRaiseRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _f, _g;
+    const { outletId } = req.params;
+    // const validateFields
+    const { data: validateFields, error } = purchaseRequestFormSchema.safeParse(req.body);
+    if (error) {
+        throw new bad_request_1.BadRequestsException(error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    let userId = req.user.id;
+    // @ts-ignore
+    const username = `${(_f = req === null || req === void 0 ? void 0 : req.user) === null || _f === void 0 ? void 0 : _f.name}-(${(_g = req === null || req === void 0 ? void 0 : req.user) === null || _g === void 0 ? void 0 : _g.role})`;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const findVendor = yield __1.prismaDB.vendor.findFirst({
+        where: {
+            restaurantId: outlet.id,
+            id: validateFields.vendorId,
+        },
+    });
+    if (!(findVendor === null || findVendor === void 0 ? void 0 : findVendor.id)) {
+        throw new not_found_1.NotFoundException("Vendor Not found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const invoiceNo = yield (0, outlet_1.generatePurchaseNo)(outlet.id);
+    yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        var _h, _j, _k;
+        yield prisma.purchase.create({
+            data: {
+                invoiceNo: invoiceNo,
+                restaurantId: outlet.id,
+                vendorId: findVendor.id,
+                createdBy: username,
+                isPaid: false,
+                purchaseItems: {
+                    create: validateFields.rawMaterials.map((item) => ({
+                        rawMaterialId: item === null || item === void 0 ? void 0 : item.rawMaterialId,
+                        rawMaterialName: item === null || item === void 0 ? void 0 : item.rawMaterialName,
+                        purchaseQuantity: item === null || item === void 0 ? void 0 : item.requestQuantity,
+                        purchaseUnitId: item === null || item === void 0 ? void 0 : item.requestUnitId,
+                        purchaseUnitName: item === null || item === void 0 ? void 0 : item.unitName,
+                        gstType: item === null || item === void 0 ? void 0 : item.gstType,
+                        netRate: item === null || item === void 0 ? void 0 : item.netRate,
+                        taxAmount: item === null || item === void 0 ? void 0 : item.taxAmount,
+                        purchasePrice: item === null || item === void 0 ? void 0 : item.totalAmount,
+                    })),
+                },
+                purchaseStatus: "REQUESTED",
+                subTotal: (_h = validateFields.summary) === null || _h === void 0 ? void 0 : _h.subTotal,
+                totalAmount: (_j = validateFields.summary) === null || _j === void 0 ? void 0 : _j.grandTotal,
+                taxes: (_k = validateFields.summary) === null || _k === void 0 ? void 0 : _k.totalTax,
+            },
+        });
+        yield redis_1.redis.del(`${outletId}-purchases`);
+    }));
+    return res.json({
+        success: true,
+        message: "Purchase Order Raised",
+    });
+});
+exports.createRaiseRequestPurchase = createRaiseRequestPurchase;
+const updateRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _l, _m;
     const { outletId, id } = req.params;
     // const validateFields
     const { data: validateFields, error } = purchaseRequestFormSchema.safeParse(req.body);
@@ -621,13 +683,13 @@ const updateRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, fu
         throw new not_found_1.NotFoundException("No Requested Purchases found", root_1.ErrorCode.NOT_FOUND);
     }
     //prepare purchaseItems to update & delete
-    const existingPurchaseItems = (_f = findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.purchaseItems) === null || _f === void 0 ? void 0 : _f.map((pi) => pi.id);
-    const incommingItems = (_g = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _g === void 0 ? void 0 : _g.map((i) => i === null || i === void 0 ? void 0 : i.id).filter(Boolean);
+    const existingPurchaseItems = (_l = findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.purchaseItems) === null || _l === void 0 ? void 0 : _l.map((pi) => pi.id);
+    const incommingItems = (_m = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _m === void 0 ? void 0 : _m.map((i) => i === null || i === void 0 ? void 0 : i.id).filter(Boolean);
     // Determine purchaseItem to delete (those in existing but not in incoming)
     const purchaseItemsToDelete = existingPurchaseItems.filter((id) => !incommingItems.includes(id));
     // Prepare transaction for atomic update
     yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _h, _j, _k, _l;
+        var _o, _p, _q, _r;
         //update purchase details
         yield __1.prismaDB.purchase.update({
             where: {
@@ -637,13 +699,13 @@ const updateRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, fu
             data: {
                 vendorId: findVendor.id,
                 isPaid: false,
-                subTotal: (_h = validateFields.summary) === null || _h === void 0 ? void 0 : _h.subTotal,
-                totalAmount: (_j = validateFields.summary) === null || _j === void 0 ? void 0 : _j.grandTotal,
-                taxes: (_k = validateFields.summary) === null || _k === void 0 ? void 0 : _k.totalTax,
+                subTotal: (_o = validateFields.summary) === null || _o === void 0 ? void 0 : _o.subTotal,
+                totalAmount: (_p = validateFields.summary) === null || _p === void 0 ? void 0 : _p.grandTotal,
+                taxes: (_q = validateFields.summary) === null || _q === void 0 ? void 0 : _q.totalTax,
             },
         });
         // Handle purchaseItems updates in a single operation
-        if (((_l = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _l === void 0 ? void 0 : _l.length) > 0) {
+        if (((_r = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _r === void 0 ? void 0 : _r.length) > 0) {
             // Perform upsert operations for ingredients
             const purchaseItemsUpserts = validateFields.rawMaterials.map((item) => {
                 // If ingredientId exists, it's an update. Otherwise, it's a create
@@ -726,19 +788,6 @@ const deleteRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, fu
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
         },
     });
-    const allPurchases = yield __1.prismaDB.purchase.findMany({
-        where: {
-            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
-        },
-        include: {
-            purchaseItems: {
-                include: {
-                    purchaseUnit: true,
-                    rawMaterial: true,
-                },
-            },
-        },
-    });
     yield redis_1.redis.del(`${outletId}-purchases`);
     return res.json({
         success: true,
@@ -746,6 +795,42 @@ const deleteRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, fu
     });
 });
 exports.deleteRequestPurchase = deleteRequestPurchase;
+const cancelRequestPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, id } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    let userId = req.user.id;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    if (userId !== outlet.adminId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    const findPurchase = yield __1.prismaDB.purchase.findFirst({
+        where: {
+            id: id,
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+    });
+    if (!(findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.id)) {
+        throw new not_found_1.NotFoundException("No Requested Purchases found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.purchase.update({
+        where: {
+            id: findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.id,
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+        data: {
+            purchaseStatus: "CANCELLED",
+        },
+    });
+    yield redis_1.redis.del(`${outletId}-purchases`);
+    return res.json({
+        success: true,
+        message: "Request Purchase Cancelled ✅",
+    });
+});
+exports.cancelRequestPurchase = cancelRequestPurchase;
 const validatePurchaseSchema = zod_1.z.object({
     id: zod_1.z.string().min(1, { message: "Purchase Id Missing" }),
     vendorId: zod_1.z
@@ -788,7 +873,7 @@ const validatePurchaseSchema = zod_1.z.object({
         .optional(),
 });
 const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _m;
+    var _s;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = validatePurchaseSchema.safeParse(req.body);
     if (error) {
@@ -802,7 +887,7 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_m = req.user) === null || _m === void 0 ? void 0 : _m.id;
+    let userId = (_s = req.user) === null || _s === void 0 ? void 0 : _s.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -828,10 +913,10 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
         throw new not_found_1.NotFoundException("Vendor Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const transaction = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _o, _p;
+        var _t, _u, _v;
         // Step 1: Restock raw materials and update `RecipeIngredient` costs
-        yield Promise.all((_o = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _o === void 0 ? void 0 : _o.map((item) => __awaiter(void 0, void 0, void 0, function* () {
-            var _q, _r;
+        yield Promise.all((_t = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _t === void 0 ? void 0 : _t.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            var _w, _x;
             const rawMaterial = yield prisma.rawMaterial.findFirst({
                 where: {
                     id: item.rawMaterialId,
@@ -842,9 +927,12 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                 },
             });
             if (rawMaterial) {
-                const newStock = Number((_q = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _q !== void 0 ? _q : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                console.log(`Raw Material Restocking started for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}, the old stock is ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock}`);
+                const newStock = Number((_w = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _w !== void 0 ? _w : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                console.log(`New Stock Calculated for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}: ${newStock}`);
                 const newPricePerItem = Number(item.totalRate) / Number(item.requestQuantity);
-                yield prisma.rawMaterial.update({
+                console.log(`New Price Per Item Calculated for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}: ${newPricePerItem}`);
+                const updatedRawMaterial = yield prisma.rawMaterial.update({
                     where: {
                         id: rawMaterial.id,
                     },
@@ -853,10 +941,11 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                         purchasedPrice: item.totalRate,
                         purchasedPricePerItem: newPricePerItem,
                         purchasedUnit: item.unitName,
-                        lastPurchasedPrice: (_r = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _r !== void 0 ? _r : 0,
-                        purchasedStock: newStock,
+                        lastPurchasedPrice: (_x = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _x !== void 0 ? _x : 0,
+                        purchasedStock: item.requestQuantity,
                     },
                 });
+                console.log(`Raw Material Restocking completed for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}, updated raw material stock: ${updatedRawMaterial === null || updatedRawMaterial === void 0 ? void 0 : updatedRawMaterial.currentStock}`);
                 // Update related alerts to resolved
                 yield __1.prismaDB.alert.deleteMany({
                     where: {
@@ -870,10 +959,14 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                         rawMaterialId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
                     },
                 });
+                console.log(`finding recipe ingredients for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}`);
                 if (findRecipeIngredients) {
+                    console.log(`recipe ingredients found for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}`);
                     const recipeCostWithQuantity = Number(findRecipeIngredients === null || findRecipeIngredients === void 0 ? void 0 : findRecipeIngredients.quantity) /
                         Number(rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.conversionFactor);
+                    console.log(`recipe cost with quantity for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}: ${recipeCostWithQuantity}`);
                     const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+                    console.log(`ingredient cost for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}: ${ingredientCost}`);
                     // Update linked `RecipeIngredient` cost
                     yield prisma.recipeIngredient.updateMany({
                         where: {
@@ -883,13 +976,25 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                             cost: ingredientCost,
                         },
                     });
+                    console.log(`recipe ingredient updated for ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.name}`);
                 }
             }
         })));
+        console.log(`Raw Materials Restocking completed for all items`);
         // Step 2: Recalculate `ItemRecipe` gross margin and related fields
         const recipesToUpdate = yield prisma.itemRecipe.findMany({
             where: {
                 restaurantId: outlet.id,
+                ingredients: {
+                    some: {
+                        rawMaterial: {
+                            restaurantId: outlet.id,
+                            id: {
+                                in: (_u = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _u === void 0 ? void 0 : _u.map((item) => item.rawMaterialId),
+                            },
+                        },
+                    },
+                },
             },
             include: {
                 ingredients: {
@@ -899,7 +1004,9 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                 },
             },
         });
+        console.log(`Recipes to update started for ${recipesToUpdate === null || recipesToUpdate === void 0 ? void 0 : recipesToUpdate.length} recipes`);
         yield Promise.all(recipesToUpdate.map((recipe) => __awaiter(void 0, void 0, void 0, function* () {
+            console.log(`Recipe to update started for ${recipe === null || recipe === void 0 ? void 0 : recipe.name}`);
             const totalCost = recipe.ingredients.reduce((sum, ingredient) => {
                 var _a, _b;
                 return sum +
@@ -907,7 +1014,9 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                         Number((_a = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _a === void 0 ? void 0 : _a.conversionFactor)) *
                         Number((_b = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _b === void 0 ? void 0 : _b.purchasedPricePerItem);
             }, 0);
+            console.log(`Total cost for ${recipe === null || recipe === void 0 ? void 0 : recipe.name}: ${totalCost}`);
             const grossMargin = Number(recipe.itemPrice) - totalCost;
+            console.log(`Gross margin for ${recipe === null || recipe === void 0 ? void 0 : recipe.name}: ${grossMargin}`);
             yield prisma.itemRecipe.update({
                 where: {
                     id: recipe.id,
@@ -917,6 +1026,7 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                     grossMargin,
                 },
             });
+            console.log(`Recipe updated for ${recipe === null || recipe === void 0 ? void 0 : recipe.name}`);
             // Update linked entities
             if (recipe.menuId) {
                 yield prisma.menuItem.update({
@@ -928,6 +1038,7 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                         grossProfit: grossMargin,
                     },
                 });
+                console.log(`Menu Item updated for ${recipe === null || recipe === void 0 ? void 0 : recipe.name}`);
             }
             if (recipe.menuVariantId) {
                 yield prisma.menuItemVariant.update({
@@ -965,7 +1076,7 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                 invoiceType: validateFields === null || validateFields === void 0 ? void 0 : validateFields.chooseInvoice,
                 purchaseStatus: "COMPLETED",
                 purchaseItems: {
-                    update: (_p = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _p === void 0 ? void 0 : _p.map((item) => ({
+                    update: (_v = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _v === void 0 ? void 0 : _v.map((item) => ({
                         where: {
                             id: item === null || item === void 0 ? void 0 : item.id,
                             purchaseId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.id,
@@ -986,7 +1097,7 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
             redis_1.redis.del(`${outletId}-stocks`),
             redis_1.redis.del(`${outletId}-vendors`),
             redis_1.redis.del(`${outletId}-raw-materials`),
-            ,
+            redis_1.redis.del(`alerts-${outletId}`),
         ]);
         return res.json({
             success: true,
@@ -1062,7 +1173,7 @@ const vendorFormSchema = zod_1.z.object({
         .optional(),
 });
 const createVendor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _s;
+    var _y;
     const { outletId } = req.params;
     const validateFields = vendorFormSchema.safeParse(req.body);
     if (!validateFields.success) {
@@ -1093,7 +1204,7 @@ const createVendor = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             email: validateFields.data.email,
             isContract: validateFields.data.isContract,
             contractRates: {
-                create: (_s = validateFields.data.rawMaterials) === null || _s === void 0 ? void 0 : _s.map((item) => ({
+                create: (_y = validateFields.data.rawMaterials) === null || _y === void 0 ? void 0 : _y.map((item) => ({
                     rawMaterialId: item.rawMaterialId,
                     rawMaterialName: item.rawMaterialName,
                     unitId: item.unitId,
@@ -1116,7 +1227,7 @@ const createVendor = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 });
 exports.createVendor = createVendor;
 const updateVendor = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _t;
+    var _z;
     const { outletId, id } = req.params;
     const validateFields = vendorFormSchema.parse(req.body);
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -1153,10 +1264,10 @@ const updateVendor = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         }
     }
     const existingContractRates = vendor.contractRates.map((rate) => rate.id);
-    const newContractRates = (_t = validateFields.rawMaterials) === null || _t === void 0 ? void 0 : _t.map((i) => i === null || i === void 0 ? void 0 : i.id).filter(Boolean);
+    const newContractRates = (_z = validateFields.rawMaterials) === null || _z === void 0 ? void 0 : _z.map((i) => i === null || i === void 0 ? void 0 : i.id).filter(Boolean);
     const deleteContractRates = existingContractRates.filter((id) => !(newContractRates === null || newContractRates === void 0 ? void 0 : newContractRates.includes(id)));
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        var _u;
+        var _0;
         //update vendor
         yield tx.vendor.update({
             where: {
@@ -1175,7 +1286,7 @@ const updateVendor = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         });
         if (validateFields.isContract &&
             (validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) &&
-            ((_u = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _u === void 0 ? void 0 : _u.length) > 0) {
+            ((_0 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _0 === void 0 ? void 0 : _0.length) > 0) {
             const contractRatesUpsert = validateFields.rawMaterials.map((item) => {
                 return (item === null || item === void 0 ? void 0 : item.id)
                     ? tx.vendorContractRate.update({
@@ -1481,11 +1592,11 @@ const recipeSchema = zod_1.z.object({
     }),
 });
 const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _v, _w, _x, _y, _z, _0, _1, _2, _3, _4;
+    var _1, _2, _3, _4, _5, _6, _7, _8, _9, _10;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_v = req === null || req === void 0 ? void 0 : req.user) === null || _v === void 0 ? void 0 : _v.id;
+    const userId = (_1 = req === null || req === void 0 ? void 0 : req.user) === null || _1 === void 0 ? void 0 : _1.id;
     if (userId !== outlet.adminId) {
         throw new unauthorized_1.UnauthorizedException("Unauthorized", root_1.ErrorCode.UNAUTHORIZED);
     }
@@ -1530,10 +1641,10 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
         },
     });
     const slugName = (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_ITEMS"
-        ? (_w = menuItems === null || menuItems === void 0 ? void 0 : menuItems.find((item) => (item === null || item === void 0 ? void 0 : item.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _w === void 0 ? void 0 : _w.name
+        ? (_2 = menuItems === null || menuItems === void 0 ? void 0 : menuItems.find((item) => (item === null || item === void 0 ? void 0 : item.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _2 === void 0 ? void 0 : _2.name
         : (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_VARIANTS"
-            ? (_y = (_x = menuVariants === null || menuVariants === void 0 ? void 0 : menuVariants.find((variant) => { var _a; return ((_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId); })) === null || _x === void 0 ? void 0 : _x.variant) === null || _y === void 0 ? void 0 : _y.name
-            : (_z = addOns === null || addOns === void 0 ? void 0 : addOns.find((addOn) => (addOn === null || addOn === void 0 ? void 0 : addOn.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _z === void 0 ? void 0 : _z.name;
+            ? (_4 = (_3 = menuVariants === null || menuVariants === void 0 ? void 0 : menuVariants.find((variant) => { var _a; return ((_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId); })) === null || _3 === void 0 ? void 0 : _3.variant) === null || _4 === void 0 ? void 0 : _4.name
+            : (_5 = addOns === null || addOns === void 0 ? void 0 : addOns.find((addOn) => (addOn === null || addOn === void 0 ? void 0 : addOn.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _5 === void 0 ? void 0 : _5.name;
     const itemRecipe = yield __1.prismaDB.itemRecipe.create({
         data: {
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
@@ -1542,10 +1653,10 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
             createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
             lastModifiedBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
             name: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_ITEMS"
-                ? (_0 = menuItems === null || menuItems === void 0 ? void 0 : menuItems.find((item) => (item === null || item === void 0 ? void 0 : item.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _0 === void 0 ? void 0 : _0.name
+                ? (_6 = menuItems === null || menuItems === void 0 ? void 0 : menuItems.find((item) => (item === null || item === void 0 ? void 0 : item.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _6 === void 0 ? void 0 : _6.name
                 : (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_VARIANTS"
-                    ? (_2 = (_1 = menuVariants === null || menuVariants === void 0 ? void 0 : menuVariants.find((variant) => { var _a; return ((_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId); })) === null || _1 === void 0 ? void 0 : _1.variant) === null || _2 === void 0 ? void 0 : _2.name
-                    : (_3 = addOns === null || addOns === void 0 ? void 0 : addOns.find((addOn) => (addOn === null || addOn === void 0 ? void 0 : addOn.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _3 === void 0 ? void 0 : _3.name,
+                    ? (_8 = (_7 = menuVariants === null || menuVariants === void 0 ? void 0 : menuVariants.find((variant) => { var _a; return ((_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId); })) === null || _7 === void 0 ? void 0 : _7.variant) === null || _8 === void 0 ? void 0 : _8.name
+                    : (_9 = addOns === null || addOns === void 0 ? void 0 : addOns.find((addOn) => (addOn === null || addOn === void 0 ? void 0 : addOn.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId))) === null || _9 === void 0 ? void 0 : _9.name,
             slug: (0, utils_1.generateSlug)(slugName),
             menuId: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.recipeFor) === "MENU_ITEMS"
                 ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId
@@ -1557,7 +1668,7 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.itemId
                 : undefined,
             ingredients: {
-                create: (_4 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _4 === void 0 ? void 0 : _4.map((ingredient) => ({
+                create: (_10 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _10 === void 0 ? void 0 : _10.map((ingredient) => ({
                     rawMaterialId: ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterialId,
                     quantity: ingredient === null || ingredient === void 0 ? void 0 : ingredient.quantity,
                     wastage: ingredient === null || ingredient === void 0 ? void 0 : ingredient.wastage,
@@ -1623,11 +1734,11 @@ const createItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.createItemRecipe = createItemRecipe;
 const updateItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _5;
+    var _11;
     const { outletId, id } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_5 = req === null || req === void 0 ? void 0 : req.user) === null || _5 === void 0 ? void 0 : _5.id;
+    const userId = (_11 = req === null || req === void 0 ? void 0 : req.user) === null || _11 === void 0 ? void 0 : _11.id;
     if (userId !== outlet.adminId) {
         throw new unauthorized_1.UnauthorizedException("Unauthorized", root_1.ErrorCode.UNAUTHORIZED);
     }
@@ -1661,7 +1772,7 @@ const updateItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
     const ingredientsToDelete = existingIngredientIds.filter((id) => !incomingIngredientIds.includes(id));
     // Prepare transaction for atomic update
     yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _6;
+        var _12;
         // Main recipe update
         yield prisma.itemRecipe.update({
             where: {
@@ -1718,7 +1829,7 @@ const updateItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
             });
         }
         // Handle ingredient updates in a single operation
-        if (((_6 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _6 === void 0 ? void 0 : _6.length) > 0) {
+        if (((_12 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.ingredients) === null || _12 === void 0 ? void 0 : _12.length) > 0) {
             // Perform upsert operations for ingredients
             const ingredientUpserts = validateFields.ingredients.map((ingredient) => {
                 // If ingredientId exists, it's an update. Otherwise, it's a create
@@ -1858,7 +1969,7 @@ const getRecipeById = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.getRecipeById = getRecipeById;
 const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _7;
+    var _13;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = validatePurchaseSchema.safeParse(req.body);
     if (error) {
@@ -1866,7 +1977,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_7 = req.user) === null || _7 === void 0 ? void 0 : _7.id;
+    let userId = (_13 = req.user) === null || _13 === void 0 ? void 0 : _13.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -1892,10 +2003,12 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
         throw new not_found_1.NotFoundException("Vendor Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const transaction = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _8, _9;
+        var _14, _15, _16;
         // Step 1: Restock raw materials and update `RecipeIngredient` costs
-        yield Promise.all((_8 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _8 === void 0 ? void 0 : _8.map((item) => __awaiter(void 0, void 0, void 0, function* () {
-            var _10, _11;
+        console.log(`Restock for raw Materiasls Inititated`);
+        yield Promise.all((_14 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _14 === void 0 ? void 0 : _14.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            var _17, _18;
+            console.log(`Restock for raw Material ${item.rawMaterialName} Inititated`);
             const rawMaterial = yield prisma.rawMaterial.findFirst({
                 where: {
                     id: item.rawMaterialId,
@@ -1906,9 +2019,12 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 },
             });
             if (rawMaterial) {
-                const newStock = Number((_10 = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _10 !== void 0 ? _10 : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                console.log(`Raw Material ${item.rawMaterialName} Found, old stock is ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock}`);
+                const newStock = Number((_17 = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _17 !== void 0 ? _17 : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                console.log(`New Stock for ${item.rawMaterialName} is ${newStock}`);
                 const newPricePerItem = Number(item.totalRate) / Number(item.requestQuantity);
-                yield prisma.rawMaterial.update({
+                console.log(`New Price per item for ${item.rawMaterialName} is ${newPricePerItem}`);
+                const updateStock = yield prisma.rawMaterial.update({
                     where: {
                         id: rawMaterial.id,
                     },
@@ -1917,10 +2033,11 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                         purchasedPrice: item.totalRate,
                         purchasedPricePerItem: newPricePerItem,
                         purchasedUnit: item.unitName,
-                        lastPurchasedPrice: (_11 = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _11 !== void 0 ? _11 : 0,
-                        purchasedStock: newStock,
+                        lastPurchasedPrice: (_18 = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _18 !== void 0 ? _18 : 0,
+                        purchasedStock: item.requestQuantity,
                     },
                 });
+                console.log(`Stock for ${item.rawMaterialName} updated to ${updateStock === null || updateStock === void 0 ? void 0 : updateStock.currentStock}`);
                 // Update related alerts to resolved
                 yield __1.prismaDB.alert.deleteMany({
                     where: {
@@ -1929,15 +2046,19 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                         status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
                     },
                 });
+                console.log(`Alerts for ${item.rawMaterialName} resolved`);
                 const findRecipeIngredients = yield prisma.recipeIngredient.findFirst({
                     where: {
                         rawMaterialId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
                     },
                 });
+                console.log(`findRecipeIngredients for ${item.rawMaterialName} is ${findRecipeIngredients === null || findRecipeIngredients === void 0 ? void 0 : findRecipeIngredients.id}`);
                 if (findRecipeIngredients) {
                     const recipeCostWithQuantity = Number(findRecipeIngredients === null || findRecipeIngredients === void 0 ? void 0 : findRecipeIngredients.quantity) /
                         Number(rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.conversionFactor);
+                    console.log(`recipeCostWithQuantity for ${item.rawMaterialName} is ${recipeCostWithQuantity}`);
                     const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+                    console.log(`ingredientCost for ${item.rawMaterialName} is ${ingredientCost}`);
                     // Update linked `RecipeIngredient` cost
                     yield prisma.recipeIngredient.updateMany({
                         where: {
@@ -1947,13 +2068,25 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                             cost: ingredientCost,
                         },
                     });
+                    console.log(`RecipeIngredient for ${item.rawMaterialName} updated`);
                 }
             }
         })));
         // Step 2: Recalculate `ItemRecipe` gross margin and related fields
+        console.log(`Recalculate ItemRecipe gross margin and related fields Inititated`);
         const recipesToUpdate = yield prisma.itemRecipe.findMany({
             where: {
                 restaurantId: outlet.id,
+                ingredients: {
+                    some: {
+                        rawMaterial: {
+                            restaurantId: outlet.id,
+                            id: {
+                                in: (_15 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _15 === void 0 ? void 0 : _15.map((item) => item.rawMaterialId),
+                            },
+                        },
+                    },
+                },
             },
             include: {
                 ingredients: {
@@ -1963,7 +2096,9 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 },
             },
         });
+        console.log(`Recipes to update found ${recipesToUpdate.length}`);
         yield Promise.all(recipesToUpdate.map((recipe) => __awaiter(void 0, void 0, void 0, function* () {
+            console.log(`Updating recipe ${recipe.name}`);
             const totalCost = recipe.ingredients.reduce((sum, ingredient) => {
                 var _a, _b;
                 return sum +
@@ -1971,7 +2106,9 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                         Number((_a = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _a === void 0 ? void 0 : _a.conversionFactor)) *
                         Number((_b = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _b === void 0 ? void 0 : _b.purchasedPricePerItem);
             }, 0);
+            console.log(`Total cost for ${recipe.name} is ${totalCost}`);
             const grossMargin = Number(recipe.itemPrice) - totalCost;
+            console.log(`Gross margin for ${recipe.name} is ${grossMargin}`);
             yield prisma.itemRecipe.update({
                 where: {
                     id: recipe.id,
@@ -1981,8 +2118,10 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                     grossMargin,
                 },
             });
+            console.log(`Recipe ${recipe.name} updated`);
             // Update linked entities
-            if (recipe.menuId) {
+            if (recipe === null || recipe === void 0 ? void 0 : recipe.menuId) {
+                console.log(`Updating menu item ${recipe.name}`);
                 yield prisma.menuItem.update({
                     where: {
                         id: recipe.menuId,
@@ -1994,6 +2133,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 });
             }
             if (recipe.menuVariantId) {
+                console.log(`Updating menu variant ${recipe.name}`);
                 yield prisma.menuItemVariant.update({
                     where: {
                         id: recipe.menuVariantId,
@@ -2005,6 +2145,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 });
             }
             if (recipe.addonItemVariantId) {
+                console.log(`Updating addon variant ${recipe.name}`);
                 yield prisma.addOnVariants.update({
                     where: {
                         id: recipe.addonItemVariantId,
@@ -2016,7 +2157,9 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 });
             }
         })));
+        console.log(`All recipes updated`);
         // Step 3: Update purchase details
+        console.log(`Updating purchase details`);
         const updatePurchase = yield prisma.purchase.update({
             where: {
                 id: findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.id,
@@ -2029,7 +2172,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
                 invoiceType: validateFields === null || validateFields === void 0 ? void 0 : validateFields.chooseInvoice,
                 purchaseStatus: "SETTLEMENT",
                 purchaseItems: {
-                    update: (_9 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _9 === void 0 ? void 0 : _9.map((item) => ({
+                    update: (_16 = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _16 === void 0 ? void 0 : _16.map((item) => ({
                         where: {
                             id: item === null || item === void 0 ? void 0 : item.id,
                             purchaseId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.id,
@@ -2049,6 +2192,7 @@ const restockPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function
             redis_1.redis.del(`${outletId}-vendors`),
             redis_1.redis.del(`${outletId}-raw-materials`),
             redis_1.redis.del(`${outletId}-purchases`),
+            redis_1.redis.del(`alerts-${outletId}`),
         ]);
         ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
         return res.json({
@@ -2098,7 +2242,7 @@ const settleFormSchema = zod_1.z.object({
     }),
 });
 const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _12;
+    var _19;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = settleFormSchema.safeParse(req.body);
     console.log("Amount to be paid", validateFields);
@@ -2114,7 +2258,7 @@ const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_12 = req.user) === null || _12 === void 0 ? void 0 : _12.id;
+    let userId = (_19 = req.user) === null || _19 === void 0 ? void 0 : _19.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -2159,26 +2303,10 @@ const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 
     }));
     if (transaction === null || transaction === void 0 ? void 0 : transaction.id) {
         // Step 4: Refresh Redis cache
-        const allPurchases = yield __1.prismaDB.purchase.findMany({
-            where: {
-                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
-            },
-            include: {
-                purchaseItems: {
-                    include: {
-                        purchaseUnit: true,
-                        rawMaterial: true,
-                    },
-                },
-            },
-            orderBy: {
-                createdAt: "desc",
-            },
-        });
         yield Promise.all([
-            (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId),
-            redis_1.redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
-            (0, get_inventory_1.fetchOutletRawMaterialsToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id),
+            redis_1.redis.del(`${outletId}-stocks`),
+            redis_1.redis.del(`${outletId}-purchases`),
+            redis_1.redis.del(`${outletId}-raw-materials`),
         ]);
         return res.json({
             success: true,
@@ -2188,11 +2316,11 @@ const settlePayForRaisedPurchase = (req, res) => __awaiter(void 0, void 0, void 
 });
 exports.settlePayForRaisedPurchase = settlePayForRaisedPurchase;
 const updateStockRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _13;
+    var _20;
     const { outletId, id } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_13 = req.user) === null || _13 === void 0 ? void 0 : _13.id;
+    let userId = (_20 = req.user) === null || _20 === void 0 ? void 0 : _20.id;
     const { stock } = req === null || req === void 0 ? void 0 : req.body;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -2207,6 +2335,10 @@ const updateStockRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, f
     });
     if (!(findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.id)) {
         throw new not_found_1.NotFoundException("Raw Material / Stock not found", root_1.ErrorCode.NOT_FOUND);
+    }
+    if ((findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.purchasedStock) &&
+        stock > (findRawMaterial === null || findRawMaterial === void 0 ? void 0 : findRawMaterial.purchasedStock)) {
+        throw new bad_request_1.BadRequestsException("You cannot update the stock to a value greater than the last purchased stock", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     yield __1.prismaDB.rawMaterial.update({
         where: {
@@ -2225,25 +2357,8 @@ const updateStockRawMaterial = (req, res) => __awaiter(void 0, void 0, void 0, f
             status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
         },
     });
-    const alerts = yield __1.prismaDB.alert.findMany({
-        where: {
-            restaurantId: outletId,
-            status: {
-                in: ["PENDING"],
-            },
-        },
-        select: {
-            id: true,
-            type: true,
-            status: true,
-            priority: true,
-            href: true,
-            message: true,
-            createdAt: true,
-        },
-    });
     ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
-    yield redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
+    yield redis_1.redis.del(`alerts-${outletId}`);
     yield (0, get_inventory_1.getfetchOutletStocksToRedis)(outletId);
     return res.json({
         success: true,
@@ -2537,7 +2652,7 @@ const allTableStocks = (req, res) => __awaiter(void 0, void 0, void 0, function*
             purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
             lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
             purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
-            purchasedStock: `${(_c = rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock) === null || _c === void 0 ? void 0 : _c.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            purchasedStock: `${(_c = rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedStock) === null || _c === void 0 ? void 0 : _c.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
             createdAt: rawItem === null || rawItem === void 0 ? void 0 : rawItem.createdAt,
         });
     });
@@ -3024,3 +3139,82 @@ const getAllTableRawMaterialUnit = (req, res) => __awaiter(void 0, void 0, void 
     });
 });
 exports.getAllTableRawMaterialUnit = getAllTableRawMaterialUnit;
+const deleteItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, id: recipeId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    // Use transaction to handle both deletion and menu updates
+    yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        var _21, _22, _23;
+        // First, find all related items that use this recipe
+        const recipe = yield prisma.itemRecipe.findUnique({
+            where: { id: recipeId },
+            include: {
+                menuItem: true, // Get linked menu items
+                menuItemVariant: true, // Get linked menu variants
+                addOnItemVariant: true, // Get linked addon variants
+            },
+        });
+        if (!recipe) {
+            throw new not_found_1.NotFoundException("Recipe Not Found", root_1.ErrorCode.NOT_FOUND);
+        }
+        // Update menu items that use this recipe
+        if (((_21 = recipe.menuItem) === null || _21 === void 0 ? void 0 : _21.length) > 0) {
+            yield prisma.menuItem.updateMany({
+                where: {
+                    itemRecipeId: recipeId,
+                },
+                data: {
+                    chooseProfit: "manualProfit",
+                    grossProfitType: "INR",
+                    itemRecipeId: null, // Remove the recipe reference
+                },
+            });
+        }
+        // Update menu variants that use this recipe
+        if (((_22 = recipe.menuItemVariant) === null || _22 === void 0 ? void 0 : _22.length) > 0) {
+            yield prisma.menuItemVariant.updateMany({
+                where: {
+                    itemRecipeId: recipeId,
+                },
+                data: {
+                    chooseProfit: "manualProfit",
+                    grossProfitType: "INR",
+                    itemRecipeId: null, // Remove the recipe reference
+                },
+            });
+        }
+        // Update addon variants that use this recipe
+        if (((_23 = recipe.addOnItemVariant) === null || _23 === void 0 ? void 0 : _23.length) > 0) {
+            yield prisma.addOnVariants.updateMany({
+                where: {
+                    itemRecipeId: recipeId,
+                },
+                data: {
+                    chooseProfit: "manualProfit",
+                    grossProfitType: "INR",
+                    itemRecipeId: null, // Remove the recipe reference
+                },
+            });
+        }
+        // Finally, delete the recipe
+        yield prisma.itemRecipe.delete({
+            where: {
+                id: recipeId,
+            },
+        });
+    }));
+    // Clear relevant cache
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
+    return res.json({
+        success: true,
+        message: "Recipe deleted and linked items updated successfully",
+    });
+});
+exports.deleteItemRecipe = deleteItemRecipe;

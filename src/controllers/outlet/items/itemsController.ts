@@ -9,19 +9,12 @@ import {
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
-import {
-  Category,
-  FoodRole,
-  MenuItem,
-  MenuItemVariant,
-  Variants,
-} from "@prisma/client";
+import { Category, FoodRole, GstType, MenuItem } from "@prisma/client";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import {
   getOAllItems,
   getOAllItemsForOnlineAndDelivery,
-  getOAllMenuCategoriesToRedis,
 } from "../../../lib/outlet/get-items";
 import { z } from "zod";
 import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
@@ -296,46 +289,18 @@ export const getItemsByCategory = async (req: Request, res: Response) => {
     categoryId: menuItem?.categoryId,
     categoryName: menuItem?.category?.name,
     name: menuItem?.name,
-    images: menuItem?.images?.map((image: any) => ({
-      id: image?.id,
-      url: image?.url,
-    })),
+    images: menuItem?.images,
     type: menuItem?.type,
     price: menuItem?.price,
     netPrice: menuItem?.netPrice,
-    itemRecipe: {
-      id: menuItem?.itemRecipe?.id,
-      menuId: menuItem?.itemRecipe?.menuId,
-      menuVariantId: menuItem?.itemRecipe?.menuVariantId,
-      addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId,
-    },
+    itemRecipe: menuItem?.itemRecipe,
     gst: menuItem?.gst,
     grossProfit: menuItem?.grossProfit,
     isVariants: menuItem?.isVariants,
     isAddOns: menuItem?.isAddons,
-    menuItemVariants: menuItem?.menuItemVariants?.map((variant: any) => ({
-      id: variant?.id,
-      variantName: variant?.variant?.name,
-      price: variant?.price,
-      netPrice: variant?.netPrice,
-      gst: variant?.gst,
-      grossProfit: variant?.grossProfit,
-      type: variant?.foodType,
-    })),
+    menuItemVariants: menuItem?.menuItemVariants,
     favourite: true,
-    menuGroupAddOns: menuItem?.menuGroupAddOns?.map((addOns: any) => ({
-      id: addOns?.id,
-      addOnGroupName: addOns?.addOnGroups?.title,
-      description: addOns?.addOnGroups?.description,
-      addonVariants: addOns?.addOnGroups?.addOnVariants?.map(
-        (addOnVariant: any) => ({
-          id: addOnVariant?.id,
-          name: addOnVariant?.name,
-          price: addOnVariant?.price,
-          type: addOnVariant?.type,
-        })
-      ),
-    })),
+    menuGroupAddOns: menuItem?.menuGroupAddOns,
   }));
 
   return res.json({
@@ -688,7 +653,7 @@ export const getVariantsForTable = async (req: Request, res: Response) => {
   const formattedVariants = getVariants?.map((item) => ({
     id: item.id,
     name: item.name,
-    variantCategory: item.variantCategory.toLowerCase(),
+    variantCategory: item.variantCategory,
     createdAt: format(item.createdAt, "MMMM do, yyyy"),
     updatedAt: format(item.updatedAt, "MMMM do, yyyy"),
   }));
@@ -755,12 +720,19 @@ export const getAddonsForTable = async (req: Request, res: Response) => {
       OR: [{ title: { contains: search, mode: "insensitive" } }],
       AND: filterConditions,
     },
+    include: {
+      addOnVariants: true,
+    },
     orderBy,
   });
 
   const formattedAddOns = getAddons?.map((addOn) => ({
     id: addOn.id,
-    addOnName: addOn.title,
+    title: addOn.title,
+    description: addOn.description,
+    minSelect: addOn.minSelect,
+    maxSelect: addOn.maxSelect,
+    addOnVariants: addOn.addOnVariants,
     status: addOn.status,
     createdAt: format(addOn.createdAt, "MMMM do, yyyy"),
     updatedAt: format(addOn.updatedAt, "MMMM do, yyyy"),
@@ -876,6 +848,9 @@ const menuSchema = z.object({
   images: z.object({ url: z.string() }).array(),
   price: z.string().optional(),
   netPrice: z.string().optional(),
+  gstType: z.nativeEnum(GstType, {
+    required_error: "You need to select a gst type.",
+  }),
   gst: z.coerce.number().optional(),
   chooseProfit: z
     .enum(["manualProfit", "itemRecipe"], {
@@ -902,6 +877,9 @@ const menuSchema = z.object({
       price: z.string(),
       netPrice: z.string(),
       gst: z.coerce.number().min(0, { message: "Gst Required" }),
+      gstType: z.nativeEnum(GstType, {
+        required_error: "You need to select a gst type.",
+      }),
       chooseProfit: z.enum(["manualProfit", "itemRecipe"], {
         required_error: "You need to select a gross profit type.",
       }),
@@ -1042,6 +1020,7 @@ export const updateItembyId = async (req: Request, res: Response) => {
               foodType: variant.foodType,
               netPrice: variant?.netPrice,
               gst: variant?.gst,
+              gstType: variant?.gstType,
               price: variant.price,
               chooseProfit: variant?.chooseProfit,
               grossProfitType: variant?.grossProfitType,
@@ -1060,6 +1039,7 @@ export const updateItembyId = async (req: Request, res: Response) => {
               foodType: variant.foodType,
               netPrice: variant?.netPrice,
               gst: variant?.gst,
+              gstType: variant?.gstType,
               price: variant.price,
               chooseProfit: variant?.chooseProfit,
               grossProfitType: variant?.grossProfitType,
@@ -1156,6 +1136,9 @@ export const updateItembyId = async (req: Request, res: Response) => {
         type: validateFields?.type,
         price: validateFields?.isVariants ? "0" : validateFields?.price,
         gst: validateFields?.isVariants ? null : validateFields?.gst,
+        gstType: validateFields?.isVariants
+          ? undefined
+          : validateFields?.gstType,
         netPrice: validateFields?.isVariants ? null : validateFields?.netPrice,
         chooseProfit: validateFields?.isVariants
           ? null
@@ -1200,9 +1183,9 @@ export const updateItembyId = async (req: Request, res: Response) => {
   });
 
   await Promise.all([
-    getOAllItems(outlet.id),
-    getOAllMenuCategoriesToRedis(outlet.id),
-    getOAllItemsForOnlineAndDelivery(outletId),
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
   ]);
 
   return res.json({
@@ -1306,6 +1289,7 @@ export const postItem = async (req: Request, res: Response) => {
       isOnline: validateFields?.isOnline,
       price: validateFields?.isVariants ? "0" : validateFields?.price,
       gst: validateFields?.isVariants ? null : validateFields?.gst,
+      gstType: validateFields?.isVariants ? undefined : validateFields?.gstType,
       netPrice: validateFields?.isVariants ? null : validateFields?.netPrice,
       chooseProfit: validateFields?.isVariants
         ? null
@@ -1329,6 +1313,7 @@ export const postItem = async (req: Request, res: Response) => {
           foodType: variant?.foodType,
           netPrice: variant?.netPrice,
           gst: variant?.gst,
+          gstType: variant?.gstType,
           price: variant?.price,
           chooseProfit: variant?.chooseProfit,
           grossProfitType: variant?.grossProfitType,
@@ -1356,9 +1341,11 @@ export const postItem = async (req: Request, res: Response) => {
     },
   });
 
-  await getOAllItems(outlet.id);
-  await getOAllMenuCategoriesToRedis(outlet.id);
-  await getOAllItemsForOnlineAndDelivery(outletId);
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
 
   return res.json({
     success: true,
@@ -1382,11 +1369,22 @@ export const deleteItem = async (req: Request, res: Response) => {
     throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
   }
 
-  await prismaDB.menuItem.delete({
-    where: {
-      restaurantId: outlet.id,
-      id: item?.id,
-    },
+  // Use transaction to delete both MenuItem and ItemRecipe
+  await prismaDB.$transaction(async (prisma) => {
+    if (item.itemRecipeId) {
+      await prisma.itemRecipe.delete({
+        where: {
+          id: item.itemRecipeId,
+        },
+      });
+    }
+
+    await prisma.menuItem.delete({
+      where: {
+        restaurantId: outlet.id,
+        id: item?.id,
+      },
+    });
   });
 
   await Promise.all([

@@ -50,7 +50,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
     var _b;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { staffId, username, isPaid, cashRegisterId, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, } = req.body;
+    const { staffId, username, isPaid, cashRegisterId, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, isSplitPayment, splitPayments, receivedAmount, changeAmount, } = req.body;
     if (isValid === true && !phoneNo) {
         throw new bad_request_1.BadRequestsException("please provide Phone No", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
@@ -59,11 +59,26 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
     if (staffId !== ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id)) {
         throw new bad_request_1.BadRequestsException("Invalid Staff", root_1.ErrorCode.UNAUTHORIZED);
     }
-    if (isPaid === true && !paymentMethod) {
+    // Normal payment validation
+    if (isPaid === true && !isSplitPayment && !paymentMethod) {
         throw new bad_request_1.BadRequestsException("Please Select Payment Mode", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
+    // Split payment validation
+    if (isPaid === true && isSplitPayment === true) {
+        if (!splitPayments ||
+            !Array.isArray(splitPayments) ||
+            splitPayments.length === 0) {
+            throw new bad_request_1.BadRequestsException("Split payment selected but no payment details provided", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        // Calculate total amount from split payments
+        const totalPaid = splitPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+        // Validate split payment total matches bill total (allow small difference for rounding)
+        if (Math.abs(totalPaid - totalAmount) > 0.1) {
+            throw new bad_request_1.BadRequestsException(`Total split payment amount (${totalPaid.toFixed(2)}) must equal bill total (${totalAmount.toFixed(2)})`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+    }
     let cashRegister = null;
-    if (isPaid === true && paymentMethod) {
+    if (isPaid === true) {
         const findCashRegister = yield __1.prismaDB.cashRegister.findFirst({
             where: { id: cashRegisterId, status: "OPEN" },
         });
@@ -150,12 +165,25 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 phoneNo: phoneNo !== null && phoneNo !== void 0 ? phoneNo : null,
                 staffId: findStaff.id,
                 customerId: isValid === true ? customer === null || customer === void 0 ? void 0 : customer.id : null,
-                paymentMethod: isPaid ? paymentMethod : null,
+                paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
                 tableId: tableId,
                 isPaid: isPaid,
                 restaurantId: getOutlet.id,
                 createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name} (${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
                 subTotal: isPaid ? totalAmount : null,
+                amountReceived: isPaid && !isSplitPayment && receivedAmount ? receivedAmount : null,
+                change: isPaid && !isSplitPayment && changeAmount ? changeAmount : null,
+                isSplitPayment: isPaid && isSplitPayment ? true : false,
+                splitPayments: isPaid && isSplitPayment && splitPayments
+                    ? {
+                        create: splitPayments.map((payment) => ({
+                            method: payment.method,
+                            amount: Number(payment.amount),
+                            note: `Part of split payment for bill #${billNo}`,
+                            createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name} (${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
+                        })),
+                    }
+                    : undefined,
                 orders: {
                     create: {
                         restaurantId: getOutlet.id,
@@ -172,6 +200,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                         totalGrossProfit: totalGrossProfit,
                         generatedOrderId: orderId,
                         orderType: orderType,
+                        paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
                         orderItems: {
                             create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
                                 var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
@@ -208,13 +237,16 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                                                 name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
                                                 selectedAddOnVariantsId: {
                                                     create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
-                                                        var _a;
+                                                        var _a, _b, _c, _d;
                                                         const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
                                                         return {
                                                             selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
                                                             name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
                                                             type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
                                                             price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                                            gst: Number((_b = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _b === void 0 ? void 0 : _b.gst),
+                                                            netPrice: Number((_c = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _c === void 0 ? void 0 : _c.netPrice).toString(),
+                                                            grossProfit: Number((_d = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _d === void 0 ? void 0 : _d.grossProfit),
                                                         };
                                                     }),
                                                 },
@@ -290,18 +322,41 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
             });
         }
         if (isPaid && (cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id)) {
-            // Create cash transaction for the order
-            yield __1.prismaDB.cashTransaction.create({
-                data: {
-                    registerId: cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id,
-                    amount: totalAmount,
-                    type: "CASH_IN",
-                    source: "ORDER",
-                    description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems === null || orderItems === void 0 ? void 0 : orderItems.length} x Items`,
-                    paymentMethod: paymentMethod,
-                    performedBy: staffId,
-                },
-            });
+            const registerIdString = cashRegister.id; // Ensure we have a string value
+            if (isSplitPayment && splitPayments && splitPayments.length > 0) {
+                // Create multiple cash transactions for split payments
+                yield Promise.all(splitPayments.map((payment) => __awaiter(void 0, void 0, void 0, function* () {
+                    yield __1.prismaDB.cashTransaction.create({
+                        data: {
+                            registerId: registerIdString,
+                            amount: Number(payment.amount),
+                            type: "CASH_IN",
+                            source: "ORDER",
+                            description: `Split Payment (${payment.method}) - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems === null || orderItems === void 0 ? void 0 : orderItems.length} x Items`,
+                            paymentMethod: payment.method,
+                            performedBy: staffId,
+                            orderId: orderSession.id,
+                            referenceId: orderSession.id, // Add reference ID for easier tracing
+                        },
+                    });
+                })));
+            }
+            else {
+                // Create a single cash transaction for regular payment
+                yield __1.prismaDB.cashTransaction.create({
+                    data: {
+                        registerId: registerIdString,
+                        amount: totalAmount,
+                        type: "CASH_IN",
+                        source: "ORDER",
+                        description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems === null || orderItems === void 0 ? void 0 : orderItems.length} x Items`,
+                        paymentMethod: paymentMethod,
+                        performedBy: staffId,
+                        orderId: orderSession.id,
+                        referenceId: orderSession.id, // Add reference ID for easier tracing
+                    },
+                });
+            }
         }
         return orderSession;
     }));

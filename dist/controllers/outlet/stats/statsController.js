@@ -79,7 +79,7 @@ const calculateGrowthRate = (current, previous) => {
 };
 const formatGrowthMessage = (growth, periodLabel) => {
     const sign = growth.delta >= 0 ? "+" : "";
-    return `${sign}${growth.delta.toFixed(2)} (${growth.percentage.toFixed(1)}%) from ${periodLabel}`;
+    return `${sign} ${growth.percentage.toFixed(1)}% from ${periodLabel}`;
 };
 const getPeriodLabel = (period) => {
     const labels = {

@@ -16,6 +16,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import axios from "axios";
 import { PUPPETEER_EXECUTABLE_PATH } from "../../../../secrets";
 import { billQueueProducer } from "../../../../services/bullmq/producer";
+import { z } from "zod";
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION!,
@@ -25,20 +26,119 @@ const s3Client = new S3Client({
   },
 });
 
+// Define the split payment type
+interface SplitPayments {
+  method: string;
+  amount: number;
+}
+
+const splitPaymentSchema = z
+  .object({
+    subTotal: z.number({
+      required_error: "Subtotal is required",
+    }),
+    paymentMethod: z.nativeEnum(PaymentMethod).optional(),
+    cashRegisterId: z.string({
+      required_error: "Cash register ID is required",
+    }),
+    isSplitPayment: z.boolean().optional(),
+    splitPayments: z
+      .array(
+        z.object({
+          method: z.nativeEnum(PaymentMethod),
+          amount: z.number(),
+        })
+      )
+      .optional(),
+    receivedAmount: z.number().optional(),
+  })
+  .refine(
+    (data) => {
+      // If it's not a split payment, paymentMethod is required
+      if (!data.isSplitPayment && !data.paymentMethod) {
+        return false;
+      }
+      // If it is a split payment, splitPayments is required
+      if (
+        data.isSplitPayment &&
+        (!data.splitPayments || data.splitPayments.length === 0)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        "Either paymentMethod (for single payment) or splitPayments (for split payment) must be provided",
+      path: ["paymentMethod"], // This will show the error on the paymentMethod field
+    }
+  );
+
 export const billingOrderSession = async (req: Request, res: Response) => {
   const { orderSessionId, outletId } = req.params;
   // @ts-ignore
   const { id, role } = req.user;
-  const { subTotal, paymentMethod, cashRegisterId } = req.body;
+  const {
+    subTotal,
+    paymentMethod,
+    cashRegisterId,
+    isSplitPayment,
+    splitPayments,
+    receivedAmount,
+  } = splitPaymentSchema.parse(req.body);
 
-  if (
-    typeof subTotal !== "number" ||
-    !Object.values(PaymentMethod).includes(paymentMethod)
-  ) {
-    throw new BadRequestsException(
-      "Invalid total or Choose Payment method",
-      ErrorCode.UNPROCESSABLE_ENTITY
+  // Validate the request based on whether it's a split payment or not
+  if (isSplitPayment) {
+    // Validate split payments
+    if (!Array.isArray(splitPayments) || splitPayments.length === 0) {
+      throw new BadRequestsException(
+        "Split payments are required for split payment mode",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    // Validate each split payment
+    for (const payment of splitPayments) {
+      if (
+        !payment.method ||
+        !Object.values(PaymentMethod).includes(payment.method)
+      ) {
+        throw new BadRequestsException(
+          "Invalid payment method in split payments",
+          ErrorCode.UNPROCESSABLE_ENTITY
+        );
+      }
+
+      if (typeof payment.amount !== "number" || payment.amount <= 0) {
+        throw new BadRequestsException(
+          "Invalid amount in split payments",
+          ErrorCode.UNPROCESSABLE_ENTITY
+        );
+      }
+    }
+
+    // Validate total amount matches subTotal
+    const totalPaid = splitPayments.reduce(
+      (sum, payment) => sum + payment.amount,
+      0
     );
+    if (Math.abs(totalPaid - subTotal) > 0.01) {
+      throw new BadRequestsException(
+        "Total split payment amount must equal the bill total",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+  } else {
+    // Regular payment validation
+    if (
+      typeof subTotal !== "number" ||
+      !Object.values(PaymentMethod).includes(paymentMethod as PaymentMethod)
+    ) {
+      throw new BadRequestsException(
+        "Invalid total or Choose Payment method",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
   }
 
   if (!cashRegisterId) {
@@ -84,8 +184,18 @@ export const billingOrderSession = async (req: Request, res: Response) => {
       data: {
         active: false,
         isPaid: true,
-        paymentMethod: paymentMethod,
+        paymentMethod: isSplitPayment ? "SPLIT" : paymentMethod,
         subTotal: subTotal,
+        isSplitPayment: isSplitPayment,
+        splitPayments:
+          isSplitPayment && splitPayments
+            ? {
+                create: splitPayments.map((payment) => ({
+                  method: payment.method,
+                  amount: payment.amount,
+                })),
+              }
+            : undefined,
         sessionStatus: "COMPLETED",
         orders: {
           updateMany: {
@@ -146,24 +256,48 @@ export const billingOrderSession = async (req: Request, res: Response) => {
       });
     }
 
-    // Create cash transaction for the order
-    await prismaDB.cashTransaction.create({
-      data: {
-        registerId: cashRegister?.id,
-        amount: subTotal,
-        type: "CASH_IN",
-        source: "ORDER",
-        description: `Order Sales - #${orderSession.billId} - ${
-          orderSession.orderType
-        } - ${
-          updatedOrderSession?.orders?.filter(
-            (order) => order?.orderStatus === "COMPLETED"
-          ).length
-        } x Items`,
-        paymentMethod: paymentMethod,
-        performedBy: id,
-      },
-    });
+    // Create cash transactions for the order
+    if (isSplitPayment && splitPayments) {
+      // Create multiple transactions for split payments
+      for (const payment of splitPayments) {
+        await prismaDB.cashTransaction.create({
+          data: {
+            registerId: cashRegister?.id,
+            amount: payment.amount,
+            type: "CASH_IN",
+            source: "ORDER",
+            description: `Split Payment - ${payment.method} - #${
+              orderSession.billId
+            } - ${orderSession.orderType} - ${
+              updatedOrderSession?.orders?.filter(
+                (order) => order?.orderStatus === "COMPLETED"
+              ).length
+            } x Items`,
+            paymentMethod: payment.method as PaymentMethod,
+            performedBy: id,
+          },
+        });
+      }
+    } else {
+      // Create a single transaction for regular payment
+      await prismaDB.cashTransaction.create({
+        data: {
+          registerId: cashRegister?.id,
+          amount: subTotal,
+          type: "CASH_IN",
+          source: "ORDER",
+          description: `Order Sales - #${orderSession.billId} - ${
+            orderSession.orderType
+          } - ${
+            updatedOrderSession?.orders?.filter(
+              (order) => order?.orderStatus === "COMPLETED"
+            ).length
+          } x Items`,
+          paymentMethod: paymentMethod as PaymentMethod,
+          performedBy: id,
+        },
+      });
+    }
 
     return updatedOrderSession;
   });
@@ -178,6 +312,16 @@ export const billingOrderSession = async (req: Request, res: Response) => {
   const { cgst, roundedDifference, roundedTotal, sgst, subtotal } =
     calculateTotals(formattedOrders);
 
+  // Parse split payment details if available
+  let parsedSplitPayments = [];
+  if (result.isSplitPayment && (result as any).splitPaymentDetails) {
+    try {
+      parsedSplitPayments = JSON.parse((result as any).splitPaymentDetails);
+    } catch (error) {
+      console.error("Error parsing split payment details:", error);
+    }
+  }
+
   const invoiceData = {
     restaurantName: outlet.restaurantName,
     address: `${outlet.address},${outlet.city}-${outlet.pincode}`,
@@ -187,7 +331,9 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     invoiceDate: new Date().toLocaleTimeString(),
     customerName: result?.username,
     customerNo: result?.phoneNo ?? "NA",
-    paymentMethod: paymentMethod,
+    paymentMethod: isSplitPayment ? "SPLIT" : paymentMethod,
+    isSplitPayment: result.isSplitPayment,
+    splitPayments: parsedSplitPayments,
     customerAddress: "NA",
     orderSessionId: result?.id,
     orderItems: result?.orders
@@ -229,12 +375,16 @@ export const billingOrderSession = async (req: Request, res: Response) => {
         paymentStatus: "PAID",
         restaurantName: outlet?.restaurantName!,
         orderType: orderSession?.orderType,
+        isSplitPayment: invoiceData.isSplitPayment,
+        splitPayments: invoiceData.splitPayments,
       },
       ownerPhone: outlet?.users?.phoneNo!,
       paymentData: {
         amount: invoiceData.total,
         billId: result?.billId!,
-        paymentMode: paymentMethod,
+        paymentMode: isSplitPayment ? "SPLIT" : paymentMethod,
+        isSplitPayment: invoiceData.isSplitPayment,
+        splitPayments: invoiceData.splitPayments,
       },
     },
     `bill-${result.id}`

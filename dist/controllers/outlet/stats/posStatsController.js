@@ -290,12 +290,26 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         calculateGrowth(),
         getTodayOrdersByHour(),
     ]);
+    // Filter order types based on outlet type
+    const isBakeryOrExpress = outlet.outletType === "BAKERY" || outlet.outletType === "EXPRESS";
+    const filterOrderTypes = (data) => {
+        return data.map((item) => {
+            const filtered = Object.assign({}, item);
+            if (isBakeryOrExpress) {
+                delete filtered.dineIn;
+            }
+            else {
+                delete filtered.express;
+            }
+            return filtered;
+        });
+    };
     res.json({
         success: true,
         data: {
             totalSalesRevenue: {
                 amount: currentRevenue._sum.totalAmount || 0,
-                percentageChange: calculatePercentageChange(currentRevenue._sum.totalAmount || 0, previousRevenue._sum.totalAmount || 0),
+                percentageChange: calculatePercentageChange(currentRevenue._sum.totalAmount || 0, previousRevenue._sum.totalAmount || 0).toFixed(2),
             },
             activeOrders,
             totalOrders: {
@@ -308,10 +322,20 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 occupancyRate: Math.round((activeTables / tables._count.id) * 100),
             },
             orderingGrowth: {
-                growth,
-                todays: todayOrdersByHour,
-                daily: dailyStats,
-                weekly: weeklyStats,
+                growth: isBakeryOrExpress
+                    ? {
+                        takeaway: growth.takeaway,
+                        delivery: growth.delivery,
+                        express: growth.express,
+                    }
+                    : {
+                        dineIn: growth.dineIn,
+                        takeaway: growth.takeaway,
+                        delivery: growth.delivery,
+                    },
+                todays: filterOrderTypes(todayOrdersByHour),
+                daily: filterOrderTypes(dailyStats),
+                weekly: filterOrderTypes(weeklyStats),
             },
         },
     });

@@ -6,6 +6,7 @@ const auth_1 = require("../middlewares/auth");
 const posController_1 = require("../controllers/outlet/posController");
 const posStatsController_1 = require("../controllers/outlet/stats/posStatsController");
 const posController_2 = require("../controllers/outlet/order/posController");
+const pos_1 = require("../controllers/outlet/inventory/pos");
 const posRoute = (0, express_1.Router)();
 posRoute.post("/:outletId/register", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posController_1.posStaffCheckInAndRegister));
 posRoute.post("/:outletId/close-shift", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posController_1.posStaffCheckOut));
@@ -22,4 +23,5 @@ posRoute.get("/:outletId/pos-stats/purchase-order-stats", auth_1.isAuthMiddelwar
 posRoute.get("/:outletId/pos-stats/vendor-stats", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getVendorStats));
 posRoute.get("/:outletId/pos-stats/dashboard", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.getPOSDashboardStats));
 posRoute.get("/:outletId/pos-stats/stock-deductions", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(posStatsController_1.orderAndStockDeduction));
+posRoute.get("/:outletId/get-vendors", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(pos_1.getVendorsForPOS));
 exports.default = posRoute;

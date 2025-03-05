@@ -181,28 +181,28 @@ export const getOAllItems = async (outletId: string) => {
       },
       gst: menuItem?.gst,
       grossProfit: menuItem?.grossProfit,
-      isVariants: menuItem.isVariants,
-      isAddOns: menuItem.isAddons,
-      menuItemVariants: menuItem.menuItemVariants.map((variant: any) => ({
-        id: variant.id,
-        variantName: variant.variant.name,
-        price: variant.price,
+      isVariants: menuItem?.isVariants,
+      isAddOns: menuItem?.isAddons,
+      menuItemVariants: menuItem?.menuItemVariants?.map((variant: any) => ({
+        id: variant?.id,
+        variantName: variant?.variant?.name,
+        price: variant?.price,
         netPrice: variant?.netPrice,
         gst: variant?.gst,
         grossProfit: variant?.grossProfit,
-        type: variant.foodType,
+        type: variant?.foodType,
       })),
       favourite: true,
-      menuGroupAddOns: menuItem.menuGroupAddOns.map((addOns: any) => ({
-        id: addOns.id,
-        addOnGroupName: addOns.addOnGroups.title,
-        description: addOns.addOnGroups.description,
-        addonVariants: addOns.addOnGroups.addOnVariants.map(
+      menuGroupAddOns: menuItem?.menuGroupAddOns?.map((addOns: any) => ({
+        id: addOns?.id,
+        addOnGroupName: addOns?.addOnGroups?.title,
+        description: addOns?.addOnGroups?.description,
+        addonVariants: addOns?.addOnGroups?.addOnVariants?.map(
           (addOnVariant: any) => ({
-            id: addOnVariant.id,
-            name: addOnVariant.name,
-            price: addOnVariant.price,
-            type: addOnVariant.type,
+            id: addOnVariant?.id,
+            name: addOnVariant?.name,
+            price: addOnVariant?.price,
+            type: addOnVariant?.type,
           })
         ),
       })),

@@ -284,55 +284,58 @@ const addFMCTokenToOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.addFMCTokenToOutlet = addFMCTokenToOutlet;
 const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _u, _v, _w, _x;
+    var _u, _v, _w;
     const validateFields = staff_1.outletOnlinePortalSchema.safeParse(req.body);
     if (!validateFields.success) {
-        throw new bad_request_1.BadRequestsException(validateFields.error.message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        throw new bad_request_1.BadRequestsException(validateFields.error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    yield __1.prismaDB.restaurant.update({
-        where: {
-            id: outlet.id,
-        },
-        data: {
-            onlinePortal: true,
-            openTime: validateFields.data.openTime.time,
-            closeTime: validateFields.data.closeTime.time,
-            areaLat: validateFields.data.areaLat,
-            areaLong: validateFields.data.areaLong,
-            orderRadius: Number(validateFields.data.orderRadius),
-            isDelivery: validateFields.data.isDelivery,
-            isDineIn: validateFields.data.isDineIn,
-            isPickUp: validateFields.data.isPickUp,
-        },
-    });
-    if (!outlet.integrations.find((outlet) => (outlet === null || outlet === void 0 ? void 0 : outlet.name) === "ONLINEHUB")) {
-        yield __1.prismaDB.integration.create({
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        var _x;
+        yield tx.restaurant.update({
+            where: {
+                id: outlet.id,
+            },
             data: {
-                restaurantId: outlet.id,
-                name: "ONLINEHUB",
-                connected: true,
-                status: true,
-                link: validateFields.data.subdomain,
+                onlinePortal: true,
+                openTime: validateFields.data.openTime.time,
+                closeTime: validateFields.data.closeTime.time,
+                areaLat: validateFields.data.areaLat,
+                areaLong: validateFields.data.areaLong,
+                orderRadius: Number(validateFields.data.orderRadius),
+                isDelivery: validateFields.data.isDelivery,
+                isDineIn: validateFields.data.isDineIn,
+                isPickUp: validateFields.data.isPickUp,
             },
         });
-        yield __1.prismaDB.site.create({
-            data: {
-                // @ts-ignore
-                adminId: (_u = req === null || req === void 0 ? void 0 : req.user) === null || _u === void 0 ? void 0 : _u.id,
-                restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
-                subdomain: validateFields.data.subdomain,
-            },
-        });
-    }
+        if (!outlet.integrations.find((outlet) => (outlet === null || outlet === void 0 ? void 0 : outlet.name) === "ONLINEHUB")) {
+            yield __1.prismaDB.integration.create({
+                data: {
+                    restaurantId: outlet.id,
+                    name: "ONLINEHUB",
+                    connected: true,
+                    status: true,
+                    link: validateFields.data.subdomain,
+                },
+            });
+            yield __1.prismaDB.site.create({
+                data: {
+                    // @ts-ignore
+                    adminId: (_x = req === null || req === void 0 ? void 0 : req.user) === null || _x === void 0 ? void 0 : _x.id,
+                    restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+                    subdomain: validateFields.data.subdomain,
+                },
+            });
+        }
+    }));
     yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
     yield (0, get_users_1.getFormatUserAndSendToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.adminId);
-    if (((_w = (_v = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _v === void 0 ? void 0 : _v.sites) === null || _w === void 0 ? void 0 : _w.length) > 0) {
-        for (const site of (_x = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _x === void 0 ? void 0 : _x.sites) {
+    if (((_v = (_u = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _u === void 0 ? void 0 : _u.sites) === null || _v === void 0 ? void 0 : _v.length) > 0) {
+        for (const site of (_w = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _w === void 0 ? void 0 : _w.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }
@@ -626,7 +629,7 @@ const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0
                             description: groupAddon.addOnGroups.description || "",
                             status: groupAddon.addOnGroups.status ? "true" : "false",
                             minSelect: Number(groupAddon.addOnGroups.minSelect) || 0,
-                            maxSelectString: groupAddon.addOnGroups.maxSelectString || "",
+                            maxSelect: Number(groupAddon.addOnGroups.maxSelect) || 0,
                             variants: groupAddon.addOnGroups.addOnVariants.map((variant) => ({
                                 name: variant.name,
                                 price: Number(variant.price),
@@ -647,8 +650,8 @@ const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0
                     slug: (0, utils_1.generateSlug)(groupData.title),
                     description: groupData.description,
                     status: groupData.status === "true" ? true : false,
-                    minSelect: groupData.minSelect.toString(),
-                    maxSelectString: groupData.maxSelectString,
+                    minSelect: groupData.minSelect,
+                    maxSelect: groupData.maxSelect,
                 },
             });
             const newVariants = [];

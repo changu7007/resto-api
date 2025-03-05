@@ -30,6 +30,7 @@ const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
 const axios_1 = __importDefault(require("axios"));
 const secrets_1 = require("../../../../secrets");
 const producer_1 = require("../../../../services/bullmq/producer");
+const zod_1 = require("zod");
 const s3Client = new client_s3_1.S3Client({
     region: process.env.AWS_REGION,
     credentials: {
@@ -37,15 +38,73 @@ const s3Client = new client_s3_1.S3Client({
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     },
 });
+const splitPaymentSchema = zod_1.z
+    .object({
+    subTotal: zod_1.z.number({
+        required_error: "Subtotal is required",
+    }),
+    paymentMethod: zod_1.z.nativeEnum(client_1.PaymentMethod).optional(),
+    cashRegisterId: zod_1.z.string({
+        required_error: "Cash register ID is required",
+    }),
+    isSplitPayment: zod_1.z.boolean().optional(),
+    splitPayments: zod_1.z
+        .array(zod_1.z.object({
+        method: zod_1.z.nativeEnum(client_1.PaymentMethod),
+        amount: zod_1.z.number(),
+    }))
+        .optional(),
+    receivedAmount: zod_1.z.number().optional(),
+})
+    .refine((data) => {
+    // If it's not a split payment, paymentMethod is required
+    if (!data.isSplitPayment && !data.paymentMethod) {
+        return false;
+    }
+    // If it is a split payment, splitPayments is required
+    if (data.isSplitPayment &&
+        (!data.splitPayments || data.splitPayments.length === 0)) {
+        return false;
+    }
+    return true;
+}, {
+    message: "Either paymentMethod (for single payment) or splitPayments (for split payment) must be provided",
+    path: ["paymentMethod"], // This will show the error on the paymentMethod field
+});
 const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e;
     const { orderSessionId, outletId } = req.params;
     // @ts-ignore
     const { id, role } = req.user;
-    const { subTotal, paymentMethod, cashRegisterId } = req.body;
-    if (typeof subTotal !== "number" ||
-        !Object.values(client_1.PaymentMethod).includes(paymentMethod)) {
-        throw new bad_request_1.BadRequestsException("Invalid total or Choose Payment method", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    const { subTotal, paymentMethod, cashRegisterId, isSplitPayment, splitPayments, receivedAmount, } = splitPaymentSchema.parse(req.body);
+    // Validate the request based on whether it's a split payment or not
+    if (isSplitPayment) {
+        // Validate split payments
+        if (!Array.isArray(splitPayments) || splitPayments.length === 0) {
+            throw new bad_request_1.BadRequestsException("Split payments are required for split payment mode", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        // Validate each split payment
+        for (const payment of splitPayments) {
+            if (!payment.method ||
+                !Object.values(client_1.PaymentMethod).includes(payment.method)) {
+                throw new bad_request_1.BadRequestsException("Invalid payment method in split payments", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+            }
+            if (typeof payment.amount !== "number" || payment.amount <= 0) {
+                throw new bad_request_1.BadRequestsException("Invalid amount in split payments", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+            }
+        }
+        // Validate total amount matches subTotal
+        const totalPaid = splitPayments.reduce((sum, payment) => sum + payment.amount, 0);
+        if (Math.abs(totalPaid - subTotal) > 0.01) {
+            throw new bad_request_1.BadRequestsException("Total split payment amount must equal the bill total", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+    }
+    else {
+        // Regular payment validation
+        if (typeof subTotal !== "number" ||
+            !Object.values(client_1.PaymentMethod).includes(paymentMethod)) {
+            throw new bad_request_1.BadRequestsException("Invalid total or Choose Payment method", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
     }
     if (!cashRegisterId) {
         throw new bad_request_1.BadRequestsException("Cash Register ID Not Found", root_1.ErrorCode.INTERNAL_EXCEPTION);
@@ -69,7 +128,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         throw new bad_request_1.BadRequestsException("Cash Register Not Found", root_1.ErrorCode.INTERNAL_EXCEPTION);
     }
     const result = yield (__1.prismaDB === null || __1.prismaDB === void 0 ? void 0 : __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _f;
+        var _f, _g;
         const updatedOrderSession = yield __1.prismaDB.orderSession.update({
             where: {
                 id: orderSession.id,
@@ -78,8 +137,17 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
             data: {
                 active: false,
                 isPaid: true,
-                paymentMethod: paymentMethod,
+                paymentMethod: isSplitPayment ? "SPLIT" : paymentMethod,
                 subTotal: subTotal,
+                isSplitPayment: isSplitPayment,
+                splitPayments: isSplitPayment && splitPayments
+                    ? {
+                        create: splitPayments.map((payment) => ({
+                            method: payment.method,
+                            amount: payment.amount,
+                        })),
+                    }
+                    : undefined,
                 sessionStatus: "COMPLETED",
                 orders: {
                     updateMany: {
@@ -133,18 +201,37 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
                 },
             });
         }
-        // Create cash transaction for the order
-        yield __1.prismaDB.cashTransaction.create({
-            data: {
-                registerId: cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id,
-                amount: subTotal,
-                type: "CASH_IN",
-                source: "ORDER",
-                description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${(_f = updatedOrderSession === null || updatedOrderSession === void 0 ? void 0 : updatedOrderSession.orders) === null || _f === void 0 ? void 0 : _f.filter((order) => (order === null || order === void 0 ? void 0 : order.orderStatus) === "COMPLETED").length} x Items`,
-                paymentMethod: paymentMethod,
-                performedBy: id,
-            },
-        });
+        // Create cash transactions for the order
+        if (isSplitPayment && splitPayments) {
+            // Create multiple transactions for split payments
+            for (const payment of splitPayments) {
+                yield __1.prismaDB.cashTransaction.create({
+                    data: {
+                        registerId: cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id,
+                        amount: payment.amount,
+                        type: "CASH_IN",
+                        source: "ORDER",
+                        description: `Split Payment - ${payment.method} - #${orderSession.billId} - ${orderSession.orderType} - ${(_f = updatedOrderSession === null || updatedOrderSession === void 0 ? void 0 : updatedOrderSession.orders) === null || _f === void 0 ? void 0 : _f.filter((order) => (order === null || order === void 0 ? void 0 : order.orderStatus) === "COMPLETED").length} x Items`,
+                        paymentMethod: payment.method,
+                        performedBy: id,
+                    },
+                });
+            }
+        }
+        else {
+            // Create a single transaction for regular payment
+            yield __1.prismaDB.cashTransaction.create({
+                data: {
+                    registerId: cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id,
+                    amount: subTotal,
+                    type: "CASH_IN",
+                    source: "ORDER",
+                    description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${(_g = updatedOrderSession === null || updatedOrderSession === void 0 ? void 0 : updatedOrderSession.orders) === null || _g === void 0 ? void 0 : _g.filter((order) => (order === null || order === void 0 ? void 0 : order.orderStatus) === "COMPLETED").length} x Items`,
+                    paymentMethod: paymentMethod,
+                    performedBy: id,
+                },
+            });
+        }
         return updatedOrderSession;
     })));
     const formattedOrders = (_a = result === null || result === void 0 ? void 0 : result.orders) === null || _a === void 0 ? void 0 : _a.map((order) => ({
@@ -154,6 +241,16 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus,
     }));
     const { cgst, roundedDifference, roundedTotal, sgst, subtotal } = (0, exports.calculateTotals)(formattedOrders);
+    // Parse split payment details if available
+    let parsedSplitPayments = [];
+    if (result.isSplitPayment && result.splitPaymentDetails) {
+        try {
+            parsedSplitPayments = JSON.parse(result.splitPaymentDetails);
+        }
+        catch (error) {
+            console.error("Error parsing split payment details:", error);
+        }
+    }
     const invoiceData = {
         restaurantName: outlet.restaurantName,
         address: `${outlet.address},${outlet.city}-${outlet.pincode}`,
@@ -163,7 +260,9 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
         invoiceDate: new Date().toLocaleTimeString(),
         customerName: result === null || result === void 0 ? void 0 : result.username,
         customerNo: (_b = result === null || result === void 0 ? void 0 : result.phoneNo) !== null && _b !== void 0 ? _b : "NA",
-        paymentMethod: paymentMethod,
+        paymentMethod: isSplitPayment ? "SPLIT" : paymentMethod,
+        isSplitPayment: result.isSplitPayment,
+        splitPayments: parsedSplitPayments,
         customerAddress: "NA",
         orderSessionId: result === null || result === void 0 ? void 0 : result.id,
         orderItems: (_c = result === null || result === void 0 ? void 0 : result.orders) === null || _c === void 0 ? void 0 : _c.filter((order) => (order === null || order === void 0 ? void 0 : order.orderStatus) === "COMPLETED").flatMap((orderItem) => orderItem.orderItems.map((item, idx) => ({
@@ -199,12 +298,16 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
             paymentStatus: "PAID",
             restaurantName: outlet === null || outlet === void 0 ? void 0 : outlet.restaurantName,
             orderType: orderSession === null || orderSession === void 0 ? void 0 : orderSession.orderType,
+            isSplitPayment: invoiceData.isSplitPayment,
+            splitPayments: invoiceData.splitPayments,
         },
         ownerPhone: (_e = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _e === void 0 ? void 0 : _e.phoneNo,
         paymentData: {
             amount: invoiceData.total,
             billId: result === null || result === void 0 ? void 0 : result.billId,
-            paymentMode: paymentMethod,
+            paymentMode: isSplitPayment ? "SPLIT" : paymentMethod,
+            isSplitPayment: invoiceData.isSplitPayment,
+            splitPayments: invoiceData.splitPayments,
         },
     }, `bill-${result.id}`);
     yield Promise.all([

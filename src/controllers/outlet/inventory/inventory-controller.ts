@@ -746,6 +746,83 @@ export const createRequestPurchase = async (req: Request, res: Response) => {
   });
 };
 
+export const createRaiseRequestPurchase = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  // const validateFields
+  const { data: validateFields, error } = purchaseRequestFormSchema.safeParse(
+    req.body
+  );
+
+  if (error) {
+    throw new BadRequestsException(
+      error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  let userId = req.user.id;
+  // @ts-ignore
+  const username = `${req?.user?.name}-(${req?.user?.role})`;
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const findVendor = await prismaDB.vendor.findFirst({
+    where: {
+      restaurantId: outlet.id,
+      id: validateFields.vendorId,
+    },
+  });
+
+  if (!findVendor?.id) {
+    throw new NotFoundException("Vendor Not found", ErrorCode.NOT_FOUND);
+  }
+
+  const invoiceNo = await generatePurchaseNo(outlet.id);
+
+  await prismaDB.$transaction(async (prisma) => {
+    await prisma.purchase.create({
+      data: {
+        invoiceNo: invoiceNo,
+        restaurantId: outlet.id,
+        vendorId: findVendor.id,
+        createdBy: username,
+        isPaid: false,
+        purchaseItems: {
+          create: validateFields.rawMaterials.map((item) => ({
+            rawMaterialId: item?.rawMaterialId,
+            rawMaterialName: item?.rawMaterialName,
+            purchaseQuantity: item?.requestQuantity,
+            purchaseUnitId: item?.requestUnitId,
+            purchaseUnitName: item?.unitName,
+            gstType: item?.gstType,
+            netRate: item?.netRate,
+            taxAmount: item?.taxAmount,
+            purchasePrice: item?.totalAmount,
+          })),
+        },
+        purchaseStatus: "REQUESTED",
+        subTotal: validateFields.summary?.subTotal,
+        totalAmount: validateFields.summary?.grandTotal,
+        taxes: validateFields.summary?.totalTax,
+      },
+    });
+
+    await redis.del(`${outletId}-purchases`);
+  });
+  return res.json({
+    success: true,
+    message: "Purchase Order Raised",
+  });
+};
+
 export const updateRequestPurchase = async (req: Request, res: Response) => {
   const { outletId, id } = req.params;
 
@@ -930,24 +1007,59 @@ export const deleteRequestPurchase = async (req: Request, res: Response) => {
     },
   });
 
-  const allPurchases = await prismaDB.purchase.findMany({
+  await redis.del(`${outletId}-purchases`);
+  return res.json({
+    success: true,
+    message: "Request Purchase Deleted ✅",
+  });
+};
+
+export const cancelRequestPurchase = async (req: Request, res: Response) => {
+  const { outletId, id } = req.params;
+
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  let userId = req.user.id;
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (userId !== outlet.adminId) {
+    throw new UnauthorizedException(
+      "Unauthorized Access",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const findPurchase = await prismaDB.purchase.findFirst({
     where: {
+      id: id,
       restaurantId: outlet?.id,
     },
-    include: {
-      purchaseItems: {
-        include: {
-          purchaseUnit: true,
-          rawMaterial: true,
-        },
-      },
+  });
+
+  if (!findPurchase?.id) {
+    throw new NotFoundException(
+      "No Requested Purchases found",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  await prismaDB.purchase.update({
+    where: {
+      id: findPurchase?.id,
+      restaurantId: outlet?.id,
+    },
+    data: {
+      purchaseStatus: "CANCELLED",
     },
   });
 
   await redis.del(`${outletId}-purchases`);
   return res.json({
     success: true,
-    message: "Request Purchase Deleted ✅",
+    message: "Request Purchase Cancelled ✅",
   });
 };
 
@@ -1079,12 +1191,21 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
         });
 
         if (rawMaterial) {
+          console.log(
+            `Raw Material Restocking started for ${rawMaterial?.name}, the old stock is ${rawMaterial?.currentStock}`
+          );
           const newStock =
             Number(rawMaterial?.currentStock ?? 0) + item?.requestQuantity;
+          console.log(
+            `New Stock Calculated for ${rawMaterial?.name}: ${newStock}`
+          );
           const newPricePerItem =
             Number(item.totalRate) / Number(item.requestQuantity);
+          console.log(
+            `New Price Per Item Calculated for ${rawMaterial?.name}: ${newPricePerItem}`
+          );
 
-          await prisma.rawMaterial.update({
+          const updatedRawMaterial = await prisma.rawMaterial.update({
             where: {
               id: rawMaterial.id,
             },
@@ -1094,9 +1215,12 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
               purchasedPricePerItem: newPricePerItem,
               purchasedUnit: item.unitName,
               lastPurchasedPrice: rawMaterial?.purchasedPrice ?? 0,
-              purchasedStock: newStock,
+              purchasedStock: item.requestQuantity,
             },
           });
+          console.log(
+            `Raw Material Restocking completed for ${rawMaterial?.name}, updated raw material stock: ${updatedRawMaterial?.currentStock}`
+          );
           // Update related alerts to resolved
           await prismaDB.alert.deleteMany({
             where: {
@@ -1113,11 +1237,19 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
               },
             }
           );
+          console.log(`finding recipe ingredients for ${rawMaterial?.name}`);
           if (findRecipeIngredients) {
+            console.log(`recipe ingredients found for ${rawMaterial?.name}`);
             const recipeCostWithQuantity =
               Number(findRecipeIngredients?.quantity) /
               Number(rawMaterial?.conversionFactor);
+            console.log(
+              `recipe cost with quantity for ${rawMaterial?.name}: ${recipeCostWithQuantity}`
+            );
             const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+            console.log(
+              `ingredient cost for ${rawMaterial?.name}: ${ingredientCost}`
+            );
             // Update linked `RecipeIngredient` cost
             await prisma.recipeIngredient.updateMany({
               where: {
@@ -1127,15 +1259,28 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
                 cost: ingredientCost,
               },
             });
+            console.log(`recipe ingredient updated for ${rawMaterial?.name}`);
           }
         }
       })
     );
-
+    console.log(`Raw Materials Restocking completed for all items`);
     // Step 2: Recalculate `ItemRecipe` gross margin and related fields
     const recipesToUpdate = await prisma.itemRecipe.findMany({
       where: {
         restaurantId: outlet.id,
+        ingredients: {
+          some: {
+            rawMaterial: {
+              restaurantId: outlet.id,
+              id: {
+                in: validateFields?.rawMaterials?.map(
+                  (item) => item.rawMaterialId
+                ),
+              },
+            },
+          },
+        },
       },
       include: {
         ingredients: {
@@ -1145,9 +1290,13 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
         },
       },
     });
+    console.log(
+      `Recipes to update started for ${recipesToUpdate?.length} recipes`
+    );
 
     await Promise.all(
       recipesToUpdate.map(async (recipe) => {
+        console.log(`Recipe to update started for ${recipe?.name}`);
         const totalCost = recipe.ingredients.reduce(
           (sum, ingredient) =>
             sum +
@@ -1156,7 +1305,9 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
               Number(ingredient?.rawMaterial?.purchasedPricePerItem),
           0
         );
+        console.log(`Total cost for ${recipe?.name}: ${totalCost}`);
         const grossMargin = Number(recipe.itemPrice as number) - totalCost;
+        console.log(`Gross margin for ${recipe?.name}: ${grossMargin}`);
 
         await prisma.itemRecipe.update({
           where: {
@@ -1167,7 +1318,7 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
             grossMargin,
           },
         });
-
+        console.log(`Recipe updated for ${recipe?.name}`);
         // Update linked entities
         if (recipe.menuId) {
           await prisma.menuItem.update({
@@ -1179,6 +1330,7 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
               grossProfit: grossMargin,
             },
           });
+          console.log(`Menu Item updated for ${recipe?.name}`);
         }
 
         if (recipe.menuVariantId) {
@@ -1244,7 +1396,7 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
       redis.del(`${outletId}-stocks`),
       redis.del(`${outletId}-vendors`),
       redis.del(`${outletId}-raw-materials`),
-      ,
+      redis.del(`alerts-${outletId}`),
     ]);
 
     return res.json({
@@ -2321,8 +2473,12 @@ export const restockPurchase = async (req: Request, res: Response) => {
 
   const transaction = await prismaDB.$transaction(async (prisma) => {
     // Step 1: Restock raw materials and update `RecipeIngredient` costs
+    console.log(`Restock for raw Materiasls Inititated`);
     await Promise.all(
       validateFields?.rawMaterials?.map(async (item) => {
+        console.log(
+          `Restock for raw Material ${item.rawMaterialName} Inititated`
+        );
         const rawMaterial = await prisma.rawMaterial.findFirst({
           where: {
             id: item.rawMaterialId,
@@ -2334,12 +2490,19 @@ export const restockPurchase = async (req: Request, res: Response) => {
         });
 
         if (rawMaterial) {
+          console.log(
+            `Raw Material ${item.rawMaterialName} Found, old stock is ${rawMaterial?.currentStock}`
+          );
           const newStock =
             Number(rawMaterial?.currentStock ?? 0) + item?.requestQuantity;
+          console.log(`New Stock for ${item.rawMaterialName} is ${newStock}`);
           const newPricePerItem =
             Number(item.totalRate) / Number(item.requestQuantity);
+          console.log(
+            `New Price per item for ${item.rawMaterialName} is ${newPricePerItem}`
+          );
 
-          await prisma.rawMaterial.update({
+          const updateStock = await prisma.rawMaterial.update({
             where: {
               id: rawMaterial.id,
             },
@@ -2349,9 +2512,13 @@ export const restockPurchase = async (req: Request, res: Response) => {
               purchasedPricePerItem: newPricePerItem,
               purchasedUnit: item.unitName,
               lastPurchasedPrice: rawMaterial?.purchasedPrice ?? 0,
-              purchasedStock: newStock,
+              purchasedStock: item.requestQuantity,
             },
           });
+
+          console.log(
+            `Stock for ${item.rawMaterialName} updated to ${updateStock?.currentStock}`
+          );
 
           // Update related alerts to resolved
           await prismaDB.alert.deleteMany({
@@ -2362,6 +2529,8 @@ export const restockPurchase = async (req: Request, res: Response) => {
             },
           });
 
+          console.log(`Alerts for ${item.rawMaterialName} resolved`);
+
           const findRecipeIngredients = await prisma.recipeIngredient.findFirst(
             {
               where: {
@@ -2369,11 +2538,20 @@ export const restockPurchase = async (req: Request, res: Response) => {
               },
             }
           );
+          console.log(
+            `findRecipeIngredients for ${item.rawMaterialName} is ${findRecipeIngredients?.id}`
+          );
           if (findRecipeIngredients) {
             const recipeCostWithQuantity =
               Number(findRecipeIngredients?.quantity) /
               Number(rawMaterial?.conversionFactor);
+            console.log(
+              `recipeCostWithQuantity for ${item.rawMaterialName} is ${recipeCostWithQuantity}`
+            );
             const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+            console.log(
+              `ingredientCost for ${item.rawMaterialName} is ${ingredientCost}`
+            );
             // Update linked `RecipeIngredient` cost
             await prisma.recipeIngredient.updateMany({
               where: {
@@ -2383,15 +2561,31 @@ export const restockPurchase = async (req: Request, res: Response) => {
                 cost: ingredientCost,
               },
             });
+            console.log(`RecipeIngredient for ${item.rawMaterialName} updated`);
           }
         }
       })
     );
 
     // Step 2: Recalculate `ItemRecipe` gross margin and related fields
+    console.log(
+      `Recalculate ItemRecipe gross margin and related fields Inititated`
+    );
     const recipesToUpdate = await prisma.itemRecipe.findMany({
       where: {
         restaurantId: outlet.id,
+        ingredients: {
+          some: {
+            rawMaterial: {
+              restaurantId: outlet.id,
+              id: {
+                in: validateFields?.rawMaterials?.map(
+                  (item) => item.rawMaterialId
+                ),
+              },
+            },
+          },
+        },
       },
       include: {
         ingredients: {
@@ -2401,9 +2595,10 @@ export const restockPurchase = async (req: Request, res: Response) => {
         },
       },
     });
-
+    console.log(`Recipes to update found ${recipesToUpdate.length}`);
     await Promise.all(
       recipesToUpdate.map(async (recipe) => {
+        console.log(`Updating recipe ${recipe.name}`);
         const totalCost = recipe.ingredients.reduce(
           (sum, ingredient) =>
             sum +
@@ -2412,7 +2607,9 @@ export const restockPurchase = async (req: Request, res: Response) => {
               Number(ingredient?.rawMaterial?.purchasedPricePerItem),
           0
         );
+        console.log(`Total cost for ${recipe.name} is ${totalCost}`);
         const grossMargin = Number(recipe.itemPrice as number) - totalCost;
+        console.log(`Gross margin for ${recipe.name} is ${grossMargin}`);
 
         await prisma.itemRecipe.update({
           where: {
@@ -2424,8 +2621,11 @@ export const restockPurchase = async (req: Request, res: Response) => {
           },
         });
 
+        console.log(`Recipe ${recipe.name} updated`);
+
         // Update linked entities
-        if (recipe.menuId) {
+        if (recipe?.menuId) {
+          console.log(`Updating menu item ${recipe.name}`);
           await prisma.menuItem.update({
             where: {
               id: recipe.menuId,
@@ -2438,6 +2638,7 @@ export const restockPurchase = async (req: Request, res: Response) => {
         }
 
         if (recipe.menuVariantId) {
+          console.log(`Updating menu variant ${recipe.name}`);
           await prisma.menuItemVariant.update({
             where: {
               id: recipe.menuVariantId,
@@ -2450,6 +2651,7 @@ export const restockPurchase = async (req: Request, res: Response) => {
         }
 
         if (recipe.addonItemVariantId) {
+          console.log(`Updating addon variant ${recipe.name}`);
           await prisma.addOnVariants.update({
             where: {
               id: recipe.addonItemVariantId,
@@ -2463,7 +2665,9 @@ export const restockPurchase = async (req: Request, res: Response) => {
       })
     );
 
+    console.log(`All recipes updated`);
     // Step 3: Update purchase details
+    console.log(`Updating purchase details`);
     const updatePurchase = await prisma.purchase.update({
       where: {
         id: findPurchase?.id,
@@ -2498,6 +2702,7 @@ export const restockPurchase = async (req: Request, res: Response) => {
       redis.del(`${outletId}-vendors`),
       redis.del(`${outletId}-raw-materials`),
       redis.del(`${outletId}-purchases`),
+      redis.del(`alerts-${outletId}`),
     ]);
 
     websocketManager.notifyClients(outletId, "NEW_ALERT");
@@ -2647,27 +2852,11 @@ export const settlePayForRaisedPurchase = async (
 
   if (transaction?.id) {
     // Step 4: Refresh Redis cache
-    const allPurchases = await prismaDB.purchase.findMany({
-      where: {
-        restaurantId: outlet?.id,
-      },
-      include: {
-        purchaseItems: {
-          include: {
-            purchaseUnit: true,
-            rawMaterial: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
 
     await Promise.all([
-      getfetchOutletStocksToRedis(outletId),
-      redis.set(`${outletId}-purchases`, JSON.stringify(allPurchases)),
-      fetchOutletRawMaterialsToRedis(outlet?.id),
+      redis.del(`${outletId}-stocks`),
+      redis.del(`${outletId}-purchases`),
+      redis.del(`${outletId}-raw-materials`),
     ]);
 
     return res.json({
@@ -2709,6 +2898,16 @@ export const updateStockRawMaterial = async (req: Request, res: Response) => {
     );
   }
 
+  if (
+    findRawMaterial?.purchasedStock &&
+    stock > findRawMaterial?.purchasedStock
+  ) {
+    throw new BadRequestsException(
+      "You cannot update the stock to a value greater than the last purchased stock",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   await prismaDB.rawMaterial.update({
     where: {
       restaurantId: outlet?.id,
@@ -2727,26 +2926,9 @@ export const updateStockRawMaterial = async (req: Request, res: Response) => {
       status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
     },
   });
-  const alerts = await prismaDB.alert.findMany({
-    where: {
-      restaurantId: outletId,
-      status: {
-        in: ["PENDING"],
-      },
-    },
-    select: {
-      id: true,
-      type: true,
-      status: true,
-      priority: true,
-      href: true,
-      message: true,
-      createdAt: true,
-    },
-  });
 
   websocketManager.notifyClients(outletId, "NEW_ALERT");
-  await redis.set(`alerts-${outletId}`, JSON.stringify(alerts));
+  await redis.del(`alerts-${outletId}`);
   await getfetchOutletStocksToRedis(outletId);
   return res.json({
     success: true,
@@ -3079,7 +3261,7 @@ export const allTableStocks = async (req: Request, res: Response) => {
     purchasedPrice: rawItem?.purchasedPrice,
     lastPurchasedPrice: rawItem?.lastPurchasedPrice,
     purchasedPricePerItem: rawItem?.purchasedPricePerItem,
-    purchasedStock: `${rawItem?.currentStock?.toFixed(2)} - ${
+    purchasedStock: `${rawItem?.purchasedStock?.toFixed(2)} - ${
       rawItem?.purchasedUnit
     }`,
     createdAt: rawItem?.createdAt,
@@ -3642,5 +3824,92 @@ export const getAllTableRawMaterialUnit = async (
   return res.json({
     success: true,
     data: { totalCount, units: formanttedUnits },
+  });
+};
+
+export const deleteItemRecipe = async (req: Request, res: Response) => {
+  const { outletId, id: recipeId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Use transaction to handle both deletion and menu updates
+  await prismaDB.$transaction(async (prisma) => {
+    // First, find all related items that use this recipe
+    const recipe = await prisma.itemRecipe.findUnique({
+      where: { id: recipeId },
+      include: {
+        menuItem: true, // Get linked menu items
+        menuItemVariant: true, // Get linked menu variants
+        addOnItemVariant: true, // Get linked addon variants
+      },
+    });
+
+    if (!recipe) {
+      throw new NotFoundException("Recipe Not Found", ErrorCode.NOT_FOUND);
+    }
+
+    // Update menu items that use this recipe
+    if (recipe.menuItem?.length > 0) {
+      await prisma.menuItem.updateMany({
+        where: {
+          itemRecipeId: recipeId,
+        },
+        data: {
+          chooseProfit: "manualProfit",
+          grossProfitType: "INR",
+          itemRecipeId: null, // Remove the recipe reference
+        },
+      });
+    }
+
+    // Update menu variants that use this recipe
+    if (recipe.menuItemVariant?.length > 0) {
+      await prisma.menuItemVariant.updateMany({
+        where: {
+          itemRecipeId: recipeId,
+        },
+        data: {
+          chooseProfit: "manualProfit",
+          grossProfitType: "INR",
+          itemRecipeId: null, // Remove the recipe reference
+        },
+      });
+    }
+
+    // Update addon variants that use this recipe
+    if (recipe.addOnItemVariant?.length > 0) {
+      await prisma.addOnVariants.updateMany({
+        where: {
+          itemRecipeId: recipeId,
+        },
+        data: {
+          chooseProfit: "manualProfit",
+          grossProfitType: "INR",
+          itemRecipeId: null, // Remove the recipe reference
+        },
+      });
+    }
+
+    // Finally, delete the recipe
+    await prisma.itemRecipe.delete({
+      where: {
+        id: recipeId,
+      },
+    });
+  });
+
+  // Clear relevant cache
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+  return res.json({
+    success: true,
+    message: "Recipe deleted and linked items updated successfully",
   });
 };

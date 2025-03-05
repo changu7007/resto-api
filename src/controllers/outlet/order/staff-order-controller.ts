@@ -24,7 +24,12 @@ import {
 import { getFetchAllNotificationToRedis } from "../../../lib/outlet/get-items";
 import { websocketManager } from "../../../services/ws";
 import { BadRequestsException } from "../../../exceptions/bad-request";
-import { OrderStatus, OrderType, CashRegister } from "@prisma/client";
+import {
+  OrderStatus,
+  OrderType,
+  CashRegister,
+  PaymentMethod,
+} from "@prisma/client";
 import { getYear } from "date-fns";
 import { getfetchOutletStocksToRedis } from "../../../lib/outlet/get-inventory";
 import { inviteCode, menuCardSchema } from "./orderOutletController";
@@ -80,6 +85,10 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     tableId,
     paymentMethod,
     orderMode,
+    isSplitPayment,
+    splitPayments,
+    receivedAmount,
+    changeAmount,
   } = req.body;
 
   if (isValid === true && !phoneNo) {
@@ -95,16 +104,47 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     throw new BadRequestsException("Invalid Staff", ErrorCode.UNAUTHORIZED);
   }
 
-  if (isPaid === true && !paymentMethod) {
+  // Normal payment validation
+  if (isPaid === true && !isSplitPayment && !paymentMethod) {
     throw new BadRequestsException(
       "Please Select Payment Mode",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
+  // Split payment validation
+  if (isPaid === true && isSplitPayment === true) {
+    if (
+      !splitPayments ||
+      !Array.isArray(splitPayments) ||
+      splitPayments.length === 0
+    ) {
+      throw new BadRequestsException(
+        "Split payment selected but no payment details provided",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    // Calculate total amount from split payments
+    const totalPaid = splitPayments.reduce(
+      (sum, payment) => sum + Number(payment.amount),
+      0
+    );
+
+    // Validate split payment total matches bill total (allow small difference for rounding)
+    if (Math.abs(totalPaid - totalAmount) > 0.1) {
+      throw new BadRequestsException(
+        `Total split payment amount (${totalPaid.toFixed(
+          2
+        )}) must equal bill total (${totalAmount.toFixed(2)})`,
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+  }
+
   let cashRegister: CashRegister | null = null;
 
-  if (isPaid === true && paymentMethod) {
+  if (isPaid === true) {
     const findCashRegister = await prismaDB.cashRegister.findFirst({
       where: { id: cashRegisterId, status: "OPEN" },
     });
@@ -206,15 +246,29 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
         orderType: orderType,
         username: username ?? findStaff.name,
         phoneNo: phoneNo ?? null,
-
         staffId: findStaff.id,
         customerId: isValid === true ? customer?.id : null,
-        paymentMethod: isPaid ? paymentMethod : null,
+        paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
         tableId: tableId,
         isPaid: isPaid,
         restaurantId: getOutlet.id,
         createdBy: `${findStaff?.name} (${findStaff?.role})`,
         subTotal: isPaid ? totalAmount : null,
+        amountReceived:
+          isPaid && !isSplitPayment && receivedAmount ? receivedAmount : null,
+        change: isPaid && !isSplitPayment && changeAmount ? changeAmount : null,
+        isSplitPayment: isPaid && isSplitPayment ? true : false,
+        splitPayments:
+          isPaid && isSplitPayment && splitPayments
+            ? {
+                create: splitPayments.map((payment: any) => ({
+                  method: payment.method,
+                  amount: Number(payment.amount),
+                  note: `Part of split payment for bill #${billNo}`,
+                  createdBy: `${findStaff?.name} (${findStaff?.role})`,
+                })),
+              }
+            : undefined,
         orders: {
           create: {
             restaurantId: getOutlet.id,
@@ -232,6 +286,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
             totalGrossProfit: totalGrossProfit,
             generatedOrderId: orderId,
             orderType: orderType,
+            paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
             orderItems: {
               create: orderItems?.map((item: any) => ({
                 menuId: item?.menuId,
@@ -298,6 +353,21 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
                               name: matchedVaraint?.name,
                               type: matchedVaraint?.type,
                               price: Number(matchedVaraint?.price),
+                              gst: Number(
+                                item?.menuItem.menuItemVariants.find(
+                                  (v: any) => v?.id === item?.sizeVariantsId
+                                )?.gst
+                              ),
+                              netPrice: Number(
+                                item?.menuItem.menuItemVariants.find(
+                                  (v: any) => v?.id === item?.sizeVariantsId
+                                )?.netPrice as string
+                              ).toString(),
+                              grossProfit: Number(
+                                item?.menuItem.menuItemVariants.find(
+                                  (v: any) => v?.id === item?.sizeVariantsId
+                                )?.grossProfit
+                              ),
                             };
                           }
                         ),
@@ -393,18 +463,43 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     }
 
     if (isPaid && cashRegister?.id) {
-      // Create cash transaction for the order
-      await prismaDB.cashTransaction.create({
-        data: {
-          registerId: cashRegister?.id,
-          amount: totalAmount,
-          type: "CASH_IN",
-          source: "ORDER",
-          description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
-          paymentMethod: paymentMethod,
-          performedBy: staffId,
-        },
-      });
+      const registerIdString = cashRegister.id; // Ensure we have a string value
+
+      if (isSplitPayment && splitPayments && splitPayments.length > 0) {
+        // Create multiple cash transactions for split payments
+        await Promise.all(
+          splitPayments.map(async (payment: any) => {
+            await prismaDB.cashTransaction.create({
+              data: {
+                registerId: registerIdString,
+                amount: Number(payment.amount),
+                type: "CASH_IN",
+                source: "ORDER",
+                description: `Split Payment (${payment.method}) - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
+                paymentMethod: payment.method,
+                performedBy: staffId,
+                orderId: orderSession.id,
+                referenceId: orderSession.id, // Add reference ID for easier tracing
+              },
+            });
+          })
+        );
+      } else {
+        // Create a single cash transaction for regular payment
+        await prismaDB.cashTransaction.create({
+          data: {
+            registerId: registerIdString,
+            amount: totalAmount,
+            type: "CASH_IN",
+            source: "ORDER",
+            description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
+            paymentMethod: paymentMethod,
+            performedBy: staffId,
+            orderId: orderSession.id,
+            referenceId: orderSession.id, // Add reference ID for easier tracing
+          },
+        });
+      }
     }
 
     return orderSession;

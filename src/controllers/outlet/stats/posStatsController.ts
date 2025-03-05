@@ -354,6 +354,22 @@ export const getPosStats = async (req: Request, res: Response) => {
       getTodayOrdersByHour(),
     ]);
 
+  // Filter order types based on outlet type
+  const isBakeryOrExpress =
+    outlet.outletType === "BAKERY" || outlet.outletType === "EXPRESS";
+
+  const filterOrderTypes = (data: any[]) => {
+    return data.map((item) => {
+      const filtered = { ...item };
+      if (isBakeryOrExpress) {
+        delete filtered.dineIn;
+      } else {
+        delete filtered.express;
+      }
+      return filtered;
+    });
+  };
+
   res.json({
     success: true,
     data: {
@@ -362,7 +378,7 @@ export const getPosStats = async (req: Request, res: Response) => {
         percentageChange: calculatePercentageChange(
           currentRevenue._sum.totalAmount || 0,
           previousRevenue._sum.totalAmount || 0
-        ),
+        ).toFixed(2),
       },
       activeOrders,
       totalOrders: {
@@ -375,10 +391,20 @@ export const getPosStats = async (req: Request, res: Response) => {
         occupancyRate: Math.round((activeTables / tables._count.id) * 100),
       },
       orderingGrowth: {
-        growth,
-        todays: todayOrdersByHour,
-        daily: dailyStats,
-        weekly: weeklyStats,
+        growth: isBakeryOrExpress
+          ? {
+              takeaway: growth.takeaway,
+              delivery: growth.delivery,
+              express: growth.express,
+            }
+          : {
+              dineIn: growth.dineIn,
+              takeaway: growth.takeaway,
+              delivery: growth.delivery,
+            },
+        todays: filterOrderTypes(todayOrdersByHour),
+        daily: filterOrderTypes(dailyStats),
+        weekly: filterOrderTypes(weeklyStats),
       },
     },
   });

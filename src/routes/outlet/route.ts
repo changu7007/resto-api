@@ -150,7 +150,9 @@ import {
 import {
   allStocks,
   allTableStocks,
+  cancelRequestPurchase,
   createItemRecipe,
+  createRaiseRequestPurchase,
   createRawMaterial,
   createRawMaterialCategory,
   createRequestPurchase,
@@ -158,6 +160,7 @@ import {
   createVendor,
   createVendorCategory,
   deleteCategoryById,
+  deleteItemRecipe,
   deleteRawMaterialById,
   deleteRequestPurchase,
   deleteUnitById,
@@ -1056,6 +1059,11 @@ outletRoute.post(
   isAuthMiddelware,
   errorHandler(createRequestPurchase)
 );
+outletRoute.post(
+  "/:outletId/inventory/raise-request-purchase",
+  isAuthMiddelware,
+  errorHandler(createRaiseRequestPurchase)
+);
 outletRoute.patch(
   "/:outletId/inventory/update-request-purchase/:id",
   isAuthMiddelware,
@@ -1065,6 +1073,11 @@ outletRoute.delete(
   "/:outletId/inventory/delete-request-purchase/:id",
   isAuthMiddelware,
   errorHandler(deleteRequestPurchase)
+);
+outletRoute.patch(
+  "/:outletId/inventory/cancel-request-purchase/:id",
+  isAuthMiddelware,
+  errorHandler(cancelRequestPurchase)
 );
 outletRoute.post(
   "/:outletId/inventory/validate-purchase/:id",
@@ -1141,6 +1154,11 @@ outletRoute.patch(
   "/:outletId/inventory/update-recipe/:id",
   isAuthMiddelware,
   errorHandler(updateItemRecipe)
+);
+outletRoute.delete(
+  "/:outletId/inventory/delete-recipe/:id",
+  isAuthMiddelware,
+  errorHandler(deleteItemRecipe)
 );
 
 outletRoute.post(

@@ -83,6 +83,40 @@ const createSubDomain = (req, res) => __awaiter(void 0, void 0, void 0, function
     if (outlet === undefined || !outlet.id) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
+    const findSubDomain = yield __1.prismaDB.site.findFirst({
+        where: {
+            subdomain: subdomain,
+        },
+    });
+    if (findSubDomain === null || findSubDomain === void 0 ? void 0 : findSubDomain.id) {
+        throw new bad_request_1.BadRequestsException("Subdomain already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (subdomain.match(/[^a-zA-Z0-9-]/)) {
+        throw new bad_request_1.BadRequestsException("Subdomain cannot contain spaces, dashes, or underscores", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (subdomain.length < 3) {
+        throw new bad_request_1.BadRequestsException("Subdomain must be at least 3 characters long", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (subdomain.length > 30) {
+        throw new bad_request_1.BadRequestsException("Subdomain must be less than 30 characters long", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (subdomain.startsWith("-") || subdomain.endsWith("-")) {
+        throw new bad_request_1.BadRequestsException("Subdomain cannot start or end with a dash", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (subdomain.includes(" ")) {
+        throw new bad_request_1.BadRequestsException("Subdomain cannot contain spaces", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if (subdomain.includes("..")) {
+        throw new bad_request_1.BadRequestsException("Subdomain cannot contain multiple dots", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const restaurantHasDomain = yield __1.prismaDB.site.findFirst({
+        where: {
+            restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+        },
+    });
+    if (restaurantHasDomain === null || restaurantHasDomain === void 0 ? void 0 : restaurantHasDomain.id) {
+        throw new bad_request_1.BadRequestsException("Restaurant already has a domain", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     yield __1.prismaDB.site.create({
         data: {
             // @ts-ignore
@@ -99,7 +133,8 @@ const createSubDomain = (req, res) => __awaiter(void 0, void 0, void 0, function
         },
     });
     if (getDomain === null || getDomain === void 0 ? void 0 : getDomain.id) {
-        yield redis_1.redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+        yield redis_1.redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain), "EX", 60 * 60 // 1 hour
+        );
     }
     return res.json({
         success: true,

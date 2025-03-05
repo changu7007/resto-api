@@ -6,6 +6,8 @@ import { ErrorCode } from "../../../exceptions/root";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import { generateSlug } from "../../../lib/utils";
+import { z } from "zod";
+import { GstType } from "@prisma/client";
 
 export const getAddon = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -38,21 +40,46 @@ export const getAddon = async (req: Request, res: Response) => {
   });
 };
 
+const formSchema = z.object({
+  title: z.string().min(1, { message: "AddOn Group Name required" }),
+  description: z.string().optional(),
+  minSelect: z.coerce.number().optional().default(0),
+  maxSelect: z.coerce.number().optional().default(0),
+  addOnVariants: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string().min(1, { message: "addon name required" }),
+        netPrice: z.string().min(1, { message: "net price required" }),
+        price: z.string().min(1, { message: "price required" }),
+        gst: z.coerce.number({ required_error: "GST required" }).min(0, {
+          message: "GST required",
+        }),
+        gstType: z.nativeEnum(GstType, {
+          required_error: "GST Type required",
+        }),
+        chooseProfit: z
+          .enum(["manualProfit", "itemRecipe"])
+          .optional()
+          .default("manualProfit"), // Default to "manualProfit",
+        grossProfit: z.coerce.number().optional().default(0),
+        grossProfitType: z.enum(["INR", "PER"]).optional().default("INR"), // Default to "INR"
+        grossProfitPer: z.string().optional(),
+        type: z.string().min(1),
+        recipeId: z.string().optional(),
+      })
+    )
+    .min(1, { message: "Atleast 1 AddOn Variant is Required" }),
+});
+
 export const createAddOn = async (req: Request, res: Response) => {
   const { outletId } = req.params;
 
-  const { title, description, addOnVariants } = req.body;
+  const { data, error } = formSchema.safeParse(req.body);
 
-  if (!title) {
+  if (error) {
     throw new BadRequestsException(
-      "Addon Title is Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
-
-  if (!addOnVariants.length) {
-    throw new BadRequestsException(
-      "Atleast 1 AddOn Variants is Required",
+      error.errors[0].message,
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
@@ -63,29 +90,52 @@ export const createAddOn = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
+  const slug = generateSlug(data.title);
+
+  const findSlug = await prismaDB.addOns.findFirst({
+    where: {
+      slug,
+    },
+  });
+
+  if (findSlug) {
+    throw new BadRequestsException(
+      "AddOn Group Name already exists",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   await prismaDB.addOns.create({
     data: {
-      title,
-      slug: generateSlug(title),
-      description,
+      title: data.title,
+      slug,
+      description: data.description,
+      minSelect: data.minSelect,
+      maxSelect: data.maxSelect,
       addOnVariants: {
-        create: addOnVariants.map((addOn: any) => ({
+        create: data.addOnVariants.map((addOn: any) => ({
           name: addOn.name,
           slug: generateSlug(addOn.name),
           price: addOn.price,
           type: addOn.type,
+          restaurantId: outlet.id,
+          gst: addOn.gst,
+          gstType: addOn.gstType,
+          chooseProfit: addOn.chooseProfit,
+          grossProfit: addOn.grossProfit,
+          grossProfitType: addOn.grossProfitType,
+          grossProfitPer:
+            addOn?.grossProfitType === "PER" ? addOn.grossProfitPer : null,
+          itemRecipeId:
+            addOn?.chooseProfit === "itemRecipe" ? addOn.recipeId : null,
+          netPrice: addOn.netPrice,
         })),
       },
       restaurantId: outlet.id,
     },
   });
 
-  const addOn = await prismaDB.addOns.findMany({
-    where: {
-      restaurantId: outlet.id,
-    },
-  });
-  await redis.set(`o-${outletId}-addons`, JSON.stringify(addOn));
+  await redis.del(`o-${outletId}-addons`);
 
   return res.json({
     success: true,
@@ -131,16 +181,16 @@ export const deleteAddon = async (req: Request, res: Response) => {
 export const updateAddon = async (req: Request, res: Response) => {
   const { outletId, addOnId } = req.params;
 
-  const { title, description, addOnVariants } = req.body;
+  const { data, error } = formSchema.safeParse(req.body);
 
-  if (!title) {
+  if (error) {
     throw new BadRequestsException(
-      "Addon Title is Required",
+      error.errors[0].message,
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  if (!addOnVariants.length) {
+  if (!data.addOnVariants.length) {
     throw new BadRequestsException(
       "Atleast 1 AddOn Variants is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
@@ -161,7 +211,7 @@ export const updateAddon = async (req: Request, res: Response) => {
 
   const existingVariants = addOn.addOnVariants;
 
-  const updates = addOnVariants.map((variant: any) => {
+  const updates = data.addOnVariants.map((variant: any) => {
     const existingVariant = existingVariants.find((ev) => ev.id === variant.id);
     if (existingVariant) {
       // Update existing variant
@@ -169,8 +219,18 @@ export const updateAddon = async (req: Request, res: Response) => {
         where: { id: existingVariant.id },
         data: {
           name: variant.name,
+          netPrice: variant.netPrice,
           price: variant.price,
           type: variant.type,
+          gst: variant.gst,
+          gstType: variant.gstType,
+          chooseProfit: variant.chooseProfit,
+          grossProfit: variant.grossProfit,
+          grossProfitType: variant.grossProfitType,
+          grossProfitPer:
+            variant?.grossProfitType === "PER" ? variant.grossProfitPer : null,
+          itemRecipeId:
+            variant.chooseProfit === "itemRecipe" ? variant.recipeId : null,
         },
       });
     } else {
@@ -183,13 +243,25 @@ export const updateAddon = async (req: Request, res: Response) => {
           price: variant.price,
           type: variant.type,
           addonId: addOn.id,
+          gst: variant.gst,
+          gstType: variant.gstType,
+          chooseProfit: variant.chooseProfit,
+          grossProfit: variant.grossProfit,
+          grossProfitType: variant.grossProfitType,
+          grossProfitPer:
+            variant?.grossProfitType === "PER" ? variant.grossProfitPer : null,
+          itemRecipeId:
+            variant.chooseProfit === "itemRecipe" ? variant.recipeId : null,
+          netPrice: variant.netPrice,
         },
       });
     }
   });
 
   // Identify variants to delete
-  const variantIdsToKeep = addOnVariants.map((v: any) => v.id).filter(Boolean);
+  const variantIdsToKeep = data.addOnVariants
+    .map((v: any) => v.id)
+    .filter(Boolean);
   const variantsToDelete = existingVariants.filter(
     (ev) => !variantIdsToKeep.includes(ev.id)
   );
@@ -199,7 +271,7 @@ export const updateAddon = async (req: Request, res: Response) => {
     // Update AddOn
     prismaDB.addOns.update({
       where: { id: addOn.id },
-      data: { title, description },
+      data: { title: data.title, description: data.description },
     }),
     // Update or create variants
     ...updates,
@@ -211,12 +283,7 @@ export const updateAddon = async (req: Request, res: Response) => {
     }),
   ]);
 
-  const addOns = await prismaDB.addOns.findMany({
-    where: {
-      restaurantId: outlet.id,
-    },
-  });
-  await redis.set(`o-${outletId}-addons`, JSON.stringify(addOns));
+  await redis.del(`o-${outletId}-addons`);
 
   return res.json({
     success: true,

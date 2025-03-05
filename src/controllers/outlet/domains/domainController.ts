@@ -92,6 +92,74 @@ export const createSubDomain = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
+  const findSubDomain = await prismaDB.site.findFirst({
+    where: {
+      subdomain: subdomain,
+    },
+  });
+
+  if (findSubDomain?.id) {
+    throw new BadRequestsException(
+      "Subdomain already exists",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (subdomain.match(/[^a-zA-Z0-9-]/)) {
+    throw new BadRequestsException(
+      "Subdomain cannot contain spaces, dashes, or underscores",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (subdomain.length < 3) {
+    throw new BadRequestsException(
+      "Subdomain must be at least 3 characters long",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (subdomain.length > 30) {
+    throw new BadRequestsException(
+      "Subdomain must be less than 30 characters long",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (subdomain.startsWith("-") || subdomain.endsWith("-")) {
+    throw new BadRequestsException(
+      "Subdomain cannot start or end with a dash",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (subdomain.includes(" ")) {
+    throw new BadRequestsException(
+      "Subdomain cannot contain spaces",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (subdomain.includes("..")) {
+    throw new BadRequestsException(
+      "Subdomain cannot contain multiple dots",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const restaurantHasDomain = await prismaDB.site.findFirst({
+    where: {
+      restaurantId: outlet?.id,
+    },
+  });
+
+  if (restaurantHasDomain?.id) {
+    throw new BadRequestsException(
+      "Restaurant already has a domain",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   await prismaDB.site.create({
     data: {
       // @ts-ignore
@@ -110,7 +178,12 @@ export const createSubDomain = async (req: Request, res: Response) => {
   });
 
   if (getDomain?.id) {
-    await redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+    await redis.set(
+      `o-domain-${outletId}`,
+      JSON.stringify(getDomain),
+      "EX",
+      60 * 60 // 1 hour
+    );
   }
 
   return res.json({

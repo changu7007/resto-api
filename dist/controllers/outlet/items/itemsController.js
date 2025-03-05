@@ -243,57 +243,25 @@ const getItemsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, funct
         }
     }
     const formattedItems = sendItems === null || sendItems === void 0 ? void 0 : sendItems.map((menuItem) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h;
+        var _a;
         return ({
             id: menuItem === null || menuItem === void 0 ? void 0 : menuItem.id,
             shortCode: menuItem === null || menuItem === void 0 ? void 0 : menuItem.shortCode,
             categoryId: menuItem === null || menuItem === void 0 ? void 0 : menuItem.categoryId,
             categoryName: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.category) === null || _a === void 0 ? void 0 : _a.name,
             name: menuItem === null || menuItem === void 0 ? void 0 : menuItem.name,
-            images: (_b = menuItem === null || menuItem === void 0 ? void 0 : menuItem.images) === null || _b === void 0 ? void 0 : _b.map((image) => ({
-                id: image === null || image === void 0 ? void 0 : image.id,
-                url: image === null || image === void 0 ? void 0 : image.url,
-            })),
+            images: menuItem === null || menuItem === void 0 ? void 0 : menuItem.images,
             type: menuItem === null || menuItem === void 0 ? void 0 : menuItem.type,
             price: menuItem === null || menuItem === void 0 ? void 0 : menuItem.price,
             netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
-            itemRecipe: {
-                id: (_c = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _c === void 0 ? void 0 : _c.id,
-                menuId: (_d = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _d === void 0 ? void 0 : _d.menuId,
-                menuVariantId: (_e = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _e === void 0 ? void 0 : _e.menuVariantId,
-                addonItemVariantId: (_f = menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe) === null || _f === void 0 ? void 0 : _f.addonItemVariantId,
-            },
+            itemRecipe: menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe,
             gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
             grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
             isVariants: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isVariants,
             isAddOns: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isAddons,
-            menuItemVariants: (_g = menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuItemVariants) === null || _g === void 0 ? void 0 : _g.map((variant) => {
-                var _a;
-                return ({
-                    id: variant === null || variant === void 0 ? void 0 : variant.id,
-                    variantName: (_a = variant === null || variant === void 0 ? void 0 : variant.variant) === null || _a === void 0 ? void 0 : _a.name,
-                    price: variant === null || variant === void 0 ? void 0 : variant.price,
-                    netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
-                    gst: variant === null || variant === void 0 ? void 0 : variant.gst,
-                    grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
-                    type: variant === null || variant === void 0 ? void 0 : variant.foodType,
-                });
-            }),
+            menuItemVariants: menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuItemVariants,
             favourite: true,
-            menuGroupAddOns: (_h = menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuGroupAddOns) === null || _h === void 0 ? void 0 : _h.map((addOns) => {
-                var _a, _b, _c, _d;
-                return ({
-                    id: addOns === null || addOns === void 0 ? void 0 : addOns.id,
-                    addOnGroupName: (_a = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _a === void 0 ? void 0 : _a.title,
-                    description: (_b = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _b === void 0 ? void 0 : _b.description,
-                    addonVariants: (_d = (_c = addOns === null || addOns === void 0 ? void 0 : addOns.addOnGroups) === null || _c === void 0 ? void 0 : _c.addOnVariants) === null || _d === void 0 ? void 0 : _d.map((addOnVariant) => ({
-                        id: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
-                        name: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.name,
-                        price: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.price,
-                        type: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.type,
-                    })),
-                });
-            }),
+            menuGroupAddOns: menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuGroupAddOns,
         });
     });
     return res.json({
@@ -606,7 +574,7 @@ const getVariantsForTable = (req, res) => __awaiter(void 0, void 0, void 0, func
     const formattedVariants = getVariants === null || getVariants === void 0 ? void 0 : getVariants.map((item) => ({
         id: item.id,
         name: item.name,
-        variantCategory: item.variantCategory.toLowerCase(),
+        variantCategory: item.variantCategory,
         createdAt: (0, date_fns_1.format)(item.createdAt, "MMMM do, yyyy"),
         updatedAt: (0, date_fns_1.format)(item.updatedAt, "MMMM do, yyyy"),
     }));
@@ -662,11 +630,18 @@ const getAddonsForTable = (req, res) => __awaiter(void 0, void 0, void 0, functi
             OR: [{ title: { contains: search, mode: "insensitive" } }],
             AND: filterConditions,
         },
+        include: {
+            addOnVariants: true,
+        },
         orderBy,
     });
     const formattedAddOns = getAddons === null || getAddons === void 0 ? void 0 : getAddons.map((addOn) => ({
         id: addOn.id,
-        addOnName: addOn.title,
+        title: addOn.title,
+        description: addOn.description,
+        minSelect: addOn.minSelect,
+        maxSelect: addOn.maxSelect,
+        addOnVariants: addOn.addOnVariants,
         status: addOn.status,
         createdAt: (0, date_fns_1.format)(addOn.createdAt, "MMMM do, yyyy"),
         updatedAt: (0, date_fns_1.format)(addOn.updatedAt, "MMMM do, yyyy"),
@@ -761,6 +736,9 @@ const menuSchema = zod_1.z.object({
     images: zod_1.z.object({ url: zod_1.z.string() }).array(),
     price: zod_1.z.string().optional(),
     netPrice: zod_1.z.string().optional(),
+    gstType: zod_1.z.nativeEnum(client_1.GstType, {
+        required_error: "You need to select a gst type.",
+    }),
     gst: zod_1.z.coerce.number().optional(),
     chooseProfit: zod_1.z
         .enum(["manualProfit", "itemRecipe"], {
@@ -783,6 +761,9 @@ const menuSchema = zod_1.z.object({
         price: zod_1.z.string(),
         netPrice: zod_1.z.string(),
         gst: zod_1.z.coerce.number().min(0, { message: "Gst Required" }),
+        gstType: zod_1.z.nativeEnum(client_1.GstType, {
+            required_error: "You need to select a gst type.",
+        }),
         chooseProfit: zod_1.z.enum(["manualProfit", "itemRecipe"], {
             required_error: "You need to select a gross profit type.",
         }),
@@ -875,6 +856,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
                         foodType: variant.foodType,
                         netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
                         gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                        gstType: variant === null || variant === void 0 ? void 0 : variant.gstType,
                         price: variant.price,
                         chooseProfit: variant === null || variant === void 0 ? void 0 : variant.chooseProfit,
                         grossProfitType: variant === null || variant === void 0 ? void 0 : variant.grossProfitType,
@@ -893,6 +875,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
                         foodType: variant.foodType,
                         netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
                         gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                        gstType: variant === null || variant === void 0 ? void 0 : variant.gstType,
                         price: variant.price,
                         chooseProfit: variant === null || variant === void 0 ? void 0 : variant.chooseProfit,
                         grossProfitType: variant === null || variant === void 0 ? void 0 : variant.grossProfitType,
@@ -974,6 +957,9 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 type: validateFields === null || validateFields === void 0 ? void 0 : validateFields.type,
                 price: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? "0" : validateFields === null || validateFields === void 0 ? void 0 : validateFields.price,
                 gst: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? null : validateFields === null || validateFields === void 0 ? void 0 : validateFields.gst,
+                gstType: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
+                    ? undefined
+                    : validateFields === null || validateFields === void 0 ? void 0 : validateFields.gstType,
                 netPrice: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? null : validateFields === null || validateFields === void 0 ? void 0 : validateFields.netPrice,
                 chooseProfit: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
                     ? null
@@ -1014,9 +1000,9 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
         }
     }));
     yield Promise.all([
-        (0, get_items_1.getOAllItems)(outlet.id),
-        (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id),
-        (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId),
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
     ]);
     return res.json({
         success: true,
@@ -1084,6 +1070,7 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             isOnline: validateFields === null || validateFields === void 0 ? void 0 : validateFields.isOnline,
             price: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? "0" : validateFields === null || validateFields === void 0 ? void 0 : validateFields.price,
             gst: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? null : validateFields === null || validateFields === void 0 ? void 0 : validateFields.gst,
+            gstType: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? undefined : validateFields === null || validateFields === void 0 ? void 0 : validateFields.gstType,
             netPrice: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) ? null : validateFields === null || validateFields === void 0 ? void 0 : validateFields.netPrice,
             chooseProfit: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
                 ? null
@@ -1107,6 +1094,7 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     foodType: variant === null || variant === void 0 ? void 0 : variant.foodType,
                     netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
                     gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                    gstType: variant === null || variant === void 0 ? void 0 : variant.gstType,
                     price: variant === null || variant === void 0 ? void 0 : variant.price,
                     chooseProfit: variant === null || variant === void 0 ? void 0 : variant.chooseProfit,
                     grossProfitType: variant === null || variant === void 0 ? void 0 : variant.grossProfitType,
@@ -1129,9 +1117,11 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             restaurantId: outlet.id,
         },
     });
-    yield (0, get_items_1.getOAllItems)(outlet.id);
-    yield (0, get_items_1.getOAllMenuCategoriesToRedis)(outlet.id);
-    yield (0, get_items_1.getOAllItemsForOnlineAndDelivery)(outletId);
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
     return res.json({
         success: true,
         item: menuItem,
@@ -1149,12 +1139,22 @@ const deleteItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     if (!(item === null || item === void 0 ? void 0 : item.id)) {
         throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
     }
-    yield __1.prismaDB.menuItem.delete({
-        where: {
-            restaurantId: outlet.id,
-            id: item === null || item === void 0 ? void 0 : item.id,
-        },
-    });
+    // Use transaction to delete both MenuItem and ItemRecipe
+    yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+        if (item.itemRecipeId) {
+            yield prisma.itemRecipe.delete({
+                where: {
+                    id: item.itemRecipeId,
+                },
+            });
+        }
+        yield prisma.menuItem.delete({
+            where: {
+                restaurantId: outlet.id,
+                id: item === null || item === void 0 ? void 0 : item.id,
+            },
+        });
+    }));
     yield Promise.all([
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
