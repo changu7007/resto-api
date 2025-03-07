@@ -57,4 +57,5 @@ authRoute.delete("/delete-pasword-token/:id", (0, error_handler_1.errorHandler)(
 authRoute.post("/create-reset-password-token", (0, error_handler_1.errorHandler)(appAuthController_1.generatePasswordResetToken));
 authRoute.post("/generate-pdf", (0, error_handler_1.errorHandler)(orderSessionController_1.generatePdfInvoice));
 authRoute.patch("/update-proile/:userId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(appAuthController_1.updateUserProfileDetails));
+authRoute.post("/pos-user-check", (0, error_handler_1.errorHandler)(pos_controller_1.POSUserCheck));
 exports.default = authRoute;

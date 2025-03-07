@@ -223,7 +223,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
             yield __1.prismaDB.cashTransaction.create({
                 data: {
                     registerId: cashRegister === null || cashRegister === void 0 ? void 0 : cashRegister.id,
-                    amount: subTotal,
+                    amount: paymentMethod === "CASH" ? receivedAmount : subTotal,
                     type: "CASH_IN",
                     source: "ORDER",
                     description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${(_g = updatedOrderSession === null || updatedOrderSession === void 0 ? void 0 : updatedOrderSession.orders) === null || _g === void 0 ? void 0 : _g.filter((order) => (order === null || order === void 0 ? void 0 : order.orderStatus) === "COMPLETED").length} x Items`,

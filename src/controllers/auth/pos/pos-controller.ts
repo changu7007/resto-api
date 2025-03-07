@@ -12,6 +12,7 @@ import { redis } from "../../../services/redis";
 import * as jwt from "jsonwebtoken";
 import { ACCESS_TOKEN, REFRESH_TOKEN } from "../../../secrets";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
+import { BadRequestsException } from "../../../exceptions/bad-request";
 
 export const StaffPOSLogin = async (req: Request, res: Response) => {
   // staffSchema.parse(req.body);
@@ -134,4 +135,37 @@ export const POSUpdateAccessToken = async (req: Request, res: Response) => {
       },
     });
   }
+};
+
+export const POSUserCheck = async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  const checkStaff = await prismaDB.staff.findFirst({
+    where: { email },
+    select: {
+      id: true,
+      password: true,
+      posAccess: true,
+    },
+  });
+
+  if (!checkStaff?.id) {
+    throw new NotFoundException("Staff Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  if (checkStaff?.password !== password) {
+    throw new BadRequestsException(
+      "Incorrect Password",
+      ErrorCode.INCORRECT_PASSWORD
+    );
+  }
+
+  if (checkStaff?.posAccess === false) {
+    throw new BadRequestsException(
+      "You Don't Have Access To POS",
+      ErrorCode.INCORRECT_PASSWORD
+    );
+  }
+
+  return res.json({ success: true });
 };

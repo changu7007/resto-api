@@ -283,7 +283,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
       await prismaDB.cashTransaction.create({
         data: {
           registerId: cashRegister?.id,
-          amount: subTotal,
+          amount: paymentMethod === "CASH" ? receivedAmount! : subTotal,
           type: "CASH_IN",
           source: "ORDER",
           description: `Order Sales - #${orderSession.billId} - ${

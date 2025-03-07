@@ -13,6 +13,7 @@ import LokiTransport from "winston-loki";
 import { createLogger } from "winston";
 import { cleanupMiddleware } from "./monitoring";
 import { initializeAlertCrons } from "./lib/alert-service";
+import { initializeEodScheduler } from "./lib/eod-scheduler";
 import { billQueueWorker } from "./services/bullmq/worker";
 import { setupCacheInvalidation } from "./controllers/outlet/stats/statsController";
 
@@ -65,6 +66,7 @@ app.use("/api", rootRouter);
 app.use(errorMiddelware);
 setupCacheInvalidation();
 initializeAlertCrons();
+initializeEodScheduler();
 
 export const prismaDB = new PrismaClient();
 

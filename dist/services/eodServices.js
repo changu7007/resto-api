@@ -16,13 +16,22 @@ class EodServices {
     processEndOfDay(restaurantId) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield __1.prismaDB.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
-                // Close all active check-ins
+                // Close all active check-ins that are either through staff or register linked to the restaurant
                 const activeCheckIns = yield tx.checkInRecord.findMany({
                     where: {
                         status: client_1.CheckInStatus.ACTIVE,
-                        register: {
-                            restaurantId,
-                        },
+                        OR: [
+                            {
+                                staff: {
+                                    restaurantId,
+                                },
+                            },
+                            {
+                                register: {
+                                    restaurantId,
+                                },
+                            },
+                        ],
                     },
                 });
                 for (const checkIn of activeCheckIns) {

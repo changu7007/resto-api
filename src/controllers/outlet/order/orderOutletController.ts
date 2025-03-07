@@ -1009,7 +1009,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         await prismaDB.cashTransaction.create({
           data: {
             registerId: registerIdString,
-            amount: totalAmount,
+            amount: paymentMethod === "CASH" ? receivedAmount : totalAmount,
             type: "CASH_IN",
             source: "ORDER",
             description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
@@ -1050,6 +1050,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     totalGrossProfit,
     orderItems,
     tableId,
+    note,
     paymentId,
   } = req.body;
 
@@ -1131,6 +1132,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
       gstPrice,
       totalAmount: totalAmount,
       totalGrossProfit,
+      note,
       orderItems: {
         create: orderItems?.map((item: any) => ({
           menuId: item?.menuId,

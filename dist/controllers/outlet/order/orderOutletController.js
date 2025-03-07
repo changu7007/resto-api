@@ -792,7 +792,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 yield __1.prismaDB.cashTransaction.create({
                     data: {
                         registerId: registerIdString,
-                        amount: totalAmount,
+                        amount: paymentMethod === "CASH" ? receivedAmount : totalAmount,
                         type: "CASH_IN",
                         source: "ORDER",
                         description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems === null || orderItems === void 0 ? void 0 : orderItems.length} x Items`,
@@ -820,7 +820,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
     var _j;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { customerId, isPaid, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentId, } = req.body;
+    const { customerId, isPaid, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, note, paymentId, } = req.body;
     // @ts-ignore
     if (customerId !== ((_j = req.user) === null || _j === void 0 ? void 0 : _j.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
@@ -879,6 +879,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             gstPrice,
             totalAmount: totalAmount,
             totalGrossProfit,
+            note,
             orderItems: {
                 create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
                     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;

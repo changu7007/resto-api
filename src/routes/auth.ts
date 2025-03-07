@@ -52,6 +52,7 @@ import { generatePdfInvoice } from "../controllers/outlet/order/orderSession/ord
 import {
   GetPOSUser,
   POSUpdateAccessToken,
+  POSUserCheck,
   StaffPOSLogin,
   StaffPOSLogout,
 } from "../controllers/auth/pos/pos-controller";
@@ -166,4 +167,6 @@ authRoute.patch(
   isAuthMiddelware,
   errorHandler(updateUserProfileDetails)
 );
+
+authRoute.post("/pos-user-check", errorHandler(POSUserCheck));
 export default authRoute;

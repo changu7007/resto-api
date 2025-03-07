@@ -32,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.POSUpdateAccessToken = exports.GetPOSUser = exports.StaffPOSLogout = exports.StaffPOSLogin = void 0;
+exports.POSUserCheck = exports.POSUpdateAccessToken = exports.GetPOSUser = exports.StaffPOSLogout = exports.StaffPOSLogin = void 0;
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -42,6 +42,7 @@ const redis_1 = require("../../../services/redis");
 const jwt = __importStar(require("jsonwebtoken"));
 const secrets_1 = require("../../../secrets");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
+const bad_request_1 = require("../../../exceptions/bad-request");
 const StaffPOSLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     // staffSchema.parse(req.body);
     // const { email, password } = req.body;
@@ -139,3 +140,25 @@ const POSUpdateAccessToken = (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 });
 exports.POSUpdateAccessToken = POSUpdateAccessToken;
+const POSUserCheck = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { email, password } = req.body;
+    const checkStaff = yield __1.prismaDB.staff.findFirst({
+        where: { email },
+        select: {
+            id: true,
+            password: true,
+            posAccess: true,
+        },
+    });
+    if (!(checkStaff === null || checkStaff === void 0 ? void 0 : checkStaff.id)) {
+        throw new not_found_1.NotFoundException("Staff Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    if ((checkStaff === null || checkStaff === void 0 ? void 0 : checkStaff.password) !== password) {
+        throw new bad_request_1.BadRequestsException("Incorrect Password", root_1.ErrorCode.INCORRECT_PASSWORD);
+    }
+    if ((checkStaff === null || checkStaff === void 0 ? void 0 : checkStaff.posAccess) === false) {
+        throw new bad_request_1.BadRequestsException("You Don't Have Access To POS", root_1.ErrorCode.INCORRECT_PASSWORD);
+    }
+    return res.json({ success: true });
+});
+exports.POSUserCheck = POSUserCheck;

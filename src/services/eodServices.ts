@@ -4,13 +4,22 @@ import { prismaDB } from "..";
 export class EodServices {
   async processEndOfDay(restaurantId: string) {
     return await prismaDB.$transaction(async (tx) => {
-      // Close all active check-ins
+      // Close all active check-ins that are either through staff or register linked to the restaurant
       const activeCheckIns = await tx.checkInRecord.findMany({
         where: {
           status: CheckInStatus.ACTIVE,
-          register: {
-            restaurantId,
-          },
+          OR: [
+            {
+              staff: {
+                restaurantId,
+              },
+            },
+            {
+              register: {
+                restaurantId,
+              },
+            },
+          ],
         },
       });
 

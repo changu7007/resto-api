@@ -28,6 +28,7 @@ const winston_loki_1 = __importDefault(require("winston-loki"));
 const winston_1 = require("winston");
 const monitoring_1 = require("./monitoring");
 const alert_service_1 = require("./lib/alert-service");
+const eod_scheduler_1 = require("./lib/eod-scheduler");
 const worker_1 = require("./services/bullmq/worker");
 const statsController_1 = require("./controllers/outlet/stats/statsController");
 const options = {
@@ -70,6 +71,7 @@ app.use("/api", routes_1.default);
 app.use(errors_1.errorMiddelware);
 (0, statsController_1.setupCacheInvalidation)();
 (0, alert_service_1.initializeAlertCrons)();
+(0, eod_scheduler_1.initializeEodScheduler)();
 exports.prismaDB = new client_1.PrismaClient();
 app.get("/health", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.json({
