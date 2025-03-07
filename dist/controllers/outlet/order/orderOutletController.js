@@ -488,7 +488,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     var _d;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { adminId, cashRegisterId, username, isPaid, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, orderMode, isSplitPayment, splitPayments, receivedAmount, changeAmount, } = req.body;
+    const { adminId, cashRegisterId, username, isPaid, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, note, orderMode, isSplitPayment, splitPayments, receivedAmount, changeAmount, } = req.body;
     if (isValid === true && !phoneNo) {
         throw new bad_request_1.BadRequestsException("please provide Phone No", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
@@ -646,6 +646,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                         paymentMethod: isPaid && !isSplitPayment ? paymentMethod : "SPLIT",
                         generatedOrderId: orderId,
                         orderType: orderType,
+                        note: note,
                         orderItems: {
                             create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
                                 var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;

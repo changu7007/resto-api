@@ -117,7 +117,6 @@ const getItemsBySearchForOnlineAndDelivery = (req, res) => __awaiter(void 0, voi
         let sendItems = [];
         if (search) {
             sendItems = items.filter((item) => {
-                var _a;
                 return (
                 // Fuzzy search on name
                 (0, algorithms_1.fuzzySearch)(item.name, search) ||
@@ -126,7 +125,7 @@ const getItemsBySearchForOnlineAndDelivery = (req, res) => __awaiter(void 0, voi
                     // Fuzzy search on description
                     (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
                     // Search in category name
-                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    (item.categoryName && (0, algorithms_1.fuzzySearch)(item.categoryName, search)) ||
                     // Match price range (if search term is a number)
                     (!isNaN(Number(search)) &&
                         Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
@@ -157,11 +156,10 @@ const getItemsBySearchForOnlineAndDelivery = (req, res) => __awaiter(void 0, voi
         let sendItems = [];
         if (search) {
             sendItems = items.filter((item) => {
-                var _a;
                 return ((0, algorithms_1.fuzzySearch)(item.name, search) ||
                     (item.shortCode && (0, algorithms_1.fuzzySearch)(item.shortCode, search)) ||
                     (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
-                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    (item.categoryName && (0, algorithms_1.fuzzySearch)(item.categoryName, search)) ||
                     (!isNaN(Number(search)) &&
                         Math.abs(Number(item.price) - Number(search)) <= 50));
             });
@@ -242,31 +240,9 @@ const getItemsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, funct
             yield redis_1.redis.set(categoryKey, JSON.stringify(sendItems), "EX", 300);
         }
     }
-    const formattedItems = sendItems === null || sendItems === void 0 ? void 0 : sendItems.map((menuItem) => {
-        var _a;
-        return ({
-            id: menuItem === null || menuItem === void 0 ? void 0 : menuItem.id,
-            shortCode: menuItem === null || menuItem === void 0 ? void 0 : menuItem.shortCode,
-            categoryId: menuItem === null || menuItem === void 0 ? void 0 : menuItem.categoryId,
-            categoryName: (_a = menuItem === null || menuItem === void 0 ? void 0 : menuItem.category) === null || _a === void 0 ? void 0 : _a.name,
-            name: menuItem === null || menuItem === void 0 ? void 0 : menuItem.name,
-            images: menuItem === null || menuItem === void 0 ? void 0 : menuItem.images,
-            type: menuItem === null || menuItem === void 0 ? void 0 : menuItem.type,
-            price: menuItem === null || menuItem === void 0 ? void 0 : menuItem.price,
-            netPrice: menuItem === null || menuItem === void 0 ? void 0 : menuItem.netPrice,
-            itemRecipe: menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipe,
-            gst: menuItem === null || menuItem === void 0 ? void 0 : menuItem.gst,
-            grossProfit: menuItem === null || menuItem === void 0 ? void 0 : menuItem.grossProfit,
-            isVariants: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isVariants,
-            isAddOns: menuItem === null || menuItem === void 0 ? void 0 : menuItem.isAddons,
-            menuItemVariants: menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuItemVariants,
-            favourite: true,
-            menuGroupAddOns: menuItem === null || menuItem === void 0 ? void 0 : menuItem.menuGroupAddOns,
-        });
-    });
     return res.json({
         success: true,
-        data: formattedItems,
+        data: sendItems,
     });
 });
 exports.getItemsByCategory = getItemsByCategory;
@@ -283,7 +259,6 @@ const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, functio
         let sendItems = [];
         if (search) {
             sendItems = items.filter((item) => {
-                var _a;
                 return (
                 // Fuzzy search on name
                 (0, algorithms_1.fuzzySearch)(item.name, search) ||
@@ -292,7 +267,7 @@ const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     // Fuzzy search on description
                     (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
                     // Search in category name
-                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    (item.categoryName && (0, algorithms_1.fuzzySearch)(item.categoryName, search)) ||
                     // Match price range (if search term is a number)
                     (!isNaN(Number(search)) &&
                         Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
@@ -323,11 +298,10 @@ const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, functio
         let sendItems = [];
         if (search) {
             sendItems = items.filter((item) => {
-                var _a;
                 return ((0, algorithms_1.fuzzySearch)(item.name, search) ||
                     (item.shortCode && (0, algorithms_1.fuzzySearch)(item.shortCode, search)) ||
                     (item.description && (0, algorithms_1.fuzzySearch)(item.description, search)) ||
-                    (((_a = item.category) === null || _a === void 0 ? void 0 : _a.name) && (0, algorithms_1.fuzzySearch)(item.category.name, search)) ||
+                    (item.categoryName && (0, algorithms_1.fuzzySearch)(item.categoryName, search)) ||
                     (!isNaN(Number(search)) &&
                         Math.abs(Number(item.price) - Number(search)) <= 50));
             });
@@ -999,11 +973,22 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
             });
         }
     }));
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
     yield Promise.all([
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
     ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
     return res.json({
         success: true,
         message: "Update Success ✅",
@@ -1117,11 +1102,22 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             restaurantId: outlet.id,
         },
     });
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
     yield Promise.all([
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
     ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
     return res.json({
         success: true,
         item: menuItem,
@@ -1155,11 +1151,22 @@ const deleteItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             },
         });
     }));
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
     yield Promise.all([
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
     ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
     return res.json({
         success: true,
         message: "Item Deleted ",
@@ -1303,11 +1310,22 @@ const enablePosStatus = (req, res) => __awaiter(void 0, void 0, void 0, function
             isDineIn: true,
         },
     });
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
     yield Promise.all([
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
     ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
     return res.json({
         success: true,
         message: "Item Updated",
@@ -1334,11 +1352,22 @@ const disablePosStatus = (req, res) => __awaiter(void 0, void 0, void 0, functio
             isDineIn: false,
         },
     });
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
     yield Promise.all([
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
     ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
     return res.json({
         success: true,
         message: "Item Updated",
@@ -1361,11 +1390,22 @@ const deleteItems = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             id: item === null || item === void 0 ? void 0 : item.id,
         },
     });
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
     yield Promise.all([
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
     ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
     return res.json({
         success: true,
         message: "Item Deleted",

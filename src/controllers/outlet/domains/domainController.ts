@@ -188,6 +188,8 @@ export const createSubDomain = async (req: Request, res: Response) => {
 
   return res.json({
     success: true,
+    id: getDomain?.id,
+    subdomain: getDomain?.subdomain,
     message: "SubDomain Created Successfully",
   });
 };

@@ -591,6 +591,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
     orderItems,
     tableId,
     paymentMethod,
+    note,
     orderMode,
     isSplitPayment,
     splitPayments,
@@ -805,6 +806,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
             paymentMethod: isPaid && !isSplitPayment ? paymentMethod : "SPLIT",
             generatedOrderId: orderId,
             orderType: orderType,
+            note: note,
             orderItems: {
               create: orderItems?.map((item: any) => ({
                 menuId: item?.menuId,

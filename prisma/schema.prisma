@@ -75,6 +75,8 @@ model Restaurant {
   targetMetrics         TargetMetrics?
   cashRegisters         CashRegister[]             @relation("RestaurantToCashRegister")
   vendorCategories      VendorCategory[]           @relation("RestaurantToVendorCategory")
+  printLocations        PrintLocation[]            @relation("RestaurantToPrintLocation")
+  printers              Printer[]                  @relation("RestaurantToPrinter")
 }
 
 model Invite {
@@ -1399,4 +1401,109 @@ model Denomination {
   total      Float
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
+}
+
+enum PrinterConnectionType {
+  LAN
+  WIFI
+  BLUETOOTH
+  USB
+}
+
+enum PrinterType {
+  THERMAL
+  DOT_MATRIX
+  INKJET
+}
+
+enum PrinterStatus {
+  ONLINE
+  OFFLINE
+  ERROR
+  PAPER_OUT
+  CONNECTING
+}
+
+enum PrintLocationType {
+  KITCHEN
+  BAR
+  BILLDESK
+  PACKING
+}
+
+// Join model for Printer and PrintLocation
+model PrinterToLocation {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  printerId       String        @db.ObjectId
+  printer         Printer       @relation(fields: [printerId], references: [id], onDelete: Cascade)
+  printLocationId String        @db.ObjectId
+  printLocation   PrintLocation @relation(fields: [printLocationId], references: [id], onDelete: Cascade)
+  isDefault       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([printerId, printLocationId])
+  @@index([printerId])
+  @@index([printLocationId])
+}
+
+enum PrinterSize {
+  MM_58
+  MM_80
+  MM_76
+}
+
+model Printer {
+  id             String                @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  description    String?
+  model          String?
+  manufacturer   String?
+  connectionType PrinterConnectionType
+  printerType    PrinterType           @default(THERMAL)
+  status         PrinterStatus         @default(OFFLINE)
+
+  // Connection details
+  ipAddress     String? // For LAN/WIFI
+  port          Int? // For LAN/WIFI
+  macAddress    String? // For Bluetooth
+  bluetoothName String? // For Bluetooth
+  usbVendorId   String? // For USB
+  usbProductId  String? // For USB
+
+  // Printer settings
+  paperWidth     PrinterSize @default(MM_58) // characters per line
+  dpi            Int?
+  defaultFont    String?
+  cutPaper       Boolean     @default(true)
+  openCashDrawer Boolean     @default(false)
+
+  // Relationships
+  restaurantId   String              @db.ObjectId
+  restaurant     Restaurant          @relation("RestaurantToPrinter", fields: [restaurantId], references: [id], onDelete: Cascade)
+  printLocations PrinterToLocation[] // Updated relation
+
+  // Metadata
+  isActive      Boolean   @default(true)
+  lastConnected DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([restaurantId])
+}
+
+model PrintLocation {
+  id           String              @id @default(auto()) @map("_id") @db.ObjectId
+  name         String // e.g., "KITCHEN", "BAR", "BILLING"
+  description  String?
+  type         PrintLocationType
+  isActive     Boolean             @default(true)
+  restaurantId String              @db.ObjectId
+  restaurant   Restaurant          @relation("RestaurantToPrintLocation", fields: [restaurantId], references: [id], onDelete: Cascade)
+  printers     PrinterToLocation[] // Updated relation
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
 }

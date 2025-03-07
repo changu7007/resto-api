@@ -244,6 +244,20 @@ import {
   openAdminRegister,
   closeAdminRegister,
 } from "../../controllers/outlet/cash-registers/adminRegisterController";
+import {
+  assignPrinterToLocation,
+  createPrinter,
+  createPrintLocation,
+  deletePrinter,
+  deletePrintLocation,
+  getPrinterById,
+  getPrinters,
+  getPrintersForLocation,
+  getPrintLocations,
+  getPrintLocationsByTypes,
+  updatePrinter,
+  updatePrintLocation,
+} from "../../controllers/outlet/printers/printer-controller";
 
 const outletRoute: Router = Router();
 
@@ -1281,6 +1295,80 @@ outletRoute.get(
   "/:outletId/admin-register/transactions-for-register",
   isAuthMiddelware,
   errorHandler(getTransactionHistoryForRegister)
+);
+
+//Printers
+outletRoute.post(
+  "/:outletId/printers/create-printer",
+  isAuthMiddelware,
+  errorHandler(createPrinter)
+);
+
+outletRoute.get(
+  "/:outletId/printers",
+  isAuthMiddelware,
+  errorHandler(getPrinters)
+);
+
+outletRoute.get(
+  "/:outletId/printers/:printerId",
+  isAuthMiddelware,
+  errorHandler(getPrinterById)
+);
+
+outletRoute.patch(
+  "/:outletId/printers/update-printer/:printerId",
+  isAuthMiddelware,
+  errorHandler(updatePrinter)
+);
+
+outletRoute.delete(
+  "/:outletId/printers/delete-printer/:printerId",
+  isAuthMiddelware,
+  errorHandler(deletePrinter)
+);
+
+//Printers Location
+outletRoute.post(
+  "/:outletId/printers/create-print-location",
+  isAuthMiddelware,
+  errorHandler(createPrintLocation)
+);
+
+outletRoute.get(
+  "/:outletId/locations/get-print-locations",
+  isAuthMiddelware,
+  errorHandler(getPrintLocations)
+);
+
+outletRoute.patch(
+  "/:outletId/printers/update-print-location/:locationId",
+  isAuthMiddelware,
+  errorHandler(updatePrintLocation)
+);
+
+outletRoute.delete(
+  "/:outletId/printers/delete-print-location/:locationId",
+  isAuthMiddelware,
+  errorHandler(deletePrintLocation)
+);
+
+outletRoute.post(
+  "/:outletId/printers/locations/:locationId/assign",
+  isAuthMiddelware,
+  errorHandler(assignPrinterToLocation)
+);
+
+outletRoute.get(
+  "/:outletId/print-locations",
+  isAuthMiddelware,
+  errorHandler(getPrintLocationsByTypes)
+);
+
+outletRoute.get(
+  "/:outletId/printers/location/:locationId",
+  isAuthMiddelware,
+  errorHandler(getPrintersForLocation)
 );
 
 export default outletRoute;

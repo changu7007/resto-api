@@ -27,6 +27,7 @@ const staff_order_controller_1 = require("../../controllers/outlet/order/staff-o
 const staffs_items_controller_1 = require("../../controllers/outlet/items/staffs-items-controller");
 const registerController_1 = require("../../controllers/outlet/cash-registers/registerController");
 const adminRegisterController_1 = require("../../controllers/outlet/cash-registers/adminRegisterController");
+const printer_controller_1 = require("../../controllers/outlet/printers/printer-controller");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/get-all-outlets", (0, error_handler_1.errorHandler)(outletController_1.getAllOutlets));
 outletRoute.get("/:outletId/get-admin-register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
@@ -264,4 +265,18 @@ outletRoute.post("/:outletId/admin-register/:registerId/close", auth_1.isAuthMid
 outletRoute.get("/:outletId/admin-register/status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
 outletRoute.post("/:outletId/admin-register/record-income", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.recordIncome));
 outletRoute.get("/:outletId/admin-register/transactions-for-register", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getTransactionHistoryForRegister));
+//Printers
+outletRoute.post("/:outletId/printers/create-printer", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.createPrinter));
+outletRoute.get("/:outletId/printers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrinters));
+outletRoute.get("/:outletId/printers/:printerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrinterById));
+outletRoute.patch("/:outletId/printers/update-printer/:printerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrinter));
+outletRoute.delete("/:outletId/printers/delete-printer/:printerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.deletePrinter));
+//Printers Location
+outletRoute.post("/:outletId/printers/create-print-location", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.createPrintLocation));
+outletRoute.get("/:outletId/locations/get-print-locations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintLocations));
+outletRoute.patch("/:outletId/printers/update-print-location/:locationId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrintLocation));
+outletRoute.delete("/:outletId/printers/delete-print-location/:locationId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.deletePrintLocation));
+outletRoute.post("/:outletId/printers/locations/:locationId/assign", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.assignPrinterToLocation));
+outletRoute.get("/:outletId/print-locations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintLocationsByTypes));
+outletRoute.get("/:outletId/printers/location/:locationId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintersForLocation));
 exports.default = outletRoute;

@@ -9,7 +9,13 @@ import {
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
-import { Category, FoodRole, GstType, MenuItem } from "@prisma/client";
+import {
+  Category,
+  ChooseProfit,
+  FoodRole,
+  GstType,
+  MenuItem,
+} from "@prisma/client";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import {
@@ -26,6 +32,56 @@ import {
 } from "../../../schema/staff";
 import { fuzzySearch } from "../../../lib/algorithms";
 import { generateSlug } from "../../../lib/utils";
+
+export interface FoodMenu {
+  id: string;
+  name: string;
+  shortCode?: string | null;
+  description?: string | null;
+  images: {
+    id: string;
+    url: string;
+  }[];
+  categoryId: string;
+  categoryName: string;
+  price: string;
+  netPrice: string;
+  chooseProfit: ChooseProfit;
+  gst: number;
+  itemRecipe: {
+    id: string;
+    menuId: string | null;
+    menuVariantId: string | null;
+    addonItemVariantId: string | null;
+  };
+  grossProfit: number;
+  isVariants: boolean;
+  isAddOns?: boolean;
+  menuItemVariants: {
+    id: string;
+    variantName: string;
+    price: string;
+    netPrice: string;
+    gst: number;
+    grossProfit: number;
+    type: string;
+  }[];
+  menuGroupAddOns: {
+    id: string;
+    addOnGroupName: string;
+    description: string | null;
+    addonVariants: {
+      id: string;
+      name: string;
+      netPrice: string;
+      gst: number;
+      price: string;
+      type: string;
+    }[];
+  }[];
+  favourite?: boolean;
+  type: FoodRole;
+}
 
 export const getItemsForOnlineAndDelivery = async (
   req: Request,
@@ -73,8 +129,8 @@ export const getItemsByCategoryForOnlineAndDelivery = async (
   );
 
   if (redisItems) {
-    const items: MenuItem[] = JSON.parse(redisItems);
-    let sendItems: MenuItem[] = [];
+    const items: FoodMenu[] = JSON.parse(redisItems);
+    let sendItems: FoodMenu[] = [];
 
     if (categoryId) {
       if (categoryId === "all") {
@@ -99,7 +155,7 @@ export const getItemsByCategoryForOnlineAndDelivery = async (
     });
   } else {
     const items = await getOAllItemsForOnlineAndDelivery(outletId);
-    let sendItems: MenuItem[] = [];
+    let sendItems: FoodMenu[] = [];
     if (categoryId) {
       if (categoryId === "all") {
         sendItems = items;
@@ -143,8 +199,8 @@ export const getItemsBySearchForOnlineAndDelivery = async (
   );
 
   if (redisItems) {
-    const items: (MenuItem & { category: Category })[] = JSON.parse(redisItems);
-    let sendItems: (MenuItem & { category: Category })[] = [];
+    const items: FoodMenu[] = JSON.parse(redisItems);
+    let sendItems: FoodMenu[] = [];
 
     if (search) {
       sendItems = items.filter((item) => {
@@ -156,7 +212,7 @@ export const getItemsBySearchForOnlineAndDelivery = async (
           // Fuzzy search on description
           (item.description && fuzzySearch(item.description, search)) ||
           // Search in category name
-          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          (item.categoryName && fuzzySearch(item.categoryName, search)) ||
           // Match price range (if search term is a number)
           (!isNaN(Number(search)) &&
             Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
@@ -185,7 +241,7 @@ export const getItemsBySearchForOnlineAndDelivery = async (
     });
   } else {
     const items = await getOAllItemsForOnlineAndDelivery(outletId);
-    let sendItems: MenuItem[] = [];
+    let sendItems: FoodMenu[] = [];
 
     if (search) {
       sendItems = items.filter((item) => {
@@ -193,7 +249,7 @@ export const getItemsBySearchForOnlineAndDelivery = async (
           fuzzySearch(item.name, search) ||
           (item.shortCode && fuzzySearch(item.shortCode, search)) ||
           (item.description && fuzzySearch(item.description, search)) ||
-          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          (item.categoryName && fuzzySearch(item.categoryName, search)) ||
           (!isNaN(Number(search)) &&
             Math.abs(Number(item.price) - Number(search)) <= 50)
         );
@@ -236,7 +292,7 @@ export const getItemsByCategory = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  let items: MenuItem[];
+  let items: FoodMenu[];
 
   // Get items either from Redis or DB
   if (redisItems) {
@@ -250,7 +306,7 @@ export const getItemsByCategory = async (req: Request, res: Response) => {
   }
 
   // Handle different category scenarios
-  let sendItems: MenuItem[] = [];
+  let sendItems: FoodMenu[] = [];
 
   if (!categoryId || categoryId === "all") {
     sendItems = items;
@@ -283,29 +339,9 @@ export const getItemsByCategory = async (req: Request, res: Response) => {
     }
   }
 
-  const formattedItems = sendItems?.map((menuItem: any) => ({
-    id: menuItem?.id,
-    shortCode: menuItem?.shortCode,
-    categoryId: menuItem?.categoryId,
-    categoryName: menuItem?.category?.name,
-    name: menuItem?.name,
-    images: menuItem?.images,
-    type: menuItem?.type,
-    price: menuItem?.price,
-    netPrice: menuItem?.netPrice,
-    itemRecipe: menuItem?.itemRecipe,
-    gst: menuItem?.gst,
-    grossProfit: menuItem?.grossProfit,
-    isVariants: menuItem?.isVariants,
-    isAddOns: menuItem?.isAddons,
-    menuItemVariants: menuItem?.menuItemVariants,
-    favourite: true,
-    menuGroupAddOns: menuItem?.menuGroupAddOns,
-  }));
-
   return res.json({
     success: true,
-    data: formattedItems,
+    data: sendItems,
   });
 };
 
@@ -322,8 +358,8 @@ export const getItemsBySearch = async (req: Request, res: Response) => {
   const redisItems = await redis.get(`${outletId}-all-items`);
 
   if (redisItems) {
-    const items: (MenuItem & { category: Category })[] = JSON.parse(redisItems);
-    let sendItems: (MenuItem & { category: Category })[] = [];
+    const items: FoodMenu[] = JSON.parse(redisItems);
+    let sendItems: FoodMenu[] = [];
 
     if (search) {
       sendItems = items.filter((item) => {
@@ -335,7 +371,7 @@ export const getItemsBySearch = async (req: Request, res: Response) => {
           // Fuzzy search on description
           (item.description && fuzzySearch(item.description, search)) ||
           // Search in category name
-          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          (item.categoryName && fuzzySearch(item.categoryName, search)) ||
           // Match price range (if search term is a number)
           (!isNaN(Number(search)) &&
             Math.abs(Number(item.price) - Number(search)) <= 50) // Within ₹50 range
@@ -364,7 +400,7 @@ export const getItemsBySearch = async (req: Request, res: Response) => {
     });
   } else {
     const items = await getOAllItems(outletId);
-    let sendItems: MenuItem[] = [];
+    let sendItems: FoodMenu[] = [];
 
     if (search) {
       sendItems = items.filter((item) => {
@@ -372,7 +408,7 @@ export const getItemsBySearch = async (req: Request, res: Response) => {
           fuzzySearch(item.name, search) ||
           (item.shortCode && fuzzySearch(item.shortCode, search)) ||
           (item.description && fuzzySearch(item.description, search)) ||
-          (item.category?.name && fuzzySearch(item.category.name, search)) ||
+          (item.categoryName && fuzzySearch(item.categoryName, search)) ||
           (!isNaN(Number(search)) &&
             Math.abs(Number(item.price) - Number(search)) <= 50)
         );
@@ -1182,11 +1218,24 @@ export const updateItembyId = async (req: Request, res: Response) => {
     }
   });
 
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
   await Promise.all([
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-for-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
   ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
 
   return res.json({
     success: true,
@@ -1341,11 +1390,24 @@ export const postItem = async (req: Request, res: Response) => {
     },
   });
 
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
   await Promise.all([
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-for-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
   ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
 
   return res.json({
     success: true,
@@ -1387,11 +1449,24 @@ export const deleteItem = async (req: Request, res: Response) => {
     });
   });
 
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
   await Promise.all([
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-for-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
   ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
 
   return res.json({
     success: true,
@@ -1556,11 +1631,24 @@ export const enablePosStatus = async (req: Request, res: Response) => {
     },
   });
 
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
   await Promise.all([
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-for-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
   ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
 
   return res.json({
     success: true,
@@ -1594,11 +1682,24 @@ export const disablePosStatus = async (req: Request, res: Response) => {
     },
   });
 
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
   await Promise.all([
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-for-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
   ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
 
   return res.json({
     success: true,
@@ -1628,11 +1729,24 @@ export const deleteItems = async (req: Request, res: Response) => {
     },
   });
 
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
   await Promise.all([
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-for-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
   ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
 
   return res.json({
     success: true,

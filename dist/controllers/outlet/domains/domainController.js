@@ -138,6 +138,8 @@ const createSubDomain = (req, res) => __awaiter(void 0, void 0, void 0, function
     }
     return res.json({
         success: true,
+        id: getDomain === null || getDomain === void 0 ? void 0 : getDomain.id,
+        subdomain: getDomain === null || getDomain === void 0 ? void 0 : getDomain.subdomain,
         message: "SubDomain Created Successfully",
     });
 });
