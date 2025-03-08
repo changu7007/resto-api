@@ -15,6 +15,7 @@ const __1 = require("../../..");
 const root_1 = require("../../../exceptions/root");
 const not_found_1 = require("../../../exceptions/not-found");
 const bad_request_1 = require("../../../exceptions/bad-request");
+const get_items_1 = require("../../../lib/outlet/get-items");
 const getStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { outletId } = req.params;
@@ -30,13 +31,22 @@ const getStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, fun
         throw new not_found_1.NotFoundException("Staff Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const favoriteMenu = (staff === null || staff === void 0 ? void 0 : staff.favoriteMenu) || [];
-    const items = JSON.parse(redisItems || "[]");
-    const favoriteItems = items.filter((item) => favoriteMenu.includes(item.id));
-    res.json({ success: true, data: favoriteItems });
+    if (!redisItems) {
+        const outletItems = yield (0, get_items_1.getOAllItems)(outletId);
+        const items = outletItems;
+        const favoriteItems = items.filter((item) => favoriteMenu.includes(item === null || item === void 0 ? void 0 : item.id));
+        res.json({ success: true, data: favoriteItems });
+    }
+    else {
+        const items = JSON.parse(redisItems);
+        const favoriteItems = items.filter((item) => favoriteMenu.includes(item === null || item === void 0 ? void 0 : item.id));
+        res.json({ success: true, data: favoriteItems });
+    }
 });
 exports.getStaffFavoriteMenu = getStaffFavoriteMenu;
 const addStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _b;
+    const { outletId } = req.params;
     // @ts-ignore
     const staffId = (_b = req.user) === null || _b === void 0 ? void 0 : _b.id;
     const staff = yield __1.prismaDB.staff.findFirst({
@@ -63,6 +73,23 @@ const addStaffFavoriteMenu = (req, res) => __awaiter(void 0, void 0, void 0, fun
         where: { id: staffId },
         data: { favoriteMenu: updatedFavItems },
     });
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+        redis_1.redis.del(`pos-${staffId}`),
+    ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
     res.json({ success: true, message: "Item added to favorite menu" });
 });
 exports.addStaffFavoriteMenu = addStaffFavoriteMenu;

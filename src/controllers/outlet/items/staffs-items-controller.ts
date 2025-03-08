@@ -5,13 +5,14 @@ import { prismaDB } from "../../..";
 import { ErrorCode } from "../../../exceptions/root";
 import { NotFoundException } from "../../../exceptions/not-found";
 import { BadRequestsException } from "../../../exceptions/bad-request";
+import { FoodMenu } from "./itemsController";
+import { getOAllItems } from "../../../lib/outlet/get-items";
 
 const getStaffFavoriteMenu = async (req: Request, res: Response) => {
   const { outletId } = req.params;
   // @ts-ignore
   const staffId = req.user?.id;
   const redisItems = await redis.get(`${outletId}-all-items`);
-
   const staff = await prismaDB.staff.findFirst({
     where: {
       id: staffId,
@@ -24,14 +25,29 @@ const getStaffFavoriteMenu = async (req: Request, res: Response) => {
 
   const favoriteMenu = staff?.favoriteMenu || [];
 
-  const items: MenuItem[] = JSON.parse(redisItems || "[]");
+  if (!redisItems) {
+    const outletItems = await getOAllItems(outletId);
 
-  const favoriteItems = items.filter((item) => favoriteMenu.includes(item.id));
+    const items: FoodMenu[] = outletItems;
 
-  res.json({ success: true, data: favoriteItems });
+    const favoriteItems = items.filter((item) =>
+      favoriteMenu.includes(item?.id)
+    );
+
+    res.json({ success: true, data: favoriteItems });
+  } else {
+    const items: FoodMenu[] = JSON.parse(redisItems);
+
+    const favoriteItems = items.filter((item) =>
+      favoriteMenu.includes(item?.id)
+    );
+
+    res.json({ success: true, data: favoriteItems });
+  }
 };
 
 const addStaffFavoriteMenu = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
   // @ts-ignore
   const staffId = req.user?.id;
 
@@ -67,6 +83,26 @@ const addStaffFavoriteMenu = async (req: Request, res: Response) => {
   await prismaDB.staff.update({
     where: { id: staffId },
     data: { favoriteMenu: updatedFavItems },
+  });
+
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+    redis.del(`pos-${staffId}`),
+  ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
   });
 
   res.json({ success: true, message: "Item added to favorite menu" });

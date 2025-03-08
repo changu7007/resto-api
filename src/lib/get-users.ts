@@ -539,7 +539,12 @@ export const getFormatStaffPOSAndSendToRedis = async (staffId: string) => {
     },
   };
 
-  await redis.set(`pos-${findStaff?.id}`, JSON.stringify(formatToSend));
+  await redis.set(
+    `pos-${findStaff?.id}`,
+    JSON.stringify(formatToSend),
+    "EX",
+    3 * 60 * 60
+  ); // 3 hours
   return formatToSend;
 };
 

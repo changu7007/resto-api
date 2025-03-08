@@ -403,7 +403,7 @@ const getFormatStaffPOSAndSendToRedis = (staffId) => __awaiter(void 0, void 0, v
             restaurantName: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.restaurantName,
         },
     };
-    yield redis_1.redis.set(`pos-${findStaff === null || findStaff === void 0 ? void 0 : findStaff.id}`, JSON.stringify(formatToSend));
+    yield redis_1.redis.set(`pos-${findStaff === null || findStaff === void 0 ? void 0 : findStaff.id}`, JSON.stringify(formatToSend), "EX", 3 * 60 * 60); // 3 hours
     return formatToSend;
 });
 exports.getFormatStaffPOSAndSendToRedis = getFormatStaffPOSAndSendToRedis;
