@@ -277,6 +277,13 @@ outletRoute.get("/:outletId/locations/get-print-locations", auth_1.isAuthMiddelw
 outletRoute.patch("/:outletId/printers/update-print-location/:locationId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrintLocation));
 outletRoute.delete("/:outletId/printers/delete-print-location/:locationId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.deletePrintLocation));
 outletRoute.post("/:outletId/printers/locations/:locationId/assign", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.assignPrinterToLocation));
-outletRoute.get("/:outletId/print-locations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintLocationsByTypes));
+outletRoute.get("/:outletId/print-locations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintLocationsByTypesForApp));
+outletRoute.get("/:outletId/pos/print-locations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintLocationsByTypes));
 outletRoute.get("/:outletId/printers/location/:locationId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintersForLocation));
+outletRoute.post("/:outletId/print/kot", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.printKOT));
+outletRoute.post("/:outletId/print/bill", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.printBill));
+outletRoute.post("/:outletId/print/tcp", (0, error_handler_1.errorHandler)(printer_controller_1.printTCP));
+outletRoute.get("/:outletId/order-item/:orderItemId/parent-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getParentOrder));
+outletRoute.get("/:outletId/settings/print-access", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getLocalPrintSetup));
+outletRoute.patch("/:outletId/tables/:tableId/unoccupied", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.markTableAsUnoccupied));
 exports.default = outletRoute;

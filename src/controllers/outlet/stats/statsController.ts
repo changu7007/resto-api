@@ -203,7 +203,7 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     prismaDB.order.findMany({
       where: {
         restaurantId: outlet.id,
-        createdAt: { gte: startDate, lte: endDate },
+        updatedAt: { gte: startDate, lte: endDate },
         orderStatus: "COMPLETED",
         orderSession: { sessionStatus: "COMPLETED" },
       },
@@ -233,19 +233,19 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     prismaDB.customerRestaurantAccess.count({
       where: {
         restaurantId: outlet.id,
-        createdAt: { gte: startDate, lte: endDate },
+        updatedAt: { gte: startDate, lte: endDate },
       },
     }),
     prismaDB.customerRestaurantAccess.count({
       where: {
         restaurantId: outlet.id,
-        createdAt: { gte: prevStartDate, lte: prevEndDate },
+        updatedAt: { gte: prevStartDate, lte: prevEndDate },
       },
     }),
     prismaDB.expenses.findMany({
       where: {
         restaurantId: outlet.id,
-        createdAt: { gte: startDate, lte: endDate },
+        updatedAt: { gte: startDate, lte: endDate },
       },
       select: {
         amount: true,
@@ -254,7 +254,7 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     prismaDB.expenses.findMany({
       where: {
         restaurantId: outlet.id,
-        createdAt: { gte: startDate, lte: endDate },
+        updatedAt: { gte: startDate, lte: endDate },
       },
       select: {
         amount: true,
@@ -427,13 +427,13 @@ export const getRevenueAndExpenses = async (req: Request, res: Response) => {
   const orders = await prismaDB.order.findMany({
     where: {
       restaurantId: outlet.id,
-      createdAt: {
+      updatedAt: {
         gte: sixMonthsAgo,
       },
     },
     select: {
       totalAmount: true,
-      createdAt: true,
+      updatedAt: true,
     },
   });
 
@@ -486,7 +486,7 @@ export const getRevenueAndExpenses = async (req: Request, res: Response) => {
 
   // Aggregate revenue by month
   orders.forEach((order) => {
-    const month = format(order.createdAt, "MMMM");
+    const month = format(order.updatedAt, "MMMM");
     if (!monthlyData[month]) {
       monthlyData[month] = { revenue: 0, expenses: 0 };
     }
@@ -560,7 +560,7 @@ export const orderStatsForOutlet = async (req: Request, res: Response) => {
   const orders = await prismaDB.order.findMany({
     where: {
       restaurantId: outlet.id,
-      createdAt: {
+      updatedAt: {
         gte: startDate,
         lte: endDate,
       },
@@ -742,7 +742,7 @@ export const orderStatsForOutletByStaff = async (
     where: {
       restaurantId: outlet.id,
       staffId: staff?.id,
-      createdAt: {
+      updatedAt: {
         gte: startDate,
         lte: endDate,
       },
@@ -848,7 +848,7 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
     where: {
       order: {
         restaurantId: outlet.id,
-        createdAt: {
+        updatedAt: {
           gte: startDate,
           lte: endDate,
         },
@@ -929,7 +929,7 @@ export const lastSixMonthsOrders = async (req: Request, res: Response) => {
   const orders = await prismaDB.order.findMany({
     where: {
       restaurantId: outlet?.id,
-      createdAt: {
+      updatedAt: {
         gte: sixMonthsAgo,
       },
       // orderStatus: "COMPLETED",
@@ -1003,7 +1003,7 @@ export const cashFlowStats = async (req: Request, res: Response) => {
   const cashFlowOrderSession = await prismaDB.orderSession.findMany({
     where: {
       restaurantId: outlet.id,
-      createdAt: {
+      updatedAt: {
         gte: startDate,
         lte: endDate,
       },
@@ -1552,7 +1552,7 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
   const orders = await prismaDB.order.findMany({
     where: {
       restaurantId: outlet.id,
-      createdAt: { gte: startDate, lte: endDate },
+      updatedAt: { gte: startDate, lte: endDate },
       orderStatus: "COMPLETED",
     },
     select: {
@@ -1575,7 +1575,7 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
   const purchases = await prismaDB.purchase.findMany({
     where: {
       restaurantId: outlet.id,
-      createdAt: { gte: startDate, lte: endDate },
+      updatedAt: { gte: startDate, lte: endDate },
     },
     select: {
       totalAmount: true,
@@ -1591,7 +1591,7 @@ export const getFinancialMetrics = async (req: Request, res: Response) => {
   const expenses = await prismaDB.expenses.findMany({
     where: {
       restaurantId: outlet.id,
-      createdAt: { gte: startDate, lte: endDate },
+      updatedAt: { gte: startDate, lte: endDate },
     },
     select: {
       amount: true,
@@ -1722,7 +1722,7 @@ export const expenseMetrics = async (req: Request, res: Response) => {
       prismaDB.order.findMany({
         where: {
           restaurantId: outletId,
-          createdAt: {
+          updatedAt: {
             gte: parsedStartDate,
             lte: parsedEndDate,
           },
@@ -1838,13 +1838,13 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
   }
 
   const orders = await prismaDB.order.groupBy({
-    by: ["createdAt"],
+    by: ["updatedAt"],
     _count: {
       id: true,
     },
     where: {
       restaurantId: outletId,
-      createdAt: {
+      updatedAt: {
         gte: new Date(todayStart),
         lte: new Date(todayEnd),
       },
@@ -1852,13 +1852,13 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
   });
 
   const orderStatuses = await prismaDB.order.groupBy({
-    by: ["createdAt", "orderStatus"],
+    by: ["updatedAt", "orderStatus"],
     _count: {
       id: true,
     },
     where: {
       restaurantId: outletId,
-      createdAt: {
+      updatedAt: {
         gte: new Date(todayStart),
         lte: new Date(todayEnd),
       },
@@ -1875,7 +1875,7 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
   );
   const formattedData = hours.map((hour) => {
     const ordersAtHour = orders.filter((order) => {
-      const orderHour = DateTime.fromJSDate(order.createdAt, {
+      const orderHour = DateTime.fromJSDate(order.updatedAt, {
         zone: timeZone,
       }).hour;
       return orderHour === hour;
@@ -1885,7 +1885,7 @@ export const getOrderHourWise = async (req: Request, res: Response) => {
 
     const statuses = orderStatuses
       .filter((status) => {
-        const statusHour = DateTime.fromJSDate(status.createdAt, {
+        const statusHour = DateTime.fromJSDate(status.updatedAt, {
           zone: timeZone,
         }).hour;
         return statusHour === hour;

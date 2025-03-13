@@ -13,6 +13,7 @@ import {
 } from "../../../schema/staff";
 import { redis } from "../../../services/redis";
 import { websocketManager } from "../../../services/ws";
+import { GstType } from "@prisma/client";
 
 const expenseSchema = z.object({
   category: z.enum(
@@ -40,10 +41,10 @@ const expenseSchema = z.object({
       requestQuantity: z.coerce
         .number()
         .min(1, { message: "Request Quantity is Required" }),
-      gst: z.coerce.number(),
-      total: z.coerce
-        .number()
-        .min(0, { message: "Purchase price is required" }),
+      netRate: z.number().optional(),
+      gstType: z.nativeEnum(GstType),
+      taxAmount: z.number().optional(),
+      totalAmount: z.number().optional(),
     })
   ),
   amount: z.coerce
@@ -100,12 +101,12 @@ export const createExpenses = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  if (userId !== outlet.adminId) {
-    throw new UnauthorizedException(
-      "Unauthorized Access",
-      ErrorCode.UNAUTHORIZED
-    );
-  }
+  // if (userId !== outlet.adminId) {
+  //   throw new UnauthorizedException(
+  //     "Unauthorized Access",
+  //     ErrorCode.UNAUTHORIZED
+  //   );
+  // }
 
   const cashRegister = await prismaDB.cashRegister.findFirst({
     where: {
@@ -141,12 +142,13 @@ export const createExpenses = async (req: Request, res: Response) => {
               create: validateFields?.rawMaterials.map((item) => ({
                 rawMaterialId: item?.rawMaterialId,
                 rawMaterialName: item?.rawMaterialName,
+                purchaseQuantity: item?.requestQuantity,
                 purchaseUnitId: item?.requestUnitId,
                 purchaseUnitName: item?.unitName,
-                purchaseQuantity: item?.requestQuantity,
-                cgst: item?.gst / 2,
-                sgst: item?.gst / 2,
-                purchasePrice: item?.total,
+                gstType: item?.gstType,
+                netRate: item?.netRate,
+                taxAmount: item?.taxAmount,
+                purchasePrice: item?.totalAmount,
               })),
             },
             generatedAmount: validateFields?.amount,
@@ -173,7 +175,7 @@ export const createExpenses = async (req: Request, res: Response) => {
               const newStock =
                 Number(rawMaterial?.currentStock ?? 0) + item?.requestQuantity;
               const newPricePerItem =
-                Number(item.total) / Number(item.requestQuantity);
+                Number(item.totalAmount) / Number(item.requestQuantity);
 
               await tx.rawMaterial.update({
                 where: {
@@ -181,7 +183,7 @@ export const createExpenses = async (req: Request, res: Response) => {
                 },
                 data: {
                   currentStock: newStock,
-                  purchasedPrice: item.total,
+                  purchasedPrice: item.totalAmount,
                   purchasedPricePerItem: newPricePerItem,
                   purchasedUnit: item.unitName,
                   lastPurchasedPrice: rawMaterial?.purchasedPrice ?? 0,
@@ -227,6 +229,18 @@ export const createExpenses = async (req: Request, res: Response) => {
         const recipesToUpdate = await tx.itemRecipe.findMany({
           where: {
             restaurantId: outlet.id,
+            ingredients: {
+              some: {
+                rawMaterial: {
+                  restaurantId: outlet.id,
+                  id: {
+                    in: validateFields?.rawMaterials?.map(
+                      (item) => item.rawMaterialId
+                    ),
+                  },
+                },
+              },
+            },
           },
           include: {
             ingredients: {
@@ -453,9 +467,10 @@ export const updateExpenses = async (req: Request, res: Response) => {
                   purchaseUnitId: item.requestUnitId,
                   purchaseUnitName: item.unitName,
                   purchaseQuantity: item.requestQuantity,
-                  cgst: item.gst / 2,
-                  sgst: item.gst / 2,
-                  purchasePrice: item.total,
+                  gstType: item?.gstType,
+                  netRate: item?.netRate,
+                  taxAmount: item?.taxAmount,
+                  purchasePrice: item?.totalAmount,
                 },
               })),
 
@@ -466,9 +481,10 @@ export const updateExpenses = async (req: Request, res: Response) => {
                 purchaseUnitId: item.requestUnitId,
                 purchaseUnitName: item.unitName,
                 purchaseQuantity: item.requestQuantity,
-                cgst: item.gst / 2,
-                sgst: item.gst / 2,
-                purchasePrice: item.total,
+                gstType: item?.gstType,
+                netRate: item?.netRate,
+                taxAmount: item?.taxAmount,
+                purchasePrice: item?.totalAmount,
               })),
             },
             generatedAmount: validateFields?.amount,

@@ -11,6 +11,7 @@ import {
   getAllOutlets,
   getByOutletId,
   getIntegration,
+  getLocalPrintSetup,
   getPOSStaffOutlet,
   getrazorpayConfig,
   getStaffOutlet,
@@ -29,6 +30,7 @@ import {
   getAllActiveSessionOrders,
   getAllOrderByStaff,
   getLiveOrders,
+  getParentOrder,
   getTableAllOrders,
   getTableAllSessionOrders,
   getTodayOrdersCount,
@@ -84,6 +86,7 @@ import {
   getAllTablesForTable,
   getTableByUniqueId,
   getTableCurrentOrders,
+  markTableAsUnoccupied,
   updateArea,
   updateTable,
   verifyTable,
@@ -255,6 +258,10 @@ import {
   getPrintersForLocation,
   getPrintLocations,
   getPrintLocationsByTypes,
+  getPrintLocationsByTypesForApp,
+  printBill,
+  printKOT,
+  printTCP,
   updatePrinter,
   updatePrintLocation,
 } from "../../controllers/outlet/printers/printer-controller";
@@ -1362,6 +1369,12 @@ outletRoute.post(
 outletRoute.get(
   "/:outletId/print-locations",
   isAuthMiddelware,
+  errorHandler(getPrintLocationsByTypesForApp)
+);
+
+outletRoute.get(
+  "/:outletId/pos/print-locations",
+  isAuthMiddelware,
   errorHandler(getPrintLocationsByTypes)
 );
 
@@ -1369,6 +1382,38 @@ outletRoute.get(
   "/:outletId/printers/location/:locationId",
   isAuthMiddelware,
   errorHandler(getPrintersForLocation)
+);
+
+outletRoute.post(
+  "/:outletId/print/kot",
+  isAuthMiddelware,
+  errorHandler(printKOT)
+);
+
+outletRoute.post(
+  "/:outletId/print/bill",
+  isAuthMiddelware,
+  errorHandler(printBill)
+);
+
+outletRoute.post("/:outletId/print/tcp", errorHandler(printTCP));
+
+outletRoute.get(
+  "/:outletId/order-item/:orderItemId/parent-order",
+  isAuthMiddelware,
+  errorHandler(getParentOrder)
+);
+
+outletRoute.get(
+  "/:outletId/settings/print-access",
+  isAuthMiddelware,
+  errorHandler(getLocalPrintSetup)
+);
+
+outletRoute.patch(
+  "/:outletId/tables/:tableId/unoccupied",
+  isAuthMiddelware,
+  errorHandler(markTableAsUnoccupied)
 );
 
 export default outletRoute;

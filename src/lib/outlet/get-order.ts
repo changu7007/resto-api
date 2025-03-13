@@ -10,6 +10,11 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
         in: ["INCOMMING", "PREPARING", "FOODREADY"],
       },
       active: true,
+      orderItems: {
+        some: {
+          strike: false,
+        },
+      },
     },
     include: {
       orderSession: {
@@ -269,6 +274,11 @@ export const getFetchLiveOrderByStaffToRedis = async (
       },
       staffId: staffId,
       active: true,
+      orderItems: {
+        some: {
+          strike: false,
+        },
+      },
     },
     include: {
       orderSession: {

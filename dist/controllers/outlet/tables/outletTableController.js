@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = exports.getAllAreasForTable = exports.getAllTablesForTable = void 0;
+exports.markTableAsUnoccupied = exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = exports.getAllAreasForTable = exports.getAllTablesForTable = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -449,9 +449,6 @@ const verifyTable = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     if (!(table === null || table === void 0 ? void 0 : table.id)) {
         throw new not_found_1.NotFoundException("Table Not Found", root_1.ErrorCode.NOT_FOUND);
     }
-    if (!table.customerId) {
-        throw new not_found_1.NotFoundException("No Table user found, Scan QR again Please", root_1.ErrorCode.NOT_FOUND);
-    }
     if (table.inviteCode === null || table.inviteCode === undefined) {
         console.log("Table has no inviteCode");
         throw new not_found_1.NotFoundException("Table has no invite code set", root_1.ErrorCode.NOT_FOUND);
@@ -564,3 +561,35 @@ const getTableCurrentOrders = (req, res) => __awaiter(void 0, void 0, void 0, fu
     });
 });
 exports.getTableCurrentOrders = getTableCurrentOrders;
+const markTableAsUnoccupied = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, tableId } = req.params;
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const table = yield __1.prismaDB.table.findFirst({
+        where: {
+            id: tableId,
+            restaurantId: getOutlet.id,
+        },
+    });
+    if (!(table === null || table === void 0 ? void 0 : table.id)) {
+        throw new not_found_1.NotFoundException("Table Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.table.updateMany({
+        where: {
+            id: table.id,
+        },
+        data: {
+            occupied: false,
+            currentOrderSessionId: null,
+            inviteCode: null,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`tables-${getOutlet.id}`),
+        redis_1.redis.del(`a-${getOutlet.id}`),
+    ]);
+    return res.json({ success: true, message: "Table marked as unoccupied" });
+});
+exports.markTableAsUnoccupied = markTableAsUnoccupied;

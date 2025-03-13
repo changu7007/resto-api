@@ -575,13 +575,6 @@ export const verifyTable = async (req: Request, res: Response) => {
     throw new NotFoundException("Table Not Found", ErrorCode.NOT_FOUND);
   }
 
-  if (!table.customerId) {
-    throw new NotFoundException(
-      "No Table user found, Scan QR again Please",
-      ErrorCode.NOT_FOUND
-    );
-  }
-
   if (table.inviteCode === null || table.inviteCode === undefined) {
     console.log("Table has no inviteCode");
     throw new NotFoundException(
@@ -712,4 +705,43 @@ export const getTableCurrentOrders = async (req: Request, res: Response) => {
     success: true,
     orders: formattedOrders,
   });
+};
+
+export const markTableAsUnoccupied = async (req: Request, res: Response) => {
+  const { outletId, tableId } = req.params;
+
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const table = await prismaDB.table.findFirst({
+    where: {
+      id: tableId,
+      restaurantId: getOutlet.id,
+    },
+  });
+
+  if (!table?.id) {
+    throw new NotFoundException("Table Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.table.updateMany({
+    where: {
+      id: table.id,
+    },
+    data: {
+      occupied: false,
+      currentOrderSessionId: null,
+      inviteCode: null,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`tables-${getOutlet.id}`),
+    redis.del(`a-${getOutlet.id}`),
+  ]);
+
+  return res.json({ success: true, message: "Table marked as unoccupied" });
 };

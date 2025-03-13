@@ -19,6 +19,7 @@ const unauthorized_1 = require("../../../exceptions/unauthorized");
 const __1 = require("../../..");
 const redis_1 = require("../../../services/redis");
 const ws_1 = require("../../../services/ws");
+const client_1 = require("@prisma/client");
 const expenseSchema = zod_1.z.object({
     category: zod_1.z.enum([
         "Ingredients",
@@ -41,10 +42,10 @@ const expenseSchema = zod_1.z.object({
         requestQuantity: zod_1.z.coerce
             .number()
             .min(1, { message: "Request Quantity is Required" }),
-        gst: zod_1.z.coerce.number(),
-        total: zod_1.z.coerce
-            .number()
-            .min(0, { message: "Purchase price is required" }),
+        netRate: zod_1.z.number().optional(),
+        gstType: zod_1.z.nativeEnum(client_1.GstType),
+        taxAmount: zod_1.z.number().optional(),
+        totalAmount: zod_1.z.number().optional(),
     })),
     amount: zod_1.z.coerce
         .number()
@@ -82,9 +83,12 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    if (userId !== outlet.adminId) {
-        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
-    }
+    // if (userId !== outlet.adminId) {
+    //   throw new UnauthorizedException(
+    //     "Unauthorized Access",
+    //     ErrorCode.UNAUTHORIZED
+    //   );
+    // }
     const cashRegister = yield __1.prismaDB.cashRegister.findFirst({
         where: {
             id: validateFields === null || validateFields === void 0 ? void 0 : validateFields.cashRegisterId,
@@ -96,7 +100,7 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
         throw new not_found_1.NotFoundException("Cash Register Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const result = yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        var _c, _d, _e, _f, _g;
+        var _c, _d, _e, _f, _g, _h;
         let purchaseId;
         if (validateFields.category === "Ingredients" &&
             (validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId) &&
@@ -114,12 +118,13 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
                         create: validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials.map((item) => ({
                             rawMaterialId: item === null || item === void 0 ? void 0 : item.rawMaterialId,
                             rawMaterialName: item === null || item === void 0 ? void 0 : item.rawMaterialName,
+                            purchaseQuantity: item === null || item === void 0 ? void 0 : item.requestQuantity,
                             purchaseUnitId: item === null || item === void 0 ? void 0 : item.requestUnitId,
                             purchaseUnitName: item === null || item === void 0 ? void 0 : item.unitName,
-                            purchaseQuantity: item === null || item === void 0 ? void 0 : item.requestQuantity,
-                            cgst: (item === null || item === void 0 ? void 0 : item.gst) / 2,
-                            sgst: (item === null || item === void 0 ? void 0 : item.gst) / 2,
-                            purchasePrice: item === null || item === void 0 ? void 0 : item.total,
+                            gstType: item === null || item === void 0 ? void 0 : item.gstType,
+                            netRate: item === null || item === void 0 ? void 0 : item.netRate,
+                            taxAmount: item === null || item === void 0 ? void 0 : item.taxAmount,
+                            purchasePrice: item === null || item === void 0 ? void 0 : item.totalAmount,
                         })),
                     },
                     generatedAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amount,
@@ -131,7 +136,7 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
             purchaseId = create === null || create === void 0 ? void 0 : create.id;
             // Step 1: Restock raw materials and update `RecipeIngredient` costs
             yield Promise.all((_e = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _e === void 0 ? void 0 : _e.map((item) => __awaiter(void 0, void 0, void 0, function* () {
-                var _h, _j;
+                var _j, _k;
                 const rawMaterial = yield tx.rawMaterial.findFirst({
                     where: {
                         id: item.rawMaterialId,
@@ -142,18 +147,18 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
                     },
                 });
                 if (rawMaterial) {
-                    const newStock = Number((_h = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _h !== void 0 ? _h : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
-                    const newPricePerItem = Number(item.total) / Number(item.requestQuantity);
+                    const newStock = Number((_j = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _j !== void 0 ? _j : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                    const newPricePerItem = Number(item.totalAmount) / Number(item.requestQuantity);
                     yield tx.rawMaterial.update({
                         where: {
                             id: rawMaterial.id,
                         },
                         data: {
                             currentStock: newStock,
-                            purchasedPrice: item.total,
+                            purchasedPrice: item.totalAmount,
                             purchasedPricePerItem: newPricePerItem,
                             purchasedUnit: item.unitName,
-                            lastPurchasedPrice: (_j = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _j !== void 0 ? _j : 0,
+                            lastPurchasedPrice: (_k = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _k !== void 0 ? _k : 0,
                             purchasedStock: newStock,
                         },
                     });
@@ -190,6 +195,16 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
             const recipesToUpdate = yield tx.itemRecipe.findMany({
                 where: {
                     restaurantId: outlet.id,
+                    ingredients: {
+                        some: {
+                            rawMaterial: {
+                                restaurantId: outlet.id,
+                                id: {
+                                    in: (_f = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _f === void 0 ? void 0 : _f.map((item) => item.rawMaterialId),
+                                },
+                            },
+                        },
+                    },
                 },
                 include: {
                     ingredients: {
@@ -258,7 +273,7 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 restaurantId: outlet.id,
                 date: new Date(),
                 // @ts-ignore
-                createdBy: `${(_f = req === null || req === void 0 ? void 0 : req.user) === null || _f === void 0 ? void 0 : _f.name} (${(_g = req === null || req === void 0 ? void 0 : req.user) === null || _g === void 0 ? void 0 : _g.role})`,
+                createdBy: `${(_g = req === null || req === void 0 ? void 0 : req.user) === null || _g === void 0 ? void 0 : _g.name} (${(_h = req === null || req === void 0 ? void 0 : req.user) === null || _h === void 0 ? void 0 : _h.role})`,
                 vendorId: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId) ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId : null,
                 restock: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.restock) ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.restock : false,
                 attachments: validateFields === null || validateFields === void 0 ? void 0 : validateFields.attachments,
@@ -298,7 +313,7 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.createExpenses = createExpenses;
 const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _k, _l;
+    var _l, _m;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = expenseSchema.safeParse(req.body);
     if (error) {
@@ -308,12 +323,12 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
         (!(validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId) ||
             !(validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) ||
             (validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials.length) === 0 ||
-            ((_k = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _k === void 0 ? void 0 : _k.some((r) => !r.rawMaterialId)))) {
+            ((_l = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _l === void 0 ? void 0 : _l.some((r) => !r.rawMaterialId)))) {
         throw new bad_request_1.BadRequestsException("Vendor & Raw Materials Required for Expenses", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_l = req.user) === null || _l === void 0 ? void 0 : _l.id;
+    let userId = (_m = req.user) === null || _m === void 0 ? void 0 : _m.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -364,9 +379,10 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
                                 purchaseUnitId: item.requestUnitId,
                                 purchaseUnitName: item.unitName,
                                 purchaseQuantity: item.requestQuantity,
-                                cgst: item.gst / 2,
-                                sgst: item.gst / 2,
-                                purchasePrice: item.total,
+                                gstType: item === null || item === void 0 ? void 0 : item.gstType,
+                                netRate: item === null || item === void 0 ? void 0 : item.netRate,
+                                taxAmount: item === null || item === void 0 ? void 0 : item.taxAmount,
+                                purchasePrice: item === null || item === void 0 ? void 0 : item.totalAmount,
                             },
                         })),
                         // Create new items
@@ -376,9 +392,10 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
                             purchaseUnitId: item.requestUnitId,
                             purchaseUnitName: item.unitName,
                             purchaseQuantity: item.requestQuantity,
-                            cgst: item.gst / 2,
-                            sgst: item.gst / 2,
-                            purchasePrice: item.total,
+                            gstType: item === null || item === void 0 ? void 0 : item.gstType,
+                            netRate: item === null || item === void 0 ? void 0 : item.netRate,
+                            taxAmount: item === null || item === void 0 ? void 0 : item.taxAmount,
+                            purchasePrice: item === null || item === void 0 ? void 0 : item.totalAmount,
                         })),
                     },
                     generatedAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amount,
@@ -423,11 +440,11 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.updateExpenses = updateExpenses;
 const deleteExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _m;
+    var _o;
     const { outletId, id } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_m = req.user) === null || _m === void 0 ? void 0 : _m.id;
+    let userId = (_o = req.user) === null || _o === void 0 ? void 0 : _o.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -581,11 +598,11 @@ const expenseCategoryColors = {
     Miscellaneous: "#64748b", // Gray
 };
 const getCategoryExpensesStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _o;
+    var _p;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_o = req.user) === null || _o === void 0 ? void 0 : _o.id;
+    let userId = (_p = req.user) === null || _p === void 0 ? void 0 : _p.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }

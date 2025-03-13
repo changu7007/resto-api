@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateOnlinePortalStatus = exports.updateOutletType = exports.createOutletFromOutletHub = exports.getrazorpayConfig = exports.deleteOutlet = exports.fetchInvoiceDetails = exports.updateInvoiceDetails = exports.createInvoiceDetails = exports.getIntegration = exports.updateOrCreateOperatingHours = exports.patchOutletOnlinePOrtalDetails = exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.deleteNotificationById = exports.deleteAllNotifications = exports.getAllNotifications = exports.getByOutletId = exports.getPOSStaffOutlet = exports.getStaffOutlet = exports.getAllOutlets = void 0;
+exports.getLocalPrintSetup = exports.updateOnlinePortalStatus = exports.updateOutletType = exports.createOutletFromOutletHub = exports.getrazorpayConfig = exports.deleteOutlet = exports.fetchInvoiceDetails = exports.updateInvoiceDetails = exports.createInvoiceDetails = exports.getIntegration = exports.updateOrCreateOperatingHours = exports.patchOutletOnlinePOrtalDetails = exports.addFMCTokenToOutlet = exports.patchOutletDetails = exports.getMainOutlet = exports.deleteNotificationById = exports.deleteAllNotifications = exports.getAllNotifications = exports.getByOutletId = exports.getPOSStaffOutlet = exports.getStaffOutlet = exports.getAllOutlets = void 0;
 const outlet_1 = require("../../lib/outlet");
 const not_found_1 = require("../../exceptions/not-found");
 const root_1 = require("../../exceptions/root");
@@ -836,3 +836,33 @@ const updateOnlinePortalStatus = (req, res) => __awaiter(void 0, void 0, void 0,
     });
 });
 exports.updateOnlinePortalStatus = updateOnlinePortalStatus;
+const getLocalPrintSetup = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getPrinter = yield __1.prismaDB.printer.findMany({
+        where: {
+            restaurantId: outlet.id,
+            connectionType: {
+                in: ["LAN", "WIFI"],
+            },
+        },
+    });
+    if (getPrinter.length === 0) {
+        return res.json({
+            success: true,
+            data: {
+                hasLocalPrintSetupAccess: false,
+            },
+        });
+    }
+    return res.json({
+        success: true,
+        data: {
+            hasLocalPrintSetupAccess: true,
+        },
+    });
+});
+exports.getLocalPrintSetup = getLocalPrintSetup;

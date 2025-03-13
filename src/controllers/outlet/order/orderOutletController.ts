@@ -1031,6 +1031,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     orderSessionId: result.id,
+    kotNumber: orderId,
     message: "Order Created from Admin ✅",
   });
 };
@@ -1442,6 +1443,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     return res.json({
       success: true,
       sessionId: orderSession.id,
+      kotNumber: orderId,
       message: "Order Created by Customer ✅",
     });
   });
@@ -1624,6 +1626,7 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     orderSessionId: orderSession.id,
+    kotNumber: generatedId,
     message: "Order Added from Admin App ✅",
   });
 };
@@ -1757,6 +1760,29 @@ export const orderessionCancelPatch = async (req: Request, res: Response) => {
       redis.del(`o-n-${outletId}`),
       redis.del(`${outletId}-stocks`),
     ]);
+
+    //if order is dineIn then update the table status to unoccupied
+    if (getOrderById.orderType === "DINEIN") {
+      //find table
+      const table = await tx.table.findFirst({
+        where: {
+          id: getOrderById?.tableId!,
+          restaurantId: outletId,
+        },
+      });
+
+      if (!table?.id) {
+        throw new NotFoundException("Table Not Found", ErrorCode.NOT_FOUND);
+      }
+
+      await tx.table.update({
+        where: {
+          id: table.id,
+          restaurantId: outletId,
+        },
+        data: { occupied: false, currentOrderSessionId: null },
+      });
+    }
     // Update the `orderSession` status to "CANCELLED"
     await tx.orderSession.update({
       where: {
@@ -2073,14 +2099,6 @@ export const orderItemModification = async (req: Request, res: Response) => {
   }
 
   const txs = await prismaDB.$transaction(async (prisma) => {
-    await Promise.all([
-      redis.del(`active-os-${outletId}`),
-      redis.del(`liv-o-${outletId}`),
-      redis.del(`tables-${outletId}`),
-      redis.del(`a-${outletId}`),
-      redis.del(`o-n-${outletId}`),
-      redis.del(`${outletId}-stocks`),
-    ]);
     await prisma.orderItem.update({
       where: {
         id: getOrderById.id,
@@ -2232,6 +2250,25 @@ export const orderItemModification = async (req: Request, res: Response) => {
         totalAmount: totalAmount,
       },
     });
+
+    // Update related alerts to resolved
+    await prismaDB.alert.deleteMany({
+      where: {
+        restaurantId: outlet.id,
+        orderId: getOrder?.order?.id,
+        status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+      },
+    });
+
+    await Promise.all([
+      redis.del(`active-os-${outletId}`),
+      redis.del(`liv-o-${outletId}`),
+      redis.del(`tables-${outletId}`),
+      redis.del(`a-${outletId}`),
+      redis.del(`o-n-${outletId}`),
+      redis.del(`${outletId}-stocks`),
+      redis.del(`alerts-${outletId}`),
+    ]);
   });
 
   return res.json({
@@ -2261,6 +2298,11 @@ export const deleteOrderItem = async (req: Request, res: Response) => {
       order: {
         include: {
           orderItems: true, // Include all order items for recalculation
+          orderSession: {
+            include: {
+              orders: true,
+            },
+          },
         },
       },
     },
@@ -2269,6 +2311,27 @@ export const deleteOrderItem = async (req: Request, res: Response) => {
   if (!orderItem?.id) {
     throw new NotFoundException("OrderItem Not Found", ErrorCode.NOT_FOUND);
   }
+
+  const parentOrder = await prismaDB.order.findFirst({
+    where: {
+      id: orderItem.orderId,
+      restaurantId: outletId,
+    },
+    include: {
+      orderSession: {
+        include: {
+          table: true,
+          orders: true,
+        },
+      },
+    },
+  });
+
+  if (!parentOrder?.id) {
+    throw new NotFoundException("Order Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const orderSession = parentOrder.orderSession;
 
   // Use Prisma transaction for atomic operation
   await prismaDB.$transaction(async (tx) => {
@@ -2299,6 +2362,22 @@ export const deleteOrderItem = async (req: Request, res: Response) => {
           id: orderItem.order.id,
         },
       });
+
+      // Check if there are other orders in the orderSession
+      const remainingOrders = orderSession.orders.filter(
+        (o) => o.id !== parentOrder.id
+      );
+
+      if (remainingOrders.length === 0) {
+        // No orders left in orderSession, mark as CANCELLED
+        // dont cancel if the orderType is DINEIN
+        if (orderSession.orderType !== "DINEIN") {
+          await tx.orderSession.update({
+            where: { id: orderSession.id },
+            data: { sessionStatus: "CANCELLED", active: false },
+          });
+        }
+      }
     } else {
       // Recalculate Order totals
       const totalGrossProfit = remainingOrderItems.reduce(
@@ -2335,11 +2414,39 @@ export const deleteOrderItem = async (req: Request, res: Response) => {
         },
       });
     }
+
+    // Update related alerts to resolved
+    await prismaDB.alert.deleteMany({
+      where: {
+        restaurantId: outlet.id,
+        orderId: parentOrder?.id,
+        status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+      },
+    });
   });
+
+  await Promise.all([
+    redis.del(`active-os-${outletId}`),
+    redis.del(`liv-o-${outletId}`),
+    redis.del(`tables-${outletId}`),
+    redis.del(`a-${outletId}`),
+    redis.del(`o-n-${outletId}`),
+    redis.del(`${outletId}-stocks`),
+    redis.del(`alerts-${outletId}`),
+  ]);
+
+  websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
 
   return res.json({
     success: true,
     message: "Order Item Deleted",
+    data: {
+      orderId: parentOrder?.id,
+      generatedOrderId: parentOrder?.generatedOrderId,
+      name: parentOrder?.orderSession.username,
+      mode: parentOrder?.orderSession.orderType,
+      table: parentOrder?.orderSession.table?.name,
+    },
   });
 };
 
@@ -2353,4 +2460,43 @@ export const inviteCode = () => {
   }
 
   return code;
+};
+
+export const getParentOrder = async (req: Request, res: Response) => {
+  const { orderItemId, outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const orderItem = await prismaDB.orderItem.findFirst({
+    where: { id: orderItemId, order: { restaurantId: outletId } },
+  });
+
+  if (!orderItem?.id) {
+    throw new NotFoundException("OrderItem Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const parentOrder = await prismaDB.order.findFirst({
+    where: { id: orderItem.orderId },
+    include: {
+      orderSession: {
+        include: {
+          table: true,
+        },
+      },
+    },
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      orderId: parentOrder?.id,
+      generatedOrderId: parentOrder?.generatedOrderId,
+      name: parentOrder?.orderSession.username,
+      mode: parentOrder?.orderSession.orderType,
+      table: parentOrder?.orderSession.table?.name,
+    },
+  });
 };

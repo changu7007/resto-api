@@ -6,10 +6,14 @@ import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { PrinterSize, PrintLocationType } from "@prisma/client";
+import { PrintManager } from "../../../services/printer/print-manager";
+import { PrintContent, PrintResult } from "../../../services/printer/types";
+import net from "net";
+import { websocketManager } from "../../../services/ws";
 
 // Validation schemas
 const printerSchema = z.object({
-  name: z.string().min(1).max(50),
+  name: z.string({ required_error: "Name is required" }).min(1).max(50),
   description: z.string().optional(),
   model: z.string().optional(),
   manufacturer: z.string().optional(),
@@ -17,17 +21,35 @@ const printerSchema = z.object({
   printerType: z.enum(["THERMAL", "DOT_MATRIX", "INKJET"]).default("THERMAL"),
 
   // Connection details based on type
-  ipAddress: z.string().ip().optional(),
-  port: z.coerce.number().int().min(1).max(65535).optional(),
-  macAddress: z.string().optional(),
-  bluetoothName: z.string().optional(),
-  usbVendorId: z.string().optional(),
-  usbProductId: z.string().optional(),
+  ipAddress: z
+    .string({ required_error: "IP Address is required" })
+    .ip()
+    .optional(),
+  port: z.coerce
+    .number({ required_error: "Port is required" })
+    .int()
+    .min(1)
+    .max(65535)
+    .optional(),
+  macAddress: z
+    .string({ required_error: "MAC Address is required" })
+    .optional(),
+  bluetoothName: z
+    .string({ required_error: "Bluetooth Name is required" })
+    .optional(),
+  usbVendorId: z
+    .string({ required_error: "USB Vendor ID is required" })
+    .optional(),
+  usbProductId: z
+    .string({ required_error: "USB Product ID is required" })
+    .optional(),
 
   // Printer settings
   paperWidth: z.nativeEnum(PrinterSize),
-  dpi: z.coerce.number().int().optional(),
-  defaultFont: z.string().optional(),
+  dpi: z.coerce.number({ required_error: "DPI is required" }).int().optional(),
+  defaultFont: z
+    .string({ required_error: "Default Font is required" })
+    .optional(),
   cutPaper: z.boolean().default(true),
   openCashDrawer: z.boolean().default(false),
   isActive: z.boolean().default(true),
@@ -239,6 +261,17 @@ export const getPrinters = async (req: Request, res: Response) => {
   });
 };
 
+const formSchema = z.object({
+  name: z.string().min(1, "Printer name is required"),
+  description: z.string().optional(),
+  connectionType: z.enum(["LAN", "WIFI", "BLUETOOTH", "USB"]),
+  printerType: z.enum(["THERMAL", "DOT_MATRIX", "INKJET"]).default("THERMAL"),
+  ipAddress: z.string().ip().optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  isActive: z.boolean().default(true),
+  printLocationIds: z.array(z.string()).optional(),
+});
+
 // Update printer
 export const updatePrinter = async (req: Request, res: Response) => {
   const { outletId, printerId } = req.params;
@@ -248,12 +281,26 @@ export const updatePrinter = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const validatedData = printerSchema.partial().parse(req.body);
+  const { data: validatedData, error } = formSchema.safeParse(req.body);
+
+  if (error) {
+    throw new BadRequestsException(
+      error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
 
   const printer = await prismaDB.printer.findFirst({
     where: {
       id: printerId,
       restaurantId: outlet.id,
+    },
+    include: {
+      printLocations: {
+        include: {
+          printLocation: true,
+        },
+      },
     },
   });
 
@@ -264,12 +311,45 @@ export const updatePrinter = async (req: Request, res: Response) => {
     );
   }
 
+  const existingPrintLocations = printer.printLocations.map(
+    (location) => location.printLocationId
+  );
+
+  const newPrintLocations = validatedData.printLocationIds?.filter(
+    (id) => !existingPrintLocations.includes(id)
+  );
+
   const updatedPrinter = await prismaDB.printer.update({
     where: {
       id: printerId,
     },
-    data: validatedData,
+    data: {
+      name: validatedData.name,
+      description: validatedData.description,
+      connectionType: validatedData.connectionType,
+      printerType: validatedData.printerType,
+      ipAddress: validatedData.ipAddress,
+      port: validatedData.port,
+      isActive: validatedData.isActive,
+    },
   });
+
+  if (newPrintLocations && newPrintLocations.length > 0) {
+    await prismaDB.printerToLocation.createMany({
+      data: newPrintLocations.map((id) => ({
+        printerId: printerId,
+        printLocationId: id,
+      })),
+    });
+  }
+
+  if (existingPrintLocations && existingPrintLocations.length > 0) {
+    await prismaDB.printerToLocation.deleteMany({
+      where: {
+        printerId: printerId,
+      },
+    });
+  }
 
   return res.json({
     success: true,
@@ -382,6 +462,74 @@ export const deletePrintLocation = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "Print location deleted successfully",
+  });
+};
+
+export const getPrintLocationsByTypesForApp = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+  const { types } = req.query;
+
+  const outlet = await getOutletById(outletId);
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Validate types parameter
+  if (!types || typeof types !== "string") {
+    throw new BadRequestsException(
+      "Types parameter is required and should be comma-separated",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  // Parse and validate location types
+  const locationTypes = types.split(",").map((type) => {
+    if (!Object.values(PrintLocationType).includes(type as PrintLocationType)) {
+      throw new BadRequestsException(
+        `Invalid location type: ${type}`,
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+    return type as PrintLocationType;
+  });
+
+  const printLocations = await prismaDB.printLocation.findMany({
+    where: {
+      restaurantId: outlet.id,
+      type: {
+        in: locationTypes,
+      },
+      isActive: true,
+    },
+    include: {
+      printers: {
+        include: {
+          printer: true,
+        },
+      },
+    },
+  });
+
+  const formattedPrinterConfig = printLocations.flatMap((location) =>
+    location.printers.map((printer) => ({
+      id: printer.printer.id,
+      name: printer.printer.name,
+      status: printer.printer.status,
+      connectionType: printer.printer.connectionType,
+      ipAddress: printer.printer.ipAddress,
+      port: printer.printer.port,
+      macAddress: printer.printer.macAddress,
+      usbVendorId: printer.printer.usbVendorId,
+      usbProductId: printer.printer.usbProductId,
+    }))
+  );
+
+  return res.json({
+    success: true,
+    data: formattedPrinterConfig,
   });
 };
 
@@ -513,4 +661,263 @@ export const getPrinterById = async (req: Request, res: Response) => {
     success: true,
     data: printer,
   });
+};
+
+// Print KOT
+export const printKOT = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Get printers for KOT location type
+  const kotPrinters = await prismaDB.printer.findMany({
+    where: {
+      restaurantId: outlet.id,
+      isActive: true,
+      printLocations: {
+        some: {
+          printLocation: {
+            type: PrintLocationType.KITCHEN,
+            isActive: true,
+          },
+        },
+      },
+    },
+    include: {
+      printLocations: {
+        include: {
+          printLocation: true,
+        },
+      },
+    },
+  });
+
+  if (!kotPrinters || kotPrinters.length === 0) {
+    throw new BadRequestsException(
+      "No active KOT printers found",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  try {
+    const printData = req.body;
+    const printManager = new PrintManager();
+
+    // Format the content for KOT printing
+    const printContent: PrintContent = {
+      type: "KOT",
+      content: {
+        header: {
+          restaurantName: printData.restaurantName,
+          customerName: printData.name,
+          orderType: printData.orderType,
+          date: printData.date,
+        },
+        items: printData.items,
+        footer: {
+          totalItems: printData.totalItems,
+        },
+        note: printData.note,
+      },
+    };
+
+    // Print to all KOT printers
+    const printResults = await Promise.all(
+      kotPrinters.map((printer) => printManager.print(printer, printContent))
+    );
+
+    // Check if at least one printer succeeded
+    const success = printResults.some((result: PrintResult) => result.success);
+
+    if (!success) {
+      throw new Error("Failed to print to any KOT printer");
+    }
+
+    return res.json({
+      success: true,
+      message: "KOT printed successfully",
+    });
+  } catch (error) {
+    console.error("KOT Print error:", error);
+    throw new BadRequestsException(
+      "Failed to print KOT",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+};
+
+// Print Bill
+export const printBill = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Get printers for BILL location type
+  const billPrinters = await prismaDB.printer.findMany({
+    where: {
+      restaurantId: outlet.id,
+      isActive: true,
+      printLocations: {
+        some: {
+          printLocation: {
+            type: PrintLocationType.BILLDESK,
+            isActive: true,
+          },
+        },
+      },
+    },
+    include: {
+      printLocations: {
+        include: {
+          printLocation: true,
+        },
+      },
+    },
+  });
+
+  if (!billPrinters || billPrinters.length === 0) {
+    throw new BadRequestsException(
+      "No active bill printers found",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  try {
+    const printData = req.body;
+    const printManager = new PrintManager();
+
+    // Format the content for bill printing
+    const printContent: PrintContent = {
+      type: "BILL",
+      content: {
+        header: {
+          restaurantName: printData.restaurantName,
+          customerName: printData.name,
+          orderType: printData.orderType,
+          date: printData.date,
+        },
+        items: printData.items,
+        summary: {
+          subTotal: printData.totalPrice - printData.gst,
+          sgst: printData.gst / 2,
+          cgst: printData.gst / 2,
+          total: printData.totalPrice,
+          rounded: Math.round(printData.totalPrice),
+        },
+        payment: printData.isSplitPayment
+          ? {
+              type: "SPLIT",
+              details: printData.splitPayments,
+            }
+          : {
+              type: "SINGLE",
+              details: [
+                {
+                  method: printData.paymentMethod || "CASH",
+                  amount: printData.totalPrice,
+                },
+              ],
+            },
+        note: printData.note,
+      },
+    };
+
+    // Print to all bill printers
+    const printResults = await Promise.all(
+      billPrinters.map((printer) => printManager.print(printer, printContent))
+    );
+
+    // Check if at least one printer succeeded
+    const success = printResults.some((result: PrintResult) => result.success);
+
+    if (!success) {
+      throw new Error("Failed to print to any bill printer");
+    }
+
+    return res.json({
+      success: true,
+      message: "Bill printed successfully",
+    });
+  } catch (error) {
+    console.error("Bill Print error:", error);
+    throw new BadRequestsException(
+      "Failed to print bill",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+};
+
+export const printTCP = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const { printerId, data, content, rawData, options } = req.body;
+
+  // Check if we have either data or content
+  if (!printerId || (!data && !content && !rawData)) {
+    throw new BadRequestsException(
+      "Missing parameters: printerId and either data or content are required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  try {
+    // Determine what data to store in the print job
+    // If we have structured content, use that for better formatting
+    // Otherwise, fall back to raw data
+    // IMPORTANT: Convert content to string as required by Prisma schema
+    const jobContent = content
+      ? JSON.stringify(content)
+      : typeof data === "string"
+      ? data
+      : JSON.stringify(data);
+
+    // Create a print job in the database
+    // Note: Store all additional data in options
+    const printJobOptions = {
+      ...options,
+      // Store raw data in options if it's provided
+      ...(rawData ? { rawData } : {}),
+      // Store the original structured content in options for the print agent to use
+      ...(content ? { structuredContent: content } : {}),
+    };
+
+    const printJob = await prismaDB.printJob.create({
+      data: {
+        restaurantId: outlet.id,
+        printerId: printerId,
+        content: jobContent, // Now this is a string as required by Prisma
+        options: printJobOptions || {},
+        status: "pending",
+      },
+    });
+
+    // Notify connected clients via WebSocket
+    websocketManager.notifyClients(outlet.id, "print_job", {
+      type: "print_job",
+      data: printJob,
+    });
+
+    return res.json({
+      success: true,
+      message: "Print job created successfully",
+      jobId: printJob.id,
+    });
+  } catch (error: any) {
+    console.error("Error creating print job:", error);
+    throw new BadRequestsException(
+      `Failed to create print job: ${error.message}`,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
 };

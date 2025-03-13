@@ -16,3 +16,6 @@ export const CHROMIUM_EXECUTABLE_PATH =
 export const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID as string;
 export const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET as string;
 export const REDIS_QUEUE_URL = process.env.REDIS_QUEUE_URL;
+export const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID as string;
+export const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN as string;
+export const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER as string;

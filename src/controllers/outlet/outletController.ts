@@ -1032,3 +1032,37 @@ export const updateOnlinePortalStatus = async (req: Request, res: Response) => {
     message: "Online Portal Status Updated Successfully",
   });
 };
+
+export const getLocalPrintSetup = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getPrinter = await prismaDB.printer.findMany({
+    where: {
+      restaurantId: outlet.id,
+      connectionType: {
+        in: ["LAN", "WIFI"],
+      },
+    },
+  });
+
+  if (getPrinter.length === 0) {
+    return res.json({
+      success: true,
+      data: {
+        hasLocalPrintSetupAccess: false,
+      },
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      hasLocalPrintSetupAccess: true,
+    },
+  });
+};

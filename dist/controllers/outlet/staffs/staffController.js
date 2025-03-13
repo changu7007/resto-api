@@ -76,7 +76,9 @@ const getStaffsForTable = (req, res) => __awaiter(void 0, void 0, void 0, functi
             role: staff === null || staff === void 0 ? void 0 : staff.role,
             salary: staff === null || staff === void 0 ? void 0 : staff.salary,
             posAccess: staff === null || staff === void 0 ? void 0 : staff.posAccess,
+            primeAccess: staff === null || staff === void 0 ? void 0 : staff.primeAccess,
             orders: (_a = staff === null || staff === void 0 ? void 0 : staff.orders) === null || _a === void 0 ? void 0 : _a.length,
+            payFrequency: staff === null || staff === void 0 ? void 0 : staff.payFrequency,
             phoneNo: staff === null || staff === void 0 ? void 0 : staff.phoneNo,
             joinedDate: staff === null || staff === void 0 ? void 0 : staff.joinedDate,
             createdAt: staff === null || staff === void 0 ? void 0 : staff.createdAt,
@@ -318,7 +320,7 @@ const createStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const { name, email, phoneNo, role, salary, joinedDate } = req.body;
+    const { name, email, phoneNo, role, salary, joinedDate, payFrequency } = req.body;
     const checkEmail = yield __1.prismaDB.staff.findFirst({
         where: {
             email,
@@ -345,6 +347,7 @@ const createStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             joinedDate,
             phoneNo,
             role,
+            payFrequency,
         },
     });
     yield (0, get_staffs_1.getAllStaff)(getOutlet.id);
@@ -369,7 +372,7 @@ const updateStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     if (!staff) {
         throw new not_found_1.NotFoundException("Staff Not Found", root_1.ErrorCode.NOT_FOUND);
     }
-    const { name, email, phoneNo, role, salary, joinedDate } = req.body;
+    const { name, email, phoneNo, role, salary, joinedDate, payFrequency } = req.body;
     yield __1.prismaDB.staff.update({
         where: {
             id: staff.id,
@@ -382,6 +385,7 @@ const updateStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             joinedDate,
             phoneNo,
             role,
+            payFrequency,
         },
     });
     yield (0, get_staffs_1.getAllStaff)(getOutlet.id);

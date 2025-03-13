@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.REDIS_QUEUE_URL = exports.RAZORPAY_KEY_SECRET = exports.RAZORPAY_KEY_ID = exports.CHROMIUM_EXECUTABLE_PATH = exports.PUPPETEER_EXECUTABLE_PATH = exports.REFRESH_TOKEN_EXPIRE = exports.ACCESS_TOKEN_EXPIRE = exports.REFRESH_TOKEN = exports.ACCESS_TOKEN = exports.REDIS_URL = exports.JWT_SECRET = exports.PORT = exports.ENV = void 0;
+exports.TWILIO_PHONE_NUMBER = exports.TWILIO_AUTH_TOKEN = exports.TWILIO_ACCOUNT_SID = exports.REDIS_QUEUE_URL = exports.RAZORPAY_KEY_SECRET = exports.RAZORPAY_KEY_ID = exports.CHROMIUM_EXECUTABLE_PATH = exports.PUPPETEER_EXECUTABLE_PATH = exports.REFRESH_TOKEN_EXPIRE = exports.ACCESS_TOKEN_EXPIRE = exports.REFRESH_TOKEN = exports.ACCESS_TOKEN = exports.REDIS_URL = exports.JWT_SECRET = exports.PORT = exports.ENV = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config({ path: ".env" });
 exports.ENV = process.env.ENV;
@@ -19,3 +19,6 @@ exports.CHROMIUM_EXECUTABLE_PATH = "https://github.com/Sparticuz/chromium/releas
 exports.RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 exports.RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 exports.REDIS_QUEUE_URL = process.env.REDIS_QUEUE_URL;
+exports.TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+exports.TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+exports.TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;

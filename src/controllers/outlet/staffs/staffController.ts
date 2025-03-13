@@ -80,7 +80,9 @@ export const getStaffsForTable = async (req: Request, res: Response) => {
     role: staff?.role,
     salary: staff?.salary,
     posAccess: staff?.posAccess,
+    primeAccess: staff?.primeAccess,
     orders: staff?.orders?.length,
+    payFrequency: staff?.payFrequency,
     phoneNo: staff?.phoneNo,
     joinedDate: staff?.joinedDate,
     createdAt: staff?.createdAt,
@@ -370,7 +372,8 @@ export const createStaff = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const { name, email, phoneNo, role, salary, joinedDate } = req.body;
+  const { name, email, phoneNo, role, salary, joinedDate, payFrequency } =
+    req.body;
 
   const checkEmail = await prismaDB.staff.findFirst({
     where: {
@@ -408,6 +411,7 @@ export const createStaff = async (req: Request, res: Response) => {
       joinedDate,
       phoneNo,
       role,
+      payFrequency,
     },
   });
 
@@ -439,7 +443,8 @@ export const updateStaff = async (req: Request, res: Response) => {
     throw new NotFoundException("Staff Not Found", ErrorCode.NOT_FOUND);
   }
 
-  const { name, email, phoneNo, role, salary, joinedDate } = req.body;
+  const { name, email, phoneNo, role, salary, joinedDate, payFrequency } =
+    req.body;
 
   await prismaDB.staff.update({
     where: {
@@ -453,6 +458,7 @@ export const updateStaff = async (req: Request, res: Response) => {
       joinedDate,
       phoneNo,
       role,
+      payFrequency,
     },
   });
 

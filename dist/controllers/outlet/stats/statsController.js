@@ -142,7 +142,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         __1.prismaDB.order.findMany({
             where: {
                 restaurantId: outlet.id,
-                createdAt: { gte: startDate, lte: endDate },
+                updatedAt: { gte: startDate, lte: endDate },
                 orderStatus: "COMPLETED",
                 orderSession: { sessionStatus: "COMPLETED" },
             },
@@ -172,19 +172,19 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         __1.prismaDB.customerRestaurantAccess.count({
             where: {
                 restaurantId: outlet.id,
-                createdAt: { gte: startDate, lte: endDate },
+                updatedAt: { gte: startDate, lte: endDate },
             },
         }),
         __1.prismaDB.customerRestaurantAccess.count({
             where: {
                 restaurantId: outlet.id,
-                createdAt: { gte: prevStartDate, lte: prevEndDate },
+                updatedAt: { gte: prevStartDate, lte: prevEndDate },
             },
         }),
         __1.prismaDB.expenses.findMany({
             where: {
                 restaurantId: outlet.id,
-                createdAt: { gte: startDate, lte: endDate },
+                updatedAt: { gte: startDate, lte: endDate },
             },
             select: {
                 amount: true,
@@ -193,7 +193,7 @@ const getDashboardMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
         __1.prismaDB.expenses.findMany({
             where: {
                 restaurantId: outlet.id,
-                createdAt: { gte: startDate, lte: endDate },
+                updatedAt: { gte: startDate, lte: endDate },
             },
             select: {
                 amount: true,
@@ -311,13 +311,13 @@ const getRevenueAndExpenses = (req, res) => __awaiter(void 0, void 0, void 0, fu
     const orders = yield __1.prismaDB.order.findMany({
         where: {
             restaurantId: outlet.id,
-            createdAt: {
+            updatedAt: {
                 gte: sixMonthsAgo,
             },
         },
         select: {
             totalAmount: true,
-            createdAt: true,
+            updatedAt: true,
         },
     });
     // Fetch purchases for expenses
@@ -365,7 +365,7 @@ const getRevenueAndExpenses = (req, res) => __awaiter(void 0, void 0, void 0, fu
     const monthlyData = {};
     // Aggregate revenue by month
     orders.forEach((order) => {
-        const month = (0, date_fns_1.format)(order.createdAt, "MMMM");
+        const month = (0, date_fns_1.format)(order.updatedAt, "MMMM");
         if (!monthlyData[month]) {
             monthlyData[month] = { revenue: 0, expenses: 0 };
         }
@@ -427,7 +427,7 @@ const orderStatsForOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
     const orders = yield __1.prismaDB.order.findMany({
         where: {
             restaurantId: outlet.id,
-            createdAt: {
+            updatedAt: {
                 gte: startDate,
                 lte: endDate,
             },
@@ -592,7 +592,7 @@ const orderStatsForOutletByStaff = (req, res) => __awaiter(void 0, void 0, void 
         where: {
             restaurantId: outlet.id,
             staffId: staff === null || staff === void 0 ? void 0 : staff.id,
-            createdAt: {
+            updatedAt: {
                 gte: startDate,
                 lte: endDate,
             },
@@ -676,7 +676,7 @@ const outletTopSellingItems = (req, res) => __awaiter(void 0, void 0, void 0, fu
         where: {
             order: {
                 restaurantId: outlet.id,
-                createdAt: {
+                updatedAt: {
                     gte: startDate,
                     lte: endDate,
                 },
@@ -744,7 +744,7 @@ const lastSixMonthsOrders = (req, res) => __awaiter(void 0, void 0, void 0, func
     const orders = yield __1.prismaDB.order.findMany({
         where: {
             restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
-            createdAt: {
+            updatedAt: {
                 gte: sixMonthsAgo,
             },
             // orderStatus: "COMPLETED",
@@ -807,7 +807,7 @@ const cashFlowStats = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     const cashFlowOrderSession = yield __1.prismaDB.orderSession.findMany({
         where: {
             restaurantId: outlet.id,
-            createdAt: {
+            updatedAt: {
                 gte: startDate,
                 lte: endDate,
             },
@@ -1266,7 +1266,7 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     const orders = yield __1.prismaDB.order.findMany({
         where: {
             restaurantId: outlet.id,
-            createdAt: { gte: startDate, lte: endDate },
+            updatedAt: { gte: startDate, lte: endDate },
             orderStatus: "COMPLETED",
         },
         select: {
@@ -1280,7 +1280,7 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     const purchases = yield __1.prismaDB.purchase.findMany({
         where: {
             restaurantId: outlet.id,
-            createdAt: { gte: startDate, lte: endDate },
+            updatedAt: { gte: startDate, lte: endDate },
         },
         select: {
             totalAmount: true,
@@ -1291,7 +1291,7 @@ const getFinancialMetrics = (req, res) => __awaiter(void 0, void 0, void 0, func
     const expenses = yield __1.prismaDB.expenses.findMany({
         where: {
             restaurantId: outlet.id,
-            createdAt: { gte: startDate, lte: endDate },
+            updatedAt: { gte: startDate, lte: endDate },
         },
         select: {
             amount: true,
@@ -1393,7 +1393,7 @@ const expenseMetrics = (req, res) => __awaiter(void 0, void 0, void 0, function*
         __1.prismaDB.order.findMany({
             where: {
                 restaurantId: outletId,
-                createdAt: {
+                updatedAt: {
                     gte: parsedStartDate,
                     lte: parsedEndDate,
                 },
@@ -1480,26 +1480,26 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
         throw new Error("Failed to calculate today's date range.");
     }
     const orders = yield __1.prismaDB.order.groupBy({
-        by: ["createdAt"],
+        by: ["updatedAt"],
         _count: {
             id: true,
         },
         where: {
             restaurantId: outletId,
-            createdAt: {
+            updatedAt: {
                 gte: new Date(todayStart),
                 lte: new Date(todayEnd),
             },
         },
     });
     const orderStatuses = yield __1.prismaDB.order.groupBy({
-        by: ["createdAt", "orderStatus"],
+        by: ["updatedAt", "orderStatus"],
         _count: {
             id: true,
         },
         where: {
             restaurantId: outletId,
-            createdAt: {
+            updatedAt: {
                 gte: new Date(todayStart),
                 lte: new Date(todayEnd),
             },
@@ -1511,7 +1511,7 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
     const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => (startHour + i) % 24);
     const formattedData = hours.map((hour) => {
         const ordersAtHour = orders.filter((order) => {
-            const orderHour = luxon_1.DateTime.fromJSDate(order.createdAt, {
+            const orderHour = luxon_1.DateTime.fromJSDate(order.updatedAt, {
                 zone: timeZone,
             }).hour;
             return orderHour === hour;
@@ -1519,7 +1519,7 @@ const getOrderHourWise = (req, res) => __awaiter(void 0, void 0, void 0, functio
         const count = ordersAtHour.reduce((sum, order) => sum + order._count.id, 0);
         const statuses = orderStatuses
             .filter((status) => {
-            const statusHour = luxon_1.DateTime.fromJSDate(status.createdAt, {
+            const statusHour = luxon_1.DateTime.fromJSDate(status.updatedAt, {
                 zone: timeZone,
             }).hour;
             return statusHour === hour;

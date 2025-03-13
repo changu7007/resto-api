@@ -54,7 +54,9 @@ const splitPaymentSchema = zod_1.z
         amount: zod_1.z.number(),
     }))
         .optional(),
-    receivedAmount: zod_1.z.number().optional(),
+    discount: zod_1.z.coerce.number().optional(),
+    discountAmount: zod_1.z.coerce.number().optional(),
+    receivedAmount: zod_1.z.coerce.number().optional(),
 })
     .refine((data) => {
     // If it's not a split payment, paymentMethod is required
@@ -76,7 +78,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
     const { orderSessionId, outletId } = req.params;
     // @ts-ignore
     const { id, role } = req.user;
-    const { subTotal, paymentMethod, cashRegisterId, isSplitPayment, splitPayments, receivedAmount, } = splitPaymentSchema.parse(req.body);
+    const { subTotal, paymentMethod, cashRegisterId, isSplitPayment, splitPayments, discount, discountAmount, receivedAmount, } = splitPaymentSchema.parse(req.body);
     // Validate the request based on whether it's a split payment or not
     if (isSplitPayment) {
         // Validate split payments
@@ -139,6 +141,8 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
                 isPaid: true,
                 paymentMethod: isSplitPayment ? "SPLIT" : paymentMethod,
                 subTotal: subTotal,
+                discount: discount,
+                discountAmount: discountAmount,
                 isSplitPayment: isSplitPayment,
                 splitPayments: isSplitPayment && splitPayments
                     ? {

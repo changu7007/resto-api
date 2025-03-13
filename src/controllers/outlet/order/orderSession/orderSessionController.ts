@@ -50,7 +50,9 @@ const splitPaymentSchema = z
         })
       )
       .optional(),
-    receivedAmount: z.number().optional(),
+    discount: z.coerce.number().optional(),
+    discountAmount: z.coerce.number().optional(),
+    receivedAmount: z.coerce.number().optional(),
   })
   .refine(
     (data) => {
@@ -84,6 +86,8 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     cashRegisterId,
     isSplitPayment,
     splitPayments,
+    discount,
+    discountAmount,
     receivedAmount,
   } = splitPaymentSchema.parse(req.body);
 
@@ -186,6 +190,8 @@ export const billingOrderSession = async (req: Request, res: Response) => {
         isPaid: true,
         paymentMethod: isSplitPayment ? "SPLIT" : paymentMethod,
         subTotal: subTotal,
+        discount: discount,
+        discountAmount: discountAmount,
         isSplitPayment: isSplitPayment,
         splitPayments:
           isSplitPayment && splitPayments

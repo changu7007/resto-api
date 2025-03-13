@@ -32,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CustomerUpdateAccessToken = exports.getCurrentOrderForCustomer = exports.getCustomerOrdersById = exports.customerUpdateSession = exports.CustomerLogin = exports.generateOtp = exports.updateOtp = exports.checkCustomer = exports.otpCheck = void 0;
+exports.CustomerUpdateAccessToken = exports.getCurrentOrderForCustomer = exports.getCustomerOrdersById = exports.customerUpdateSession = exports.CustomerLogin = exports.generateOtp = exports.verifyOtp = exports.sendWhatsAppOtp = exports.updateOtp = exports.checkCustomer = exports.otpCheck = void 0;
 const __1 = require("../../..");
 const jwt_1 = require("../../../services/jwt");
 const bad_request_1 = require("../../../exceptions/bad-request");
@@ -45,11 +45,18 @@ const secrets_2 = require("../../../secrets");
 const jwt = __importStar(require("jsonwebtoken"));
 const redis_1 = require("../../../services/redis");
 const whatsapp_1 = require("../../../services/whatsapp");
+const twilio_1 = require("../../../services/twilio");
 const whatsappService = new whatsapp_1.WhatsAppService({
     accessToken: process.env.META_ACCESS_TOKEN,
     phoneNumberId: process.env.META_PHONE_NUMBER_ID,
     businessAccountId: process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID,
     version: "v21.0",
+});
+// Initialize Twilio service for SMS
+const twilioService = new twilio_1.TwilioService({
+    accountSid: secrets_1.TWILIO_ACCOUNT_SID,
+    authToken: secrets_1.TWILIO_AUTH_TOKEN,
+    fromPhoneNumber: secrets_1.TWILIO_PHONE_NUMBER,
 });
 const otpCheck = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { mobile } = req.body;
@@ -66,45 +73,158 @@ const checkCustomer = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.checkCustomer = checkCustomer;
 const updateOtp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { mobile } = req.body;
-    const newOtp = generateOtp();
-    const newExpiry = new Date(Date.now() + 300000);
-    const existingOtp = yield __1.prismaDB.otp.findUnique({
-        where: {
-            mobile: mobile.toString(),
-        },
-    });
-    if (existingOtp) {
-        const update = yield __1.prismaDB.otp.update({
-            where: { mobile: mobile.toString() },
-            data: { otp: newOtp, expires: newExpiry },
-        });
-        // await whatsappService.sendAuthenticationOTP({
-        //   phoneNumber: mobile.toString(),
-        //   otp: newOtp,
-        //   expiryMinutes: 5,
-        //   businessName: "Your Restaurant",
-        // });
-        return res.json({ success: true, otp: update.otp });
-    }
-    else {
-        const createdOTP = yield __1.prismaDB.otp.create({
-            data: {
+    const { mobile, restaurantId } = req.body;
+    try {
+        const getOutlet = yield (0, outlet_1.getOutletById)(restaurantId);
+        if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+            throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+        }
+        // Generate a new OTP
+        const newOtp = generateOtp();
+        const newExpiry = new Date(Date.now() + 300000); // 5 minutes expiry
+        // Store or update OTP in database
+        const existingOtp = yield __1.prismaDB.otp.findUnique({
+            where: {
                 mobile: mobile.toString(),
-                otp: newOtp,
-                expires: newExpiry,
-            }, // expires in 5 minutes
+            },
         });
-        // await whatsappService.sendAuthenticationOTP({
-        //   phoneNumber: mobile.toString(),
-        //   otp: newOtp,
-        //   expiryMinutes: 5,
-        //   businessName: "Your Restaurant",
-        // });
-        return res.json({ success: true, otp: createdOTP.otp });
+        if (existingOtp) {
+            yield __1.prismaDB.otp.update({
+                where: { mobile: mobile.toString() },
+                data: { otp: newOtp, expires: newExpiry },
+            });
+        }
+        else {
+            yield __1.prismaDB.otp.create({
+                data: {
+                    mobile: mobile.toString(),
+                    otp: newOtp,
+                    expires: newExpiry,
+                },
+            });
+        }
+        // Send OTP via SMS using Twilio
+        const businessName = (getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.name) || "Your Restaurant";
+        yield twilioService.sendSmsOtp(mobile.toString(), newOtp, businessName);
+        return res.json({
+            success: true,
+            message: "Verification code sent via SMS",
+            phoneNumber: mobile.toString(),
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to send verification code",
+        });
     }
 });
 exports.updateOtp = updateOtp;
+/**
+ * Send OTP via WhatsApp
+ */
+const sendWhatsAppOtp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { mobile, restaurantName } = req.body;
+    try {
+        // Generate a new OTP
+        const newOtp = generateOtp();
+        const newExpiry = new Date(Date.now() + 300000); // 5 minutes expiry
+        // Store or update OTP in database
+        const existingOtp = yield __1.prismaDB.otp.findUnique({
+            where: {
+                mobile: mobile.toString(),
+            },
+        });
+        if (existingOtp) {
+            yield __1.prismaDB.otp.update({
+                where: { mobile: mobile.toString() },
+                data: { otp: newOtp, expires: newExpiry },
+            });
+        }
+        else {
+            yield __1.prismaDB.otp.create({
+                data: {
+                    mobile: mobile.toString(),
+                    otp: newOtp,
+                    expires: newExpiry,
+                },
+            });
+        }
+        // Send OTP via WhatsApp using Twilio
+        const businessName = restaurantName || "Your Restaurant";
+        yield twilioService.sendWhatsAppOtp(mobile.toString(), newOtp, businessName);
+        return res.json({
+            success: true,
+            message: "Verification code sent via WhatsApp",
+            phoneNumber: mobile.toString(),
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to send verification code",
+        });
+    }
+});
+exports.sendWhatsAppOtp = sendWhatsAppOtp;
+/**
+ * Verify OTP code
+ */
+const verifyOtp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { mobile, code } = req.body;
+    try {
+        if (!mobile || !code) {
+            return res.status(400).json({
+                success: false,
+                message: "Phone number and verification code are required",
+            });
+        }
+        // Get OTP from database
+        const otpRecord = yield __1.prismaDB.otp.findUnique({
+            where: { mobile: mobile.toString() },
+        });
+        if (!otpRecord) {
+            return res.status(404).json({
+                success: false,
+                message: "No verification code found for this number",
+            });
+        }
+        // Check if OTP has expired
+        if (new Date() > otpRecord.expires) {
+            // Delete expired OTP
+            yield __1.prismaDB.otp.delete({
+                where: { mobile: mobile.toString() },
+            });
+            return res.status(400).json({
+                success: false,
+                message: "Verification code has expired",
+            });
+        }
+        // Check if OTP matches
+        if (otpRecord.otp !== code) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid verification code",
+            });
+        }
+        // Delete used OTP
+        yield __1.prismaDB.otp.delete({
+            where: { mobile: mobile.toString() },
+        });
+        return res.json({
+            success: true,
+            message: "Phone number verified successfully",
+            phoneNumber: mobile.toString(),
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to verify code",
+        });
+    }
+});
+exports.verifyOtp = verifyOtp;
 function generateOtp() {
     return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
 }

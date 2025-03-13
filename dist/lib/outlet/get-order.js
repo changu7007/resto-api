@@ -21,6 +21,11 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
                 in: ["INCOMMING", "PREPARING", "FOODREADY"],
             },
             active: true,
+            orderItems: {
+                some: {
+                    strike: false,
+                },
+            },
         },
         include: {
             orderSession: {
@@ -260,6 +265,11 @@ const getFetchLiveOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0,
             },
             staffId: staffId,
             active: true,
+            orderItems: {
+                some: {
+                    strike: false,
+                },
+            },
         },
         include: {
             orderSession: {

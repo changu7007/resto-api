@@ -9,11 +9,17 @@ import {
   getOutletCustomerAndFetchToRedis,
 } from "../../../lib/outlet";
 import { getCustomerById } from "../../../lib/get-users";
-import { ACCESS_TOKEN } from "../../../secrets";
+import {
+  ACCESS_TOKEN,
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  TWILIO_PHONE_NUMBER,
+} from "../../../secrets";
 import { REFRESH_TOKEN } from "../../../secrets";
 import * as jwt from "jsonwebtoken";
 import { redis } from "../../../services/redis";
 import { WhatsAppService } from "../../../services/whatsapp";
+import { TwilioService } from "../../../services/twilio";
 
 export interface Customer {
   id: string;
@@ -30,6 +36,13 @@ const whatsappService = new WhatsAppService({
   phoneNumberId: process.env.META_PHONE_NUMBER_ID!,
   businessAccountId: process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID!,
   version: "v21.0",
+});
+
+// Initialize Twilio service for SMS
+const twilioService = new TwilioService({
+  accountSid: TWILIO_ACCOUNT_SID,
+  authToken: TWILIO_AUTH_TOKEN,
+  fromPhoneNumber: TWILIO_PHONE_NUMBER,
 });
 
 export const otpCheck = async (req: Request, res: Response) => {
@@ -49,46 +62,175 @@ export const checkCustomer = async (req: Request, res: Response) => {
 };
 
 export const updateOtp = async (req: Request, res: Response) => {
-  const { mobile } = req.body;
+  const { mobile, restaurantId } = req.body;
 
-  const newOtp = generateOtp();
-  const newExpiry = new Date(Date.now() + 300000);
+  try {
+    const getOutlet = await getOutletById(restaurantId);
+    if (!getOutlet?.id) {
+      throw new NotFoundException(
+        "Outlet Not Found",
+        ErrorCode.OUTLET_NOT_FOUND
+      );
+    }
+    // Generate a new OTP
+    const newOtp = generateOtp();
+    const newExpiry = new Date(Date.now() + 300000); // 5 minutes expiry
 
-  const existingOtp = await prismaDB.otp.findUnique({
-    where: {
-      mobile: mobile.toString(),
-    },
-  });
-
-  if (existingOtp) {
-    const update = await prismaDB.otp.update({
-      where: { mobile: mobile.toString() },
-      data: { otp: newOtp, expires: newExpiry },
-    });
-
-    // await whatsappService.sendAuthenticationOTP({
-    //   phoneNumber: mobile.toString(),
-    //   otp: newOtp,
-    //   expiryMinutes: 5,
-    //   businessName: "Your Restaurant",
-    // });
-
-    return res.json({ success: true, otp: update.otp });
-  } else {
-    const createdOTP = await prismaDB.otp.create({
-      data: {
+    // Store or update OTP in database
+    const existingOtp = await prismaDB.otp.findUnique({
+      where: {
         mobile: mobile.toString(),
-        otp: newOtp,
-        expires: newExpiry,
-      }, // expires in 5 minutes
+      },
     });
-    // await whatsappService.sendAuthenticationOTP({
-    //   phoneNumber: mobile.toString(),
-    //   otp: newOtp,
-    //   expiryMinutes: 5,
-    //   businessName: "Your Restaurant",
-    // });
-    return res.json({ success: true, otp: createdOTP.otp });
+
+    if (existingOtp) {
+      await prismaDB.otp.update({
+        where: { mobile: mobile.toString() },
+        data: { otp: newOtp, expires: newExpiry },
+      });
+    } else {
+      await prismaDB.otp.create({
+        data: {
+          mobile: mobile.toString(),
+          otp: newOtp,
+          expires: newExpiry,
+        },
+      });
+    }
+
+    // Send OTP via SMS using Twilio
+    const businessName = getOutlet?.name || "Your Restaurant";
+    await twilioService.sendSmsOtp(mobile.toString(), newOtp, businessName);
+
+    return res.json({
+      success: true,
+      message: "Verification code sent via SMS",
+      phoneNumber: mobile.toString(),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send verification code",
+    });
+  }
+};
+
+/**
+ * Send OTP via WhatsApp
+ */
+export const sendWhatsAppOtp = async (req: Request, res: Response) => {
+  const { mobile, restaurantName } = req.body;
+
+  try {
+    // Generate a new OTP
+    const newOtp = generateOtp();
+    const newExpiry = new Date(Date.now() + 300000); // 5 minutes expiry
+
+    // Store or update OTP in database
+    const existingOtp = await prismaDB.otp.findUnique({
+      where: {
+        mobile: mobile.toString(),
+      },
+    });
+
+    if (existingOtp) {
+      await prismaDB.otp.update({
+        where: { mobile: mobile.toString() },
+        data: { otp: newOtp, expires: newExpiry },
+      });
+    } else {
+      await prismaDB.otp.create({
+        data: {
+          mobile: mobile.toString(),
+          otp: newOtp,
+          expires: newExpiry,
+        },
+      });
+    }
+
+    // Send OTP via WhatsApp using Twilio
+    const businessName = restaurantName || "Your Restaurant";
+    await twilioService.sendWhatsAppOtp(
+      mobile.toString(),
+      newOtp,
+      businessName
+    );
+
+    return res.json({
+      success: true,
+      message: "Verification code sent via WhatsApp",
+      phoneNumber: mobile.toString(),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send verification code",
+    });
+  }
+};
+
+/**
+ * Verify OTP code
+ */
+export const verifyOtp = async (req: Request, res: Response) => {
+  const { mobile, code } = req.body;
+
+  try {
+    if (!mobile || !code) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number and verification code are required",
+      });
+    }
+
+    // Get OTP from database
+    const otpRecord = await prismaDB.otp.findUnique({
+      where: { mobile: mobile.toString() },
+    });
+
+    if (!otpRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "No verification code found for this number",
+      });
+    }
+
+    // Check if OTP has expired
+    if (new Date() > otpRecord.expires) {
+      // Delete expired OTP
+      await prismaDB.otp.delete({
+        where: { mobile: mobile.toString() },
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: "Verification code has expired",
+      });
+    }
+
+    // Check if OTP matches
+    if (otpRecord.otp !== code) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification code",
+      });
+    }
+
+    // Delete used OTP
+    await prismaDB.otp.delete({
+      where: { mobile: mobile.toString() },
+    });
+
+    return res.json({
+      success: true,
+      message: "Phone number verified successfully",
+      phoneNumber: mobile.toString(),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to verify code",
+    });
   }
 };
 

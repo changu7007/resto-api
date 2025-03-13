@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.menuCardSchema = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionCancelPatch = exports.orderessionNamePatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.postOrderForUser = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.getParentOrder = exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.menuCardSchema = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionCancelPatch = exports.orderessionNamePatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.postOrderForUser = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -812,6 +812,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     return res.json({
         success: true,
         orderSessionId: result.id,
+        kotNumber: orderId,
         message: "Order Created from Admin ✅",
     });
 });
@@ -1136,6 +1137,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         return res.json({
             success: true,
             sessionId: orderSession.id,
+            kotNumber: orderId,
             message: "Order Created by Customer ✅",
         });
     }));
@@ -1269,6 +1271,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
     return res.json({
         success: true,
         orderSessionId: orderSession.id,
+        kotNumber: generatedId,
         message: "Order Added from Admin App ✅",
     });
 });
@@ -1368,6 +1371,26 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
         ]);
+        //if order is dineIn then update the table status to unoccupied
+        if (getOrderById.orderType === "DINEIN") {
+            //find table
+            const table = yield tx.table.findFirst({
+                where: {
+                    id: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.tableId,
+                    restaurantId: outletId,
+                },
+            });
+            if (!(table === null || table === void 0 ? void 0 : table.id)) {
+                throw new not_found_1.NotFoundException("Table Not Found", root_1.ErrorCode.NOT_FOUND);
+            }
+            yield tx.table.update({
+                where: {
+                    id: table.id,
+                    restaurantId: outletId,
+                },
+                data: { occupied: false, currentOrderSessionId: null },
+            });
+        }
         // Update the `orderSession` status to "CANCELLED"
         yield tx.orderSession.update({
             where: {
@@ -1623,15 +1646,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
         throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
     }
     const txs = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13;
-        yield Promise.all([
-            redis_1.redis.del(`active-os-${outletId}`),
-            redis_1.redis.del(`liv-o-${outletId}`),
-            redis_1.redis.del(`tables-${outletId}`),
-            redis_1.redis.del(`a-${outletId}`),
-            redis_1.redis.del(`o-n-${outletId}`),
-            redis_1.redis.del(`${outletId}-stocks`),
-        ]);
+        var _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14;
         yield prisma.orderItem.update({
             where: {
                 id: getOrderById.id,
@@ -1728,6 +1743,23 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 totalAmount: totalAmount,
             },
         });
+        // Update related alerts to resolved
+        yield __1.prismaDB.alert.deleteMany({
+            where: {
+                restaurantId: outlet.id,
+                orderId: (_14 = getOrder === null || getOrder === void 0 ? void 0 : getOrder.order) === null || _14 === void 0 ? void 0 : _14.id,
+                status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+            },
+        });
+        yield Promise.all([
+            redis_1.redis.del(`active-os-${outletId}`),
+            redis_1.redis.del(`liv-o-${outletId}`),
+            redis_1.redis.del(`tables-${outletId}`),
+            redis_1.redis.del(`a-${outletId}`),
+            redis_1.redis.del(`o-n-${outletId}`),
+            redis_1.redis.del(`${outletId}-stocks`),
+            redis_1.redis.del(`alerts-${outletId}`),
+        ]);
     }));
     return res.json({
         success: true,
@@ -1736,6 +1768,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
 });
 exports.orderItemModification = orderItemModification;
 const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _15;
     const { orderItemId, outletId } = req.params;
     // Validate outlet
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -1754,6 +1787,11 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
             order: {
                 include: {
                     orderItems: true, // Include all order items for recalculation
+                    orderSession: {
+                        include: {
+                            orders: true,
+                        },
+                    },
                 },
             },
         },
@@ -1761,6 +1799,24 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
     if (!(orderItem === null || orderItem === void 0 ? void 0 : orderItem.id)) {
         throw new not_found_1.NotFoundException("OrderItem Not Found", root_1.ErrorCode.NOT_FOUND);
     }
+    const parentOrder = yield __1.prismaDB.order.findFirst({
+        where: {
+            id: orderItem.orderId,
+            restaurantId: outletId,
+        },
+        include: {
+            orderSession: {
+                include: {
+                    table: true,
+                    orders: true,
+                },
+            },
+        },
+    });
+    if (!(parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.id)) {
+        throw new not_found_1.NotFoundException("Order Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const orderSession = parentOrder.orderSession;
     // Use Prisma transaction for atomic operation
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
         // Refresh caches after successful transaction
@@ -1786,6 +1842,18 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
                     id: orderItem.order.id,
                 },
             });
+            // Check if there are other orders in the orderSession
+            const remainingOrders = orderSession.orders.filter((o) => o.id !== parentOrder.id);
+            if (remainingOrders.length === 0) {
+                // No orders left in orderSession, mark as CANCELLED
+                // dont cancel if the orderType is DINEIN
+                if (orderSession.orderType !== "DINEIN") {
+                    yield tx.orderSession.update({
+                        where: { id: orderSession.id },
+                        data: { sessionStatus: "CANCELLED", active: false },
+                    });
+                }
+            }
         }
         else {
             // Recalculate Order totals
@@ -1807,10 +1875,35 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
                 },
             });
         }
+        // Update related alerts to resolved
+        yield __1.prismaDB.alert.deleteMany({
+            where: {
+                restaurantId: outlet.id,
+                orderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.id,
+                status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+            },
+        });
     }));
+    yield Promise.all([
+        redis_1.redis.del(`active-os-${outletId}`),
+        redis_1.redis.del(`liv-o-${outletId}`),
+        redis_1.redis.del(`tables-${outletId}`),
+        redis_1.redis.del(`a-${outletId}`),
+        redis_1.redis.del(`o-n-${outletId}`),
+        redis_1.redis.del(`${outletId}-stocks`),
+        redis_1.redis.del(`alerts-${outletId}`),
+    ]);
+    ws_1.websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
     return res.json({
         success: true,
         message: "Order Item Deleted",
+        data: {
+            orderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.id,
+            generatedOrderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.generatedOrderId,
+            name: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.username,
+            mode: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.orderType,
+            table: (_15 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _15 === void 0 ? void 0 : _15.name,
+        },
     });
 });
 exports.deleteOrderItem = deleteOrderItem;
@@ -1824,3 +1917,38 @@ const inviteCode = () => {
     return code;
 };
 exports.inviteCode = inviteCode;
+const getParentOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _16;
+    const { orderItemId, outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const orderItem = yield __1.prismaDB.orderItem.findFirst({
+        where: { id: orderItemId, order: { restaurantId: outletId } },
+    });
+    if (!(orderItem === null || orderItem === void 0 ? void 0 : orderItem.id)) {
+        throw new not_found_1.NotFoundException("OrderItem Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const parentOrder = yield __1.prismaDB.order.findFirst({
+        where: { id: orderItem.orderId },
+        include: {
+            orderSession: {
+                include: {
+                    table: true,
+                },
+            },
+        },
+    });
+    return res.json({
+        success: true,
+        data: {
+            orderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.id,
+            generatedOrderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.generatedOrderId,
+            name: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.username,
+            mode: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.orderType,
+            table: (_16 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _16 === void 0 ? void 0 : _16.name,
+        },
+    });
+});
+exports.getParentOrder = getParentOrder;

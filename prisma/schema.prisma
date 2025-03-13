@@ -191,10 +191,11 @@ model Staff {
   id               String            @id @default(auto()) @map("_id") @db.ObjectId
   active           StaffActive       @default(ACTIVE)
   name             String
-  email            String            @unique
+  email            String?
   emailVerified    Boolean?
   password         String?
   posAccess        Boolean           @default(false)
+  primeAccess      Boolean           @default(false)
   image            String?
   phoneNo          String            @unique
   role             UserRole
@@ -285,6 +286,7 @@ enum PayFrequency {
   WEEKLY
   BIWEEKLY
   MONTHLY
+  DAILY
 }
 
 model User {
@@ -845,6 +847,8 @@ model OrderSession {
   adminId         String?                   @db.ObjectId
   admin           User?                     @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   createdAt       DateTime                  @default(now())
+  discount        Float?
+  discountAmount  Float?
   subTotal        Float?
   isPaid          Boolean?                  @default(false)
   invoiceUrl      String?
@@ -887,6 +891,13 @@ enum PaymentMethod {
   SPLIT
 }
 
+enum KOTStatus {
+  NEW
+  MODIFIED
+  REPRINTED
+  CANCELLED
+}
+
 model Order {
   id               String         @id @default(auto()) @map("_id") @db.ObjectId
   active           Boolean
@@ -903,6 +914,7 @@ model Order {
   gstPrice         Float?
   totalAmount      Float
   isPaid           Boolean
+  kotStatus        KOTStatus      @default(NEW)
   paymentMethod    PaymentMethod? // The payment method if not split
   createdBy        String?
   staffId          String?        @db.ObjectId
@@ -1506,4 +1518,18 @@ model PrintLocation {
 
   @@unique([restaurantId, name])
   @@index([restaurantId])
+}
+
+model PrintJob {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId String
+  printerId    String
+  content      String
+  options      Json?
+  status       String   @default("pending") // pending, processing, completed, failed
+  error        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([restaurantId, status])
 }
