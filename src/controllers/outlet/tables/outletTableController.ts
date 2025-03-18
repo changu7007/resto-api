@@ -16,6 +16,7 @@ import {
   PaginationState,
 } from "../../../schema/staff";
 import { generateSlug } from "../../../lib/utils";
+import { z } from "zod";
 
 export const getAllTablesForTable = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -727,6 +728,13 @@ export const markTableAsUnoccupied = async (req: Request, res: Response) => {
     throw new NotFoundException("Table Not Found", ErrorCode.NOT_FOUND);
   }
 
+  if (table.currentOrderSessionId !== null) {
+    throw new BadRequestsException(
+      "Table has an active order session",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   await prismaDB.table.updateMany({
     where: {
       id: table.id,
@@ -744,4 +752,102 @@ export const markTableAsUnoccupied = async (req: Request, res: Response) => {
   ]);
 
   return res.json({ success: true, message: "Table marked as unoccupied" });
+};
+
+const tableTransferSchema = z.object({
+  transferTableId: z.string({
+    required_error: "Transfer Table ID is required",
+  }),
+});
+
+export const transferTableOrder = async (req: Request, res: Response) => {
+  const { outletId, tableId } = req.params;
+
+  const { data, error } = tableTransferSchema.safeParse(req.body);
+
+  if (error) {
+    throw new BadRequestsException(
+      error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const table = await prismaDB.table.findFirst({
+    where: { id: tableId, restaurantId: getOutlet.id },
+  });
+
+  if (!table?.id) {
+    throw new NotFoundException("Table Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  const transferTable = await prismaDB.table.findFirst({
+    where: {
+      id: data.transferTableId,
+      restaurantId: getOutlet.id,
+      occupied: false,
+    },
+  });
+
+  if (!transferTable?.id) {
+    throw new NotFoundException(
+      "Transfer Table Not Found / Table is Occupied",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  await prismaDB.$transaction(async (tx) => {
+    await tx.table.updateMany({
+      where: { id: transferTable.id },
+      data: {
+        currentOrderSessionId: table.currentOrderSessionId,
+        occupied: true,
+        inviteCode: inviteCode(),
+      },
+    });
+
+    await tx.table.updateMany({
+      where: { id: table.id },
+      data: {
+        occupied: false,
+        currentOrderSessionId: null,
+        inviteCode: null,
+      },
+    });
+
+    const findOrderSession = await tx.orderSession.findFirst({
+      where: { id: table.currentOrderSessionId! },
+    });
+
+    if (!findOrderSession?.id) {
+      throw new NotFoundException(
+        "No Order Session Found, you can mark table as unoccupied",
+        ErrorCode.NOT_FOUND
+      );
+    }
+
+    // updateOrdersession
+    await tx.orderSession.update({
+      where: { id: findOrderSession.id },
+      data: {
+        tableId: transferTable.id,
+      },
+    });
+  });
+
+  await Promise.all([
+    redis.del(`active-os-${outletId}`),
+    redis.del(`liv-o-${outletId}`),
+    redis.del(`tables-${outletId}`),
+    redis.del(`a-${outletId}`),
+    redis.del(`o-n-${outletId}`),
+    redis.del(`${outletId}-stocks`),
+  ]);
+
+  return res.json({ success: true, message: "Table Order Transferred" });
 };

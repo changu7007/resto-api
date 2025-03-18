@@ -87,6 +87,7 @@ import {
   getTableByUniqueId,
   getTableCurrentOrders,
   markTableAsUnoccupied,
+  transferTableOrder,
   updateArea,
   updateTable,
   verifyTable,
@@ -1414,6 +1415,12 @@ outletRoute.patch(
   "/:outletId/tables/:tableId/unoccupied",
   isAuthMiddelware,
   errorHandler(markTableAsUnoccupied)
+);
+
+outletRoute.patch(
+  "/:outletId/tables/:tableId/transfer",
+  isAuthMiddelware,
+  errorHandler(transferTableOrder)
 );
 
 export default outletRoute;

@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.markTableAsUnoccupied = exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = exports.getAllAreasForTable = exports.getAllTablesForTable = void 0;
+exports.transferTableOrder = exports.markTableAsUnoccupied = exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = exports.getAllAreasForTable = exports.getAllTablesForTable = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -19,6 +19,7 @@ const bad_request_1 = require("../../../exceptions/bad-request");
 const get_tables_1 = require("../../../lib/outlet/get-tables");
 const orderOutletController_1 = require("../order/orderOutletController");
 const utils_1 = require("../../../lib/utils");
+const zod_1 = require("zod");
 const getAllTablesForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -576,6 +577,9 @@ const markTableAsUnoccupied = (req, res) => __awaiter(void 0, void 0, void 0, fu
     if (!(table === null || table === void 0 ? void 0 : table.id)) {
         throw new not_found_1.NotFoundException("Table Not Found", root_1.ErrorCode.NOT_FOUND);
     }
+    if (table.currentOrderSessionId !== null) {
+        throw new bad_request_1.BadRequestsException("Table has an active order session", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     yield __1.prismaDB.table.updateMany({
         where: {
             id: table.id,
@@ -593,3 +597,76 @@ const markTableAsUnoccupied = (req, res) => __awaiter(void 0, void 0, void 0, fu
     return res.json({ success: true, message: "Table marked as unoccupied" });
 });
 exports.markTableAsUnoccupied = markTableAsUnoccupied;
+const tableTransferSchema = zod_1.z.object({
+    transferTableId: zod_1.z.string({
+        required_error: "Transfer Table ID is required",
+    }),
+});
+const transferTableOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, tableId } = req.params;
+    const { data, error } = tableTransferSchema.safeParse(req.body);
+    if (error) {
+        throw new bad_request_1.BadRequestsException(error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const table = yield __1.prismaDB.table.findFirst({
+        where: { id: tableId, restaurantId: getOutlet.id },
+    });
+    if (!(table === null || table === void 0 ? void 0 : table.id)) {
+        throw new not_found_1.NotFoundException("Table Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    const transferTable = yield __1.prismaDB.table.findFirst({
+        where: {
+            id: data.transferTableId,
+            restaurantId: getOutlet.id,
+            occupied: false,
+        },
+    });
+    if (!(transferTable === null || transferTable === void 0 ? void 0 : transferTable.id)) {
+        throw new not_found_1.NotFoundException("Transfer Table Not Found / Table is Occupied", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        yield tx.table.updateMany({
+            where: { id: transferTable.id },
+            data: {
+                currentOrderSessionId: table.currentOrderSessionId,
+                occupied: true,
+                inviteCode: (0, orderOutletController_1.inviteCode)(),
+            },
+        });
+        yield tx.table.updateMany({
+            where: { id: table.id },
+            data: {
+                occupied: false,
+                currentOrderSessionId: null,
+                inviteCode: null,
+            },
+        });
+        const findOrderSession = yield tx.orderSession.findFirst({
+            where: { id: table.currentOrderSessionId },
+        });
+        if (!(findOrderSession === null || findOrderSession === void 0 ? void 0 : findOrderSession.id)) {
+            throw new not_found_1.NotFoundException("No Order Session Found, you can mark table as unoccupied", root_1.ErrorCode.NOT_FOUND);
+        }
+        // updateOrdersession
+        yield tx.orderSession.update({
+            where: { id: findOrderSession.id },
+            data: {
+                tableId: transferTable.id,
+            },
+        });
+    }));
+    yield Promise.all([
+        redis_1.redis.del(`active-os-${outletId}`),
+        redis_1.redis.del(`liv-o-${outletId}`),
+        redis_1.redis.del(`tables-${outletId}`),
+        redis_1.redis.del(`a-${outletId}`),
+        redis_1.redis.del(`o-n-${outletId}`),
+        redis_1.redis.del(`${outletId}-stocks`),
+    ]);
+    return res.json({ success: true, message: "Table Order Transferred" });
+});
+exports.transferTableOrder = transferTableOrder;

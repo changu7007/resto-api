@@ -286,4 +286,5 @@ outletRoute.post("/:outletId/print/tcp", (0, error_handler_1.errorHandler)(print
 outletRoute.get("/:outletId/order-item/:orderItemId/parent-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getParentOrder));
 outletRoute.get("/:outletId/settings/print-access", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getLocalPrintSetup));
 outletRoute.patch("/:outletId/tables/:tableId/unoccupied", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.markTableAsUnoccupied));
+outletRoute.patch("/:outletId/tables/:tableId/transfer", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.transferTableOrder));
 exports.default = outletRoute;
