@@ -119,7 +119,8 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
                 sessionStatus: true,
             },
             _sum: {
-                subTotal: true, // Calculate total revenue per payment method
+                subTotal: true,
+                // Calculate total revenue per payment method
             },
         }),
         __1.prismaDB.orderSession.groupBy({
@@ -179,6 +180,9 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
             orderType: true,
             createdAt: true,
             updatedAt: true,
+            discount: true,
+            discountAmount: true,
+            amountReceived: true,
             table: {
                 select: {
                     name: true,
@@ -236,6 +240,9 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
                 orderType: (order === null || order === void 0 ? void 0 : order.orderType) === "DINEIN" ? (_a = order === null || order === void 0 ? void 0 : order.table) === null || _a === void 0 ? void 0 : _a.name : order === null || order === void 0 ? void 0 : order.orderType,
                 date: order === null || order === void 0 ? void 0 : order.createdAt,
                 modified: order === null || order === void 0 ? void 0 : order.updatedAt,
+                discount: order === null || order === void 0 ? void 0 : order.discount,
+                discountAmount: order === null || order === void 0 ? void 0 : order.discountAmount,
+                amountReceived: order === null || order === void 0 ? void 0 : order.amountReceived,
                 viewOrders: (_b = order === null || order === void 0 ? void 0 : order.orders) === null || _b === void 0 ? void 0 : _b.map((o) => {
                     var _a;
                     return ({

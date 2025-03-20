@@ -7,8 +7,26 @@
         font-family: Arial, sans-serif;
         margin: 20px;
       }
-      h1 {
+      h1,
+      h2 {
         text-align: center;
+        color: #2563eb;
+      }
+      .summary-box {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+      .summary-title {
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      .summary-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
       }
       table {
         width: 100%;
@@ -24,29 +42,81 @@
       th {
         background-color: #f4f4f4;
       }
+      .amount {
+        text-align: right;
+      }
+      .paid {
+        color: #16a34a;
+      }
+      .unpaid {
+        color: #dc2626;
+      }
+      .restaurant-info {
+        margin-bottom: 20px;
+      }
+      .report-period {
+        margin-bottom: 20px;
+        font-style: italic;
+      }
     </style>
   </head>
   <body>
     <h1>Sales Report</h1>
-    <p>Restaurant: <%= restaurantName %></p>
-    <p>Report Period: <%= startDate %> to <%= endDate %></p>
 
+    <div class="restaurant-info">
+      <p><strong>Restaurant:</strong> <%= data.restaurant.name %></p>
+      <p><strong>Address:</strong> <%= data.restaurant.address %></p>
+    </div>
+
+    <div class="report-period">
+      <p>Report Period: <%= startDate %> to <%= endDate %></p>
+    </div>
+
+    <div class="summary-box">
+      <div class="summary-title">Summary</div>
+      <div class="summary-item">
+        <span>Total Revenue:</span>
+        <span>₹<%= data.ordersData.totalRevenue.toFixed(2) %></span>
+      </div>
+      <div class="summary-item">
+        <span>Total Orders:</span>
+        <span><%= data.ordersData.stats.totalOrders %></span>
+      </div>
+      <div class="summary-title" style="margin-top: 15px">
+        Payment Distribution
+      </div>
+      <% Object.entries(data.ordersData.paymentMethods).forEach(([method,
+      amount]) => { %>
+      <div class="summary-item">
+        <span><%= method %>:</span>
+        <span>₹<%= amount.toFixed(2) %></span>
+      </div>
+      <% }); %>
+    </div>
+
+    <h2>Order Details</h2>
     <table>
       <thead>
         <tr>
-          <th>Order ID</th>
-          <th>Customer</th>
-          <th>Total Amount</th>
-          <th>Order Date</th>
+          <th>Bill ID</th>
+          <th>Order Type</th>
+          <th>Status</th>
+          <th>Amount</th>
+          <th>Date</th>
+          <th>Time</th>
         </tr>
       </thead>
       <tbody>
-        <% data.forEach(order => { %>
+        <% data.ordersData.formattedOrders.forEach(order => { %>
         <tr>
-          <td><%= order.id %></td>
-          <td><%= order.username || "N/A" %></td>
-          <td>₹<%= order.totalAmount %></td>
-          <td><%= new Date(order.createdAt).toLocaleDateString() %></td>
+          <td><%= order.billId %></td>
+          <td><%= order.orderType %></td>
+          <td class="<%= order.paidStatus === 'Paid' ? 'paid' : 'unpaid' %>">
+            <%= order.paidStatus %>
+          </td>
+          <td class="amount">₹<%= order.totalAmount.toFixed(2) %></td>
+          <td><%= order.date %></td>
+          <td><%= order.time %></td>
         </tr>
         <% }); %>
       </tbody>

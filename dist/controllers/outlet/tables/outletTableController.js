@@ -417,18 +417,19 @@ const connectTable = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     if (!(_table === null || _table === void 0 ? void 0 : _table.id)) {
         throw new not_found_1.NotFoundException("Table Not Found", root_1.ErrorCode.NOT_FOUND);
     }
+    const inviteCodes = (0, orderOutletController_1.inviteCode)();
     const table = yield __1.prismaDB.table.updateMany({
         where: {
             id: _table.id,
             restaurantId: getOutlet.id,
         },
         data: {
-            inviteCode: (0, orderOutletController_1.inviteCode)(),
+            inviteCode: inviteCodes,
         },
     });
     yield (0, get_tables_1.getFetchAllAreastoRedis)(getOutlet.id);
     yield (0, get_tables_1.getFetchAllTablesToRedis)(getOutlet.id);
-    return res.json({ success: true, table });
+    return res.json({ success: true, inviteCode: inviteCodes });
 });
 exports.connectTable = connectTable;
 const verifyTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -465,6 +466,7 @@ const verifyTable = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             success: true,
             message: "verified",
             customerId: table.customerId,
+            inviteCode: table.inviteCode,
         });
     }
     throw new not_found_1.NotFoundException("Invalid Code", root_1.ErrorCode.NOT_FOUND);

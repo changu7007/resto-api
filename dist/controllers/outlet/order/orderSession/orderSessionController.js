@@ -45,7 +45,7 @@ const splitPaymentSchema = zod_1.z
     }),
     paymentMethod: zod_1.z.nativeEnum(client_1.PaymentMethod).optional(),
     cashRegisterId: zod_1.z.string({
-        required_error: "Cash register ID is required",
+        required_error: "Cash register ID is required / Cash Register Not Opened",
     }),
     isSplitPayment: zod_1.z.boolean().optional(),
     splitPayments: zod_1.z
@@ -78,7 +78,11 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
     const { orderSessionId, outletId } = req.params;
     // @ts-ignore
     const { id, role } = req.user;
-    const { subTotal, paymentMethod, cashRegisterId, isSplitPayment, splitPayments, discount, discountAmount, receivedAmount, } = splitPaymentSchema.parse(req.body);
+    const { data, error } = splitPaymentSchema.safeParse(req.body);
+    if (error) {
+        throw new bad_request_1.BadRequestsException(error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const { subTotal, paymentMethod, cashRegisterId, isSplitPayment, splitPayments, discount, discountAmount, receivedAmount, } = data;
     // Validate the request based on whether it's a split payment or not
     if (isSplitPayment) {
         // Validate split payments

@@ -532,19 +532,22 @@ export const connectTable = async (req: Request, res: Response) => {
     throw new NotFoundException("Table Not Found", ErrorCode.NOT_FOUND);
   }
 
+  const inviteCodes = inviteCode();
+
   const table = await prismaDB.table.updateMany({
     where: {
       id: _table.id,
       restaurantId: getOutlet.id,
     },
     data: {
-      inviteCode: inviteCode(),
+      inviteCode: inviteCodes,
     },
   });
+
   await getFetchAllAreastoRedis(getOutlet.id);
   await getFetchAllTablesToRedis(getOutlet.id);
 
-  return res.json({ success: true, table });
+  return res.json({ success: true, inviteCode: inviteCodes });
 };
 
 export const verifyTable = async (req: Request, res: Response) => {
@@ -595,6 +598,7 @@ export const verifyTable = async (req: Request, res: Response) => {
       success: true,
       message: "verified",
       customerId: table.customerId,
+      inviteCode: table.inviteCode,
     });
   }
   throw new NotFoundException("Invalid Code", ErrorCode.NOT_FOUND);

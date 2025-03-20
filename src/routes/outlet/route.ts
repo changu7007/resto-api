@@ -250,10 +250,12 @@ import {
 } from "../../controllers/outlet/cash-registers/adminRegisterController";
 import {
   assignPrinterToLocation,
+  createPrintDetails,
   createPrinter,
   createPrintLocation,
   deletePrinter,
   deletePrintLocation,
+  getPrintDetails,
   getPrinterById,
   getPrinters,
   getPrintersForLocation,
@@ -263,6 +265,7 @@ import {
   printBill,
   printKOT,
   printTCP,
+  updatePrintDetails,
   updatePrinter,
   updatePrintLocation,
 } from "../../controllers/outlet/printers/printer-controller";
@@ -440,13 +443,13 @@ outletRoute.post(
 //online and delivery
 outletRoute.get(
   "/:outletId/online-and-delivery-items",
-  isAuthMiddelware,
+  // isAuthMiddelware,
   errorHandler(getItemsByCategoryForOnlineAndDelivery)
 );
 
 outletRoute.get(
   "/:outletId/online-and-delivery-items-search",
-  isAuthMiddelware,
+  // isAuthMiddelware,
   errorHandler(getItemsBySearchForOnlineAndDelivery)
 );
 
@@ -1421,6 +1424,24 @@ outletRoute.patch(
   "/:outletId/tables/:tableId/transfer",
   isAuthMiddelware,
   errorHandler(transferTableOrder)
+);
+
+outletRoute.post(
+  "/:outletId/print-details",
+  isAuthMiddelware,
+  errorHandler(createPrintDetails)
+);
+
+outletRoute.patch(
+  "/:outletId/print-details",
+  isAuthMiddelware,
+  errorHandler(updatePrintDetails)
+);
+
+outletRoute.get(
+  "/:outletId/print-details",
+  isAuthMiddelware,
+  errorHandler(getPrintDetails)
 );
 
 export default outletRoute;

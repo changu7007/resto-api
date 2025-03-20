@@ -109,13 +109,21 @@ const createReport = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 exports.createReport = createReport;
 function fetchReportData(reportType, startDate, endDate, restaurantId) {
     return __awaiter(this, void 0, void 0, function* () {
+        // Adjust date ranges to start at 00:00:00 for the start date and 23:59:59 for the end date (IST)
+        const startDateWithTime = new Date(startDate);
+        startDateWithTime.setHours(0, 0, 0, 0);
+        const endDateWithTime = new Date(endDate);
+        endDateWithTime.setHours(23, 59, 59, 999);
         const where = {
             restaurantId,
-            createdAt: { gte: new Date(startDate), lte: new Date(endDate) },
+            createdAt: {
+                gte: startDateWithTime,
+                lte: endDateWithTime,
+            },
         };
         const dateRange = {
-            from: startDate,
-            to: endDate,
+            from: startDateWithTime.toISOString(),
+            to: endDateWithTime.toISOString(),
         };
         switch (reportType) {
             case "SALES":
@@ -148,22 +156,16 @@ function formatSalesData(dateRange, outletId) {
             },
         };
         // Fetch all required data in parallel
-        const [orders, outlet, customerStats, topItems] = yield Promise.all([
+        const [orders, outlet] = yield Promise.all([
             __1.prismaDB.order.findMany({
                 where,
                 include: {
-                    orderItems: {
-                        include: {
-                            menuItem: {
-                                select: {
-                                    category: true,
-                                },
-                            },
-                        },
-                    },
                     orderSession: {
                         select: {
+                            billId: true,
                             paymentMethod: true,
+                            isPaid: true,
+                            splitPayments: true,
                         },
                     },
                 },
@@ -178,95 +180,105 @@ function formatSalesData(dateRange, outletId) {
                     imageUrl: true,
                 },
             }),
-            __1.prismaDB.customerRestaurantAccess.groupBy({
-                by: ["id"],
-                where: {
-                    orderSession: {
-                        some: {
-                            orders: {
-                                every: where,
-                            },
-                        },
-                    },
-                },
-                _count: true,
-            }),
-            __1.prismaDB.orderItem.groupBy({
-                by: ["name"],
-                where: {
-                    order: where,
-                },
-                _sum: {
-                    quantity: true,
-                    totalPrice: true,
-                },
-            }),
         ]);
-        // Calculate order types distribution
-        const ordersType = orders.reduce((acc, order) => {
-            const type = order.orderType;
-            acc[type] = (acc[type] || 0) + 1;
-            return acc;
-        }, {});
-        // Calculate payment methods distribution
-        const paymentMethods = orders.reduce((acc, order) => {
-            const method = order.orderSession.paymentMethod;
-            acc[method] = (acc[method] || 0) + Number(order.totalAmount);
-            return acc;
-        }, {});
-        // Calculate category sales
-        const categorySales = orders.reduce((acc, order) => {
-            order.orderItems.forEach((item) => {
-                acc[item.menuItem.category.name] =
-                    (acc[item.menuItem.category.name] || 0) +
-                        Number(item.totalPrice) * Number(item.quantity);
-            });
-            return acc;
-        }, {});
-        // Calculate time analysis
-        const timeAnalysis = {
-            peakHours: calculatePeakHours(orders),
-            weekdayDistribution: calculateWeekdayDistribution(orders),
+        // Format the orders for table display
+        const formattedOrders = orders.map((order) => ({
+            billId: order.orderSession.billId || order.id,
+            orderType: order.orderType,
+            paidStatus: order.orderSession.isPaid ? "Paid" : "Unpaid",
+            totalAmount: Number(order.totalAmount),
+            paymentMethod: order.orderSession.paymentMethod,
+            time: order.createdAt.toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true,
+            }),
+            date: order.createdAt.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+            }),
+        }));
+        const standardizedPayments = {
+            CASH: 0,
+            UPI: 0,
+            CARD: 0,
+            OTHER: 0,
         };
-        // Format customer analytics
-        const customerAnalytics = {
-            newCustomers: customerStats.filter((c) => c._count === 1).length,
-            repeatCustomers: customerStats.filter((c) => c._count > 1).length,
-            averageOrderValue: orders.reduce((acc, order) => acc + Number(order.totalAmount), 0) /
-                orders.length,
-            avgServingTime: calculateAverageServingTime(orders),
-        };
-        // Format top items
-        const formattedTopItems = topItems
-            .map((item) => ({
-            name: item.name,
-            quantity: Number(item._sum.quantity) || 0,
-            revenue: Number(item._sum.totalPrice) || 0,
-        }))
-            .sort((a, b) => b.revenue - a.revenue)
-            .slice(0, 5);
-        // Calculate total stats
-        const stats = {
-            totalItems: orders.reduce((acc, order) => acc + order.orderItems.length, 0),
-            totalRevenue: orders.reduce((acc, order) => acc + Number(order.totalAmount), 0),
-            totalOrders: orders.length,
-            totalProfit: calculateTotalProfit(orders),
-            totalCustomers: customerStats.length,
-            totalTax: orders.reduce((acc, order) => acc + (order.gstPrice || 0), 0),
-        };
+        // Process all orders to calculate payment method distribution
+        orders.forEach((order) => {
+            const paymentMethod = order.orderSession.paymentMethod;
+            const orderAmount = Number(order.totalAmount);
+            // Handle regular (non-split) payments
+            if (paymentMethod !== "SPLIT") {
+                const standardMethod = mapPaymentMethod(paymentMethod);
+                standardizedPayments[standardMethod] += orderAmount;
+            }
+            // Handle split payments by distributing amounts across standardized categories
+            else if (order.paymentMethod === "SPLIT" &&
+                order.orderSession.splitPayments &&
+                order.orderSession.splitPayments.length > 0) {
+                order.orderSession.splitPayments.forEach((splitPayment) => {
+                    const standardMethod = mapPaymentMethod(splitPayment.method);
+                    standardizedPayments[standardMethod] += splitPayment.amount;
+                });
+            }
+            // If it's marked as SPLIT but no split details available, put it in OTHER
+            else {
+                standardizedPayments["OTHER"] += orderAmount;
+            }
+        });
+        // Remove any payment methods with zero amounts
+        const paymentMethods = Object.fromEntries(Object.entries(standardizedPayments).filter(([_, amount]) => amount > 0));
+        // Calculate total revenue
+        const totalRevenue = orders.reduce((acc, order) => acc + Number(order.totalAmount), 0);
         return {
-            restaurant: outlet,
+            restaurant: {
+                name: (outlet === null || outlet === void 0 ? void 0 : outlet.name) || "",
+                address: (outlet === null || outlet === void 0 ? void 0 : outlet.address) || "",
+                phone: (outlet === null || outlet === void 0 ? void 0 : outlet.phoneNo) || "",
+                email: (outlet === null || outlet === void 0 ? void 0 : outlet.email) || "",
+                logo: (outlet === null || outlet === void 0 ? void 0 : outlet.imageUrl) || "",
+                dateRange: {
+                    from: new Date(dateRange.from).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    }),
+                    to: new Date(dateRange.to).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    }),
+                },
+            },
             ordersData: {
-                stats,
-                ordersType,
+                formattedOrders,
+                totalRevenue,
                 paymentMethods,
-                categorySales,
-                timeAnalysis,
-                customerAnalytics,
-                topItems: formattedTopItems,
             },
         };
     });
+}
+// Function to standardize payment methods
+function mapPaymentMethod(method) {
+    // Map payment methods to standardized categories: CASH, UPI, CARD
+    switch (method) {
+        case "CASH":
+            return "CASH";
+        case "UPI":
+            return "UPI";
+        case "CREDIT":
+        case "DEBIT":
+            return "CARD"; // Map both CREDIT and DEBIT to CARD
+        default:
+            return "OTHER";
+    }
 }
 function formatInventoryData(dateRange, outletId) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -550,24 +562,28 @@ const getReportsForTable = (req, res) => __awaiter(void 0, void 0, void 0, funct
     const filterConditions = filters.map((filter) => ({
         [filter.id]: { in: filter.value },
     }));
+    let dateFilter = {};
+    // Apply the proper time range if dateRange is provided
+    if (dateRange) {
+        const startDateWithTime = new Date(dateRange.from);
+        startDateWithTime.setHours(0, 0, 0, 0);
+        const endDateWithTime = new Date(dateRange.to);
+        endDateWithTime.setHours(23, 59, 59, 999);
+        dateFilter = {
+            createdAt: {
+                gte: startDateWithTime,
+                lte: endDateWithTime,
+            },
+        };
+    }
     // Fetch total count for the given query
     const totalCount = yield __1.prismaDB.report.count({
-        where: Object.assign({ restaurantId: outletId, OR: [{ generatedBy: { contains: search, mode: "insensitive" } }], AND: filterConditions }, (dateRange && {
-            createdAt: {
-                gt: new Date(dateRange.from),
-                lt: new Date(dateRange.to),
-            },
-        })),
+        where: Object.assign({ restaurantId: outletId, OR: [{ generatedBy: { contains: search, mode: "insensitive" } }], AND: filterConditions }, dateFilter),
     });
     const reports = yield __1.prismaDB.report.findMany({
         take,
         skip,
-        where: Object.assign({ restaurantId: outletId, OR: [{ generatedBy: { contains: (_k = search) !== null && _k !== void 0 ? _k : "" } }], AND: filterConditions }, (dateRange && {
-            createdAt: {
-                gt: new Date(dateRange.from),
-                lt: new Date(dateRange.to),
-            },
-        })),
+        where: Object.assign({ restaurantId: outletId, OR: [{ generatedBy: { contains: (_k = search) !== null && _k !== void 0 ? _k : "" } }], AND: filterConditions }, dateFilter),
         select: {
             id: true,
             reportType: true,
@@ -620,31 +636,21 @@ function formatSalesWorkbook(workbook, data) {
         color: { argb: "2563EB" },
     };
     worksheet.getCell("A1").alignment = { horizontal: "center" };
-    // Key Stats
+    // Restaurant Information
     worksheet.addRow([""]);
-    worksheet.addRow(["Key Metrics", "Value"]);
+    worksheet.addRow(["Restaurant Information"]);
+    worksheet.addRow(["Name", data.restaurant.name]);
+    worksheet.addRow(["Address", data.restaurant.address]);
+    worksheet.addRow(["Phone", data.restaurant.phone]);
+    worksheet.addRow(["Email", data.restaurant.email]);
+    // Summary
+    worksheet.addRow([""]);
+    worksheet.addRow(["Summary"]);
     worksheet.addRow([
         "Total Revenue",
-        formatCurrencyForExcel(data.ordersData.stats.totalRevenue),
+        formatCurrencyForExcel(data.ordersData.totalRevenue),
     ]);
-    worksheet.addRow(["Total Orders", data.ordersData.stats.totalOrders]);
-    worksheet.addRow(["Total Items", data.ordersData.stats.totalItems]);
-    worksheet.addRow([
-        "Total Profit",
-        formatCurrencyForExcel(data.ordersData.stats.totalProfit),
-    ]);
-    worksheet.addRow(["Total Customers", data.ordersData.stats.totalCustomers]);
-    worksheet.addRow([
-        "Total Tax",
-        formatCurrencyForExcel(data.ordersData.stats.totalTax),
-    ]);
-    // Order Types
-    worksheet.addRow([""]);
-    worksheet.addRow(["Order Types"]);
-    worksheet.addRow(["Type", "Count"]);
-    Object.entries(data.ordersData.ordersType).forEach(([type, count]) => {
-        worksheet.addRow([type, count]);
-    });
+    worksheet.addRow(["Total Orders", data.ordersData.formattedOrders.length]);
     // Payment Methods
     worksheet.addRow([""]);
     worksheet.addRow(["Payment Methods"]);
@@ -652,55 +658,25 @@ function formatSalesWorkbook(workbook, data) {
     Object.entries(data.ordersData.paymentMethods).forEach(([method, amount]) => {
         worksheet.addRow([method, formatCurrencyForExcel(amount)]);
     });
-    // Category Sales
+    // Orders Table
     worksheet.addRow([""]);
-    worksheet.addRow(["Category Sales"]);
-    worksheet.addRow(["Category", "Amount"]);
-    Object.entries(data.ordersData.categorySales).forEach(([category, amount]) => {
-        worksheet.addRow([category, formatCurrencyForExcel(amount)]);
-    });
-    // Time Analysis
-    worksheet.addRow([""]);
-    worksheet.addRow(["Peak Hours"]);
-    worksheet.addRow(["Hour", "Orders"]);
-    Object.entries(data.ordersData.timeAnalysis.peakHours).forEach(([hour, count]) => {
-        worksheet.addRow([hour, count]);
-    });
-    worksheet.addRow([""]);
-    worksheet.addRow(["Weekday Distribution"]);
-    worksheet.addRow(["Day", "Orders"]);
-    Object.entries(data.ordersData.timeAnalysis.weekdayDistribution).forEach(([day, count]) => {
-        worksheet.addRow([day, count]);
-    });
-    // Customer Analytics
-    worksheet.addRow([""]);
-    worksheet.addRow(["Customer Analytics"]);
-    worksheet.addRow(["Metric", "Value"]);
+    worksheet.addRow(["Order Details"]);
     worksheet.addRow([
-        "New Customers",
-        data.ordersData.customerAnalytics.newCustomers,
+        "Bill ID",
+        "Order Type",
+        "Status",
+        "Amount",
+        "Date",
+        "Time",
     ]);
-    worksheet.addRow([
-        "Repeat Customers",
-        data.ordersData.customerAnalytics.repeatCustomers,
-    ]);
-    worksheet.addRow([
-        "Average Order Value",
-        formatCurrencyForExcel(data.ordersData.customerAnalytics.averageOrderValue),
-    ]);
-    worksheet.addRow([
-        "Average Serving Time",
-        `${data.ordersData.customerAnalytics.avgServingTime} mins`,
-    ]);
-    // Top Items
-    worksheet.addRow([""]);
-    worksheet.addRow(["Top Selling Items"]);
-    worksheet.addRow(["Item Name", "Quantity", "Revenue"]);
-    data.ordersData.topItems.forEach((item) => {
+    data.ordersData.formattedOrders.forEach((order) => {
         worksheet.addRow([
-            item.name,
-            item.quantity,
-            formatCurrencyForExcel(item.revenue),
+            order.billId,
+            order.orderType,
+            order.paidStatus,
+            formatCurrencyForExcel(order.totalAmount),
+            order.date,
+            order.time,
         ]);
     });
     applySalesStyles(worksheet);

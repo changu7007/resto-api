@@ -32,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.printTCP = exports.printBill = exports.printKOT = exports.getPrinterById = exports.getPrintersForLocation = exports.getPrintLocationsByTypes = exports.getPrintLocationsByTypesForApp = exports.deletePrintLocation = exports.updatePrintLocation = exports.deletePrinter = exports.updatePrinter = exports.getPrinters = exports.getPrintLocations = exports.assignPrinterToLocation = exports.createPrintLocation = exports.createPrinter = void 0;
+exports.getPrintDetails = exports.updatePrintDetails = exports.createPrintDetails = exports.printTCP = exports.printBill = exports.printKOT = exports.getPrinterById = exports.getPrintersForLocation = exports.getPrintLocationsByTypes = exports.getPrintLocationsByTypesForApp = exports.deletePrintLocation = exports.updatePrintLocation = exports.deletePrinter = exports.updatePrinter = exports.getPrinters = exports.getPrintLocations = exports.assignPrinterToLocation = exports.createPrintLocation = exports.createPrinter = void 0;
 const z = __importStar(require("zod"));
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -765,3 +765,90 @@ const printTCP = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.printTCP = printTCP;
+const printDetailsSchema = z.object({
+    restaurantName: z.string().min(1),
+    description: z.string().optional(),
+    address: z.string().min(1),
+    GSTIN: z.string().optional(),
+    fssaiNo: z.string().optional(),
+    phoneNo: z.string().min(1),
+    email: z.string().min(1),
+    website: z.string().optional(),
+    logo: z.string().optional(),
+    footer: z.string().optional(),
+    googleReviewUrl: z.string().optional(),
+});
+const createPrintDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!outlet) {
+        throw new not_found_1.NotFoundException("Outlet not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const validatedData = printDetailsSchema.safeParse(req.body);
+    if (!validatedData.success) {
+        throw new bad_request_1.BadRequestsException(validatedData.error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const printDetails = yield __1.prismaDB.printDetails.create({
+        data: {
+            restaurantName: validatedData.data.restaurantName,
+            description: validatedData.data.description,
+            address: validatedData.data.address,
+            GSTIN: validatedData.data.GSTIN,
+            fssaiNo: validatedData.data.fssaiNo,
+            phoneNo: validatedData.data.phoneNo,
+            email: validatedData.data.email,
+            website: validatedData.data.website,
+            logo: validatedData.data.logo,
+            footer: validatedData.data.footer,
+            googleReviewUrl: validatedData.data.googleReviewUrl,
+            restaurantId: outlet.id,
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Print details created successfully",
+        data: printDetails,
+    });
+});
+exports.createPrintDetails = createPrintDetails;
+const updatePrintDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!outlet) {
+        throw new not_found_1.NotFoundException("Outlet not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const validatedData = printDetailsSchema.safeParse(req.body);
+    if (!validatedData.success) {
+        throw new bad_request_1.BadRequestsException(validatedData.error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const printDetails = yield __1.prismaDB.printDetails.update({
+        where: {
+            restaurantId: outlet.id,
+        },
+        data: validatedData.data,
+    });
+    return res.json({
+        success: true,
+        message: "Print details updated successfully",
+        data: printDetails,
+    });
+});
+exports.updatePrintDetails = updatePrintDetails;
+const getPrintDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!outlet) {
+        throw new not_found_1.NotFoundException("Outlet not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const printDetails = yield __1.prismaDB.printDetails.findUnique({
+        where: {
+            restaurantId: outlet.id,
+        },
+    });
+    return res.json({
+        success: true,
+        message: "Print details fetched successfully",
+        data: printDetails,
+    });
+});
+exports.getPrintDetails = getPrintDetails;

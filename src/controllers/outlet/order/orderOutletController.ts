@@ -165,7 +165,8 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
           sessionStatus: true,
         },
         _sum: {
-          subTotal: true, // Calculate total revenue per payment method
+          subTotal: true,
+          // Calculate total revenue per payment method
         },
       }),
       prismaDB.orderSession.groupBy({
@@ -242,6 +243,9 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
       orderType: true,
       createdAt: true,
       updatedAt: true,
+      discount: true,
+      discountAmount: true,
+      amountReceived: true,
       table: {
         select: {
           name: true,
@@ -299,6 +303,9 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
         order?.orderType === "DINEIN" ? order?.table?.name : order?.orderType,
       date: order?.createdAt,
       modified: order?.updatedAt,
+      discount: order?.discount,
+      discountAmount: order?.discountAmount,
+      amountReceived: order?.amountReceived,
       viewOrders: order?.orders?.map((o) => ({
         id: o?.id,
         generatedOrderId: o?.generatedOrderId,

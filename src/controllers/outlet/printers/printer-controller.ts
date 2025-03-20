@@ -921,3 +921,108 @@ export const printTCP = async (req: Request, res: Response) => {
     );
   }
 };
+
+const printDetailsSchema = z.object({
+  restaurantName: z.string().min(1),
+  description: z.string().optional(),
+  address: z.string().min(1),
+  GSTIN: z.string().optional(),
+  fssaiNo: z.string().optional(),
+  phoneNo: z.string().min(1),
+  email: z.string().min(1),
+  website: z.string().optional(),
+  logo: z.string().optional(),
+  footer: z.string().optional(),
+  googleReviewUrl: z.string().optional(),
+});
+
+export const createPrintDetails = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const validatedData = printDetailsSchema.safeParse(req.body);
+
+  if (!validatedData.success) {
+    throw new BadRequestsException(
+      validatedData.error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+  const printDetails = await prismaDB.printDetails.create({
+    data: {
+      restaurantName: validatedData.data.restaurantName,
+      description: validatedData.data.description,
+      address: validatedData.data.address,
+      GSTIN: validatedData.data.GSTIN,
+      fssaiNo: validatedData.data.fssaiNo,
+      phoneNo: validatedData.data.phoneNo,
+      email: validatedData.data.email,
+      website: validatedData.data.website,
+      logo: validatedData.data.logo,
+      footer: validatedData.data.footer,
+      googleReviewUrl: validatedData.data.googleReviewUrl,
+      restaurantId: outlet.id,
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Print details created successfully",
+    data: printDetails,
+  });
+};
+
+export const updatePrintDetails = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const validatedData = printDetailsSchema.safeParse(req.body);
+
+  if (!validatedData.success) {
+    throw new BadRequestsException(
+      validatedData.error.errors[0].message,
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+  const printDetails = await prismaDB.printDetails.update({
+    where: {
+      restaurantId: outlet.id,
+    },
+    data: validatedData.data,
+  });
+
+  return res.json({
+    success: true,
+    message: "Print details updated successfully",
+    data: printDetails,
+  });
+};
+
+export const getPrintDetails = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const printDetails = await prismaDB.printDetails.findUnique({
+    where: {
+      restaurantId: outlet.id,
+    },
+  });
+
+  return res.json({
+    success: true,
+    message: "Print details fetched successfully",
+    data: printDetails,
+  });
+};

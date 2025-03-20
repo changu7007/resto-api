@@ -66,8 +66,12 @@ outletRoute.patch("/:outletId/staff-order-item-patch/:orderId", auth_1.isAuthMid
 outletRoute.patch("/:outletId/staff-order-status-patch/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staff_order_controller_1.orderStatusPatchByStaff));
 outletRoute.post("/:outletId/get-staff-attendance", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.getStaffAttendance));
 //online and delivery
-outletRoute.get("/:outletId/online-and-delivery-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategoryForOnlineAndDelivery));
-outletRoute.get("/:outletId/online-and-delivery-items-search", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearchForOnlineAndDelivery));
+outletRoute.get("/:outletId/online-and-delivery-items", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategoryForOnlineAndDelivery));
+outletRoute.get("/:outletId/online-and-delivery-items-search", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearchForOnlineAndDelivery));
 outletRoute.get("/:outletId/online-and-delivery-all-items", 
 // isAuthMiddelware,
 (0, error_handler_1.errorHandler)(itemsController_1.getItemsForOnlineAndDelivery));
@@ -287,4 +291,7 @@ outletRoute.get("/:outletId/order-item/:orderItemId/parent-order", auth_1.isAuth
 outletRoute.get("/:outletId/settings/print-access", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getLocalPrintSetup));
 outletRoute.patch("/:outletId/tables/:tableId/unoccupied", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.markTableAsUnoccupied));
 outletRoute.patch("/:outletId/tables/:tableId/transfer", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.transferTableOrder));
+outletRoute.post("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.createPrintDetails));
+outletRoute.patch("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrintDetails));
+outletRoute.get("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintDetails));
 exports.default = outletRoute;
