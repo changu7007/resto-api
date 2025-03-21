@@ -519,7 +519,6 @@ const getTableCurrentOrders = (req, res) => __awaiter(void 0, void 0, void 0, fu
         where: {
             id: table.id,
             restaurantId: getOutlet.id,
-            customerId: validCustomer.id,
         },
         include: {
             orderSession: {

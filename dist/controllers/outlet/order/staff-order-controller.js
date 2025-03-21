@@ -374,6 +374,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
     return res.json({
         success: true,
         orderSessionId: result.id,
+        kotNumber: orderId,
         message: "Order Created from Captain ✅",
     });
 });
@@ -513,6 +514,7 @@ const existingOrderPatchForStaff = (req, res) => __awaiter(void 0, void 0, void 
     return res.json({
         success: true,
         orderSessionId: orderSession.id,
+        kotNumber: generatedId,
         message: "Order Added from Captain ✅",
     });
 });

@@ -665,7 +665,6 @@ export const getTableCurrentOrders = async (req: Request, res: Response) => {
     where: {
       id: table.id,
       restaurantId: getOutlet.id,
-      customerId: validCustomer.id,
     },
     include: {
       orderSession: {

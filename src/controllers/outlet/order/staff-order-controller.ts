@@ -520,6 +520,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     orderSessionId: result.id,
+    kotNumber: orderId,
     message: "Order Created from Captain ✅",
   });
 };
@@ -717,6 +718,7 @@ export const existingOrderPatchForStaff = async (
   return res.json({
     success: true,
     orderSessionId: orderSession.id,
+    kotNumber: generatedId,
     message: "Order Added from Captain ✅",
   });
 };
