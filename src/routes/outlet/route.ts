@@ -48,6 +48,7 @@ import {
   addItemToUserFav,
   deleteItem,
   disablePosStatus,
+  duplicateItem,
   enablePosStatus,
   getAddONById,
   getAddonsForTable,
@@ -589,6 +590,11 @@ outletRoute.post(
   "/:outletId/create-item",
   isAuthMiddelware,
   errorHandler(postItem)
+);
+outletRoute.post(
+  "/:outletId/duplicate-item/:itemId",
+  isAuthMiddelware,
+  errorHandler(duplicateItem)
 );
 outletRoute.get(
   "/:outletId/get-items",

@@ -9,13 +9,7 @@ import {
 import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
-import {
-  Category,
-  ChooseProfit,
-  FoodRole,
-  GstType,
-  MenuItem,
-} from "@prisma/client";
+import { ChooseProfit, FoodRole, GstType } from "@prisma/client";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import {
@@ -1025,6 +1019,22 @@ export const updateItembyId = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
+  const slug = generateSlug(validateFields?.name);
+
+  const checkSlug = await prismaDB.menuItem.findFirst({
+    where: {
+      restaurantId: outlet.id,
+      slug,
+    },
+  });
+
+  if (checkSlug) {
+    throw new BadRequestsException(
+      "Item already exists",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   const menuItem = await getItemByOutletId(outlet.id, itemId);
 
   if (!menuItem?.id) {
@@ -1314,6 +1324,22 @@ export const postItem = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
+  const slug = generateSlug(validateFields?.name);
+
+  const checkSlug = await prismaDB.menuItem.findFirst({
+    where: {
+      restaurantId: outlet.id,
+      slug,
+    },
+  });
+
+  if (checkSlug) {
+    throw new BadRequestsException(
+      "Item already exists",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   const validVariants =
     validateFields?.isVariants && validateFields?.menuItemVariants.length > 0
       ? validateFields?.menuItemVariants
@@ -1326,7 +1352,7 @@ export const postItem = async (req: Request, res: Response) => {
   const menuItem = await prismaDB.menuItem.create({
     data: {
       name: validateFields?.name,
-      slug: generateSlug(validateFields?.name),
+      slug,
       shortCode: validateFields?.shortCode,
       description: validateFields?.description,
       categoryId: validateFields?.categoryId,
@@ -1414,6 +1440,175 @@ export const postItem = async (req: Request, res: Response) => {
     item: menuItem,
     message: "Creattion of Item Success ✅",
   });
+};
+
+export const duplicateItem = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  // Get the item to duplicate
+  const sourceItem = await getItemByOutletId(outlet.id, itemId);
+
+  if (!sourceItem?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  try {
+    // Create the duplicate item with all related data in a transaction
+    const duplicatedItem = await prismaDB.$transaction(async (prisma) => {
+      // 1. Create new menu item with modified name
+      const newMenuItem = await prisma.menuItem.create({
+        data: {
+          restaurantId: outlet.id,
+          name: `${sourceItem.name} (Copy)`,
+          slug: generateSlug(`${sourceItem.name} Copy`),
+          shortCode: sourceItem.shortCode
+            ? `${sourceItem.shortCode}_copy`
+            : null,
+          description: sourceItem.description,
+          price: sourceItem.price,
+          netPrice: sourceItem.netPrice,
+          gst: sourceItem.gst,
+          gstType: sourceItem.gstType,
+          chooseProfit: sourceItem.chooseProfit,
+          grossProfit: sourceItem.grossProfit,
+          grossProfitType: sourceItem.grossProfitType,
+          grossProfitPer: sourceItem.grossProfitPer,
+          isVariants: sourceItem.isVariants,
+          isAddons: sourceItem.isAddons,
+          isDineIn: sourceItem.isDineIn,
+          isOnline: sourceItem.isOnline,
+          isPickUp: sourceItem.isPickUp,
+          isDelivery: sourceItem.isDelivery,
+          type: sourceItem.type,
+          categoryId: sourceItem.categoryId,
+        },
+        include: {
+          menuItemVariants: true,
+          menuGroupAddOns: true,
+          images: true,
+        },
+      });
+
+      // 2. Duplicate all variants if they exist
+      if (sourceItem.isVariants && sourceItem.menuItemVariants.length > 0) {
+        await Promise.all(
+          sourceItem.menuItemVariants.map(async (variant) => {
+            await prisma.menuItemVariant.create({
+              data: {
+                restaurantId: outlet.id,
+                menuItemId: newMenuItem.id,
+                variantId: variant.variantId,
+                foodType: variant.foodType,
+                price: variant.price,
+                netPrice: variant.netPrice,
+                gst: variant.gst,
+                gstType: variant.gstType,
+                chooseProfit: variant.chooseProfit,
+                grossProfit: variant.grossProfit,
+                grossProfitType: variant.grossProfitType,
+                grossProfitPer: variant.grossProfitPer,
+              },
+            });
+          })
+        );
+      }
+
+      // 3. Duplicate all add-on groups if they exist
+      if (sourceItem.isAddons && sourceItem.menuGroupAddOns.length > 0) {
+        await Promise.all(
+          sourceItem.menuGroupAddOns.map(async (addon) => {
+            await prisma.menuGroupAddOns.create({
+              data: {
+                menuItemId: newMenuItem.id,
+                addOnGroupId: addon.addOnGroupId,
+              },
+            });
+          })
+        );
+      }
+
+      // 4. Duplicate all images
+      if (sourceItem.images.length > 0) {
+        await Promise.all(
+          sourceItem.images.map(async (image) => {
+            await prisma.image.create({
+              data: {
+                url: image.url,
+                menuId: newMenuItem.id,
+              },
+            });
+          })
+        );
+      }
+
+      // 5. Duplicate item recipe if it exists
+      // if (sourceItem.itemRecipeId) {
+      //   // Get the original recipe details
+      //   const originalRecipe = await prisma.itemRecipe.findUnique({
+      //     where: { id: sourceItem.itemRecipeId },
+      //   });
+
+      //   if (originalRecipe) {
+      //     const newRecipe = await prisma.itemRecipe.create({
+      //       data: {
+      //         menuId: newMenuItem.id,
+      //         menuVariantId: originalRecipe.menuVariantId,
+      //         addonItemVariantId: originalRecipe.addonItemVariantId,
+      //         recipeFor: originalRecipe.recipeFor,
+      //         recipeType: originalRecipe.recipeType,
+      //         ingredients: originalRecipe.ingredients,
+      //       },
+      //     });
+
+      //     // Update the menu item with the new recipe ID
+      //     await prisma.menuItem.update({
+      //       where: { id: newMenuItem.id },
+      //       data: { itemRecipeId: newRecipe.id },
+      //     });
+      //   }
+      // }
+
+      return newMenuItem;
+    });
+
+    // Clear Redis cache for this outlet
+    const categories = await prismaDB.category.findMany({
+      where: {
+        restaurantId: outletId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await Promise.all([
+      redis.del(`${outletId}-all-items`),
+      redis.del(`${outletId}-all-items-for-online-and-delivery`),
+      redis.del(`o-${outletId}-categories`),
+    ]);
+
+    categories?.map(async (c) => {
+      await redis.del(`${outletId}-category-${c.id}`);
+    });
+
+    return res.json({
+      success: true,
+      item: duplicatedItem,
+      message: "Item duplicated successfully ✅",
+    });
+  } catch (error) {
+    console.error("Error duplicating item:", error);
+    throw new BadRequestsException(
+      "Failed to duplicate item",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
 };
 
 export const deleteItem = async (req: Request, res: Response) => {
