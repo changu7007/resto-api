@@ -104,6 +104,7 @@ outletRoute.patch("/:outletId/bulk-pos-access-enable", auth_1.isAuthMiddelware, 
 outletRoute.patch("/:outletId/bulk-pos-access-disable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessDisable));
 //Items Route
 outletRoute.post("/:outletId/create-item", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.postItem));
+outletRoute.post("/:outletId/duplicate-item/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.duplicateItem));
 outletRoute.get("/:outletId/get-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getAllItem));
 outletRoute.get("/:outletId/menu-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategory));
 outletRoute.get("/:outletId/menu-items-search", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearch));

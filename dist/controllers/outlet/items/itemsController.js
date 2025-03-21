@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteItems = exports.disablePosStatus = exports.enablePosStatus = exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = exports.getItemsBySearchForOnlineAndDelivery = exports.getItemsByCategoryForOnlineAndDelivery = exports.getItemsForOnlineAndDelivery = void 0;
+exports.deleteItems = exports.disablePosStatus = exports.enablePosStatus = exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.duplicateItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = exports.getItemsBySearchForOnlineAndDelivery = exports.getItemsByCategoryForOnlineAndDelivery = exports.getItemsForOnlineAndDelivery = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -810,6 +810,16 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
+    const slug = (0, utils_1.generateSlug)(validateFields === null || validateFields === void 0 ? void 0 : validateFields.name);
+    const checkSlug = yield __1.prismaDB.menuItem.findFirst({
+        where: {
+            restaurantId: outlet.id,
+            slug,
+        },
+    });
+    if (checkSlug) {
+        throw new bad_request_1.BadRequestsException("Item already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     const menuItem = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
     if (!(menuItem === null || menuItem === void 0 ? void 0 : menuItem.id)) {
         throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
@@ -1034,6 +1044,16 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
+    const slug = (0, utils_1.generateSlug)(validateFields === null || validateFields === void 0 ? void 0 : validateFields.name);
+    const checkSlug = yield __1.prismaDB.menuItem.findFirst({
+        where: {
+            restaurantId: outlet.id,
+            slug,
+        },
+    });
+    if (checkSlug) {
+        throw new bad_request_1.BadRequestsException("Item already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     const validVariants = (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants) && (validateFields === null || validateFields === void 0 ? void 0 : validateFields.menuItemVariants.length) > 0
         ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.menuItemVariants
         : [];
@@ -1043,7 +1063,7 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const menuItem = yield __1.prismaDB.menuItem.create({
         data: {
             name: validateFields === null || validateFields === void 0 ? void 0 : validateFields.name,
-            slug: (0, utils_1.generateSlug)(validateFields === null || validateFields === void 0 ? void 0 : validateFields.name),
+            slug,
             shortCode: validateFields === null || validateFields === void 0 ? void 0 : validateFields.shortCode,
             description: validateFields === null || validateFields === void 0 ? void 0 : validateFields.description,
             categoryId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.categoryId,
@@ -1125,6 +1145,151 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     });
 });
 exports.postItem = postItem;
+const duplicateItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, itemId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    // Get the item to duplicate
+    const sourceItem = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
+    if (!(sourceItem === null || sourceItem === void 0 ? void 0 : sourceItem.id)) {
+        throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    try {
+        // Create the duplicate item with all related data in a transaction
+        const duplicatedItem = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
+            // 1. Create new menu item with modified name
+            const newMenuItem = yield prisma.menuItem.create({
+                data: {
+                    restaurantId: outlet.id,
+                    name: `${sourceItem.name} (Copy)`,
+                    slug: (0, utils_1.generateSlug)(`${sourceItem.name} Copy`),
+                    shortCode: sourceItem.shortCode
+                        ? `${sourceItem.shortCode}_copy`
+                        : null,
+                    description: sourceItem.description,
+                    price: sourceItem.price,
+                    netPrice: sourceItem.netPrice,
+                    gst: sourceItem.gst,
+                    gstType: sourceItem.gstType,
+                    chooseProfit: sourceItem.chooseProfit,
+                    grossProfit: sourceItem.grossProfit,
+                    grossProfitType: sourceItem.grossProfitType,
+                    grossProfitPer: sourceItem.grossProfitPer,
+                    isVariants: sourceItem.isVariants,
+                    isAddons: sourceItem.isAddons,
+                    isDineIn: sourceItem.isDineIn,
+                    isOnline: sourceItem.isOnline,
+                    isPickUp: sourceItem.isPickUp,
+                    isDelivery: sourceItem.isDelivery,
+                    type: sourceItem.type,
+                    categoryId: sourceItem.categoryId,
+                },
+                include: {
+                    menuItemVariants: true,
+                    menuGroupAddOns: true,
+                    images: true,
+                },
+            });
+            // 2. Duplicate all variants if they exist
+            if (sourceItem.isVariants && sourceItem.menuItemVariants.length > 0) {
+                yield Promise.all(sourceItem.menuItemVariants.map((variant) => __awaiter(void 0, void 0, void 0, function* () {
+                    yield prisma.menuItemVariant.create({
+                        data: {
+                            restaurantId: outlet.id,
+                            menuItemId: newMenuItem.id,
+                            variantId: variant.variantId,
+                            foodType: variant.foodType,
+                            price: variant.price,
+                            netPrice: variant.netPrice,
+                            gst: variant.gst,
+                            gstType: variant.gstType,
+                            chooseProfit: variant.chooseProfit,
+                            grossProfit: variant.grossProfit,
+                            grossProfitType: variant.grossProfitType,
+                            grossProfitPer: variant.grossProfitPer,
+                        },
+                    });
+                })));
+            }
+            // 3. Duplicate all add-on groups if they exist
+            if (sourceItem.isAddons && sourceItem.menuGroupAddOns.length > 0) {
+                yield Promise.all(sourceItem.menuGroupAddOns.map((addon) => __awaiter(void 0, void 0, void 0, function* () {
+                    yield prisma.menuGroupAddOns.create({
+                        data: {
+                            menuItemId: newMenuItem.id,
+                            addOnGroupId: addon.addOnGroupId,
+                        },
+                    });
+                })));
+            }
+            // 4. Duplicate all images
+            if (sourceItem.images.length > 0) {
+                yield Promise.all(sourceItem.images.map((image) => __awaiter(void 0, void 0, void 0, function* () {
+                    yield prisma.image.create({
+                        data: {
+                            url: image.url,
+                            menuId: newMenuItem.id,
+                        },
+                    });
+                })));
+            }
+            // 5. Duplicate item recipe if it exists
+            // if (sourceItem.itemRecipeId) {
+            //   // Get the original recipe details
+            //   const originalRecipe = await prisma.itemRecipe.findUnique({
+            //     where: { id: sourceItem.itemRecipeId },
+            //   });
+            //   if (originalRecipe) {
+            //     const newRecipe = await prisma.itemRecipe.create({
+            //       data: {
+            //         menuId: newMenuItem.id,
+            //         menuVariantId: originalRecipe.menuVariantId,
+            //         addonItemVariantId: originalRecipe.addonItemVariantId,
+            //         recipeFor: originalRecipe.recipeFor,
+            //         recipeType: originalRecipe.recipeType,
+            //         ingredients: originalRecipe.ingredients,
+            //       },
+            //     });
+            //     // Update the menu item with the new recipe ID
+            //     await prisma.menuItem.update({
+            //       where: { id: newMenuItem.id },
+            //       data: { itemRecipeId: newRecipe.id },
+            //     });
+            //   }
+            // }
+            return newMenuItem;
+        }));
+        // Clear Redis cache for this outlet
+        const categories = yield __1.prismaDB.category.findMany({
+            where: {
+                restaurantId: outletId,
+            },
+            select: {
+                id: true,
+            },
+        });
+        yield Promise.all([
+            redis_1.redis.del(`${outletId}-all-items`),
+            redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+            redis_1.redis.del(`o-${outletId}-categories`),
+        ]);
+        categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+            yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+        }));
+        return res.json({
+            success: true,
+            item: duplicatedItem,
+            message: "Item duplicated successfully ✅",
+        });
+    }
+    catch (error) {
+        console.error("Error duplicating item:", error);
+        throw new bad_request_1.BadRequestsException("Failed to duplicate item", root_1.ErrorCode.INTERNAL_EXCEPTION);
+    }
+});
+exports.duplicateItem = duplicateItem;
 const deleteItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId, itemId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
