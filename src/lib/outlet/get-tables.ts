@@ -71,6 +71,7 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
                   },
                 },
               },
+              table: true,
             },
           },
         },
@@ -110,7 +111,7 @@ export const getFetchAllAreastoRedis = async (outletId: string) => {
         active: orderSess.active,
         orderBy: orderSess.createdBy,
         orderMode: orderSess.orderType,
-        table: orderSess.tableId,
+        table: orderSess.table?.name,
         subTotal: orderSess.subTotal,
         orders: orderSess.orders.map((order) => ({
           id: order.id,

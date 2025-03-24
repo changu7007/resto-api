@@ -243,6 +243,7 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
         orderBy: {
           checkInTime: "desc",
         },
+        take: 1,
       },
     },
   });
@@ -320,7 +321,12 @@ export const getFormatStaffAndSendToRedis = async (staffId: string) => {
     },
   };
 
-  await redis.set(findStaff?.id, JSON.stringify(formatToSend));
+  await redis.set(
+    findStaff?.id,
+    JSON.stringify(formatToSend),
+    "EX",
+    3 * 60 * 60
+  );
   return formatToSend;
 };
 

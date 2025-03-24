@@ -115,7 +115,6 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
       isVariants: item.isVariants,
       totalPrice: item.totalPrice,
       selectedVariant: item.selectedVariant,
-
       addOnSelected: item.addOnSelected,
     })),
     createdBy: order?.createdBy,

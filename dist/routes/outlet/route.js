@@ -28,6 +28,7 @@ const staffs_items_controller_1 = require("../../controllers/outlet/items/staffs
 const registerController_1 = require("../../controllers/outlet/cash-registers/registerController");
 const adminRegisterController_1 = require("../../controllers/outlet/cash-registers/adminRegisterController");
 const printer_controller_1 = require("../../controllers/outlet/printers/printer-controller");
+const staffController_2 = require("../../controllers/outlet/staffs/staffController");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/get-all-outlets", (0, error_handler_1.errorHandler)(outletController_1.getAllOutlets));
 outletRoute.get("/:outletId/get-admin-register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
@@ -100,6 +101,8 @@ outletRoute.post("/:outletId/all-table-session-orders", auth_1.isAuthMiddelware,
 outletRoute.post("/:outletId/all-table-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllOrders));
 outletRoute.get("/:outletId/all-staff-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllOrderByStaff));
 outletRoute.get("/:outletId/table/:tableId/customer/:customerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.getTableCurrentOrders));
+outletRoute.post("/:outletId/assign-tables-to-staff", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_2.assignTablesForWaiters));
+outletRoute.get("/:outletId/get-tables-assigned-to-waiters/:staffId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.getTablesAssignedToWaiters));
 outletRoute.patch("/:outletId/bulk-pos-access-enable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessEnable));
 outletRoute.patch("/:outletId/bulk-pos-access-disable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessDisable));
 //Items Route

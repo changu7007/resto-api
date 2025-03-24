@@ -137,6 +137,7 @@ import {
   getStaffId,
   getStaffIds,
   getStaffsForTable,
+  getTablesAssignedToWaiters,
   updateStaff,
 } from "../../controllers/outlet/staffs/staffController";
 import {
@@ -270,7 +271,7 @@ import {
   updatePrinter,
   updatePrintLocation,
 } from "../../controllers/outlet/printers/printer-controller";
-
+import { assignTablesForWaiters } from "../../controllers/outlet/staffs/staffController";
 const outletRoute: Router = Router();
 
 outletRoute.get("/get-all-outlets", errorHandler(getAllOutlets));
@@ -575,6 +576,19 @@ outletRoute.get(
   isAuthMiddelware,
   errorHandler(getTableCurrentOrders)
 );
+
+outletRoute.post(
+  "/:outletId/assign-tables-to-staff",
+  isAuthMiddelware,
+  errorHandler(assignTablesForWaiters)
+);
+
+outletRoute.get(
+  "/:outletId/get-tables-assigned-to-waiters/:staffId",
+  isAuthMiddelware,
+  errorHandler(getTablesAssignedToWaiters)
+);
+
 outletRoute.patch(
   "/:outletId/bulk-pos-access-enable",
   isAuthMiddelware,

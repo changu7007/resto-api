@@ -1104,6 +1104,10 @@ export const getStaffOrderStats = async (req: Request, res: Response) => {
   let endDate;
 
   switch (period) {
+    case "today":
+      startDate = new Date(now.setHours(0, 0, 0, 0)); // Start of today
+      endDate = now; // Now is the end date
+      break;
     case "yesterday":
       const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
@@ -1143,8 +1147,7 @@ export const getStaffOrderStats = async (req: Request, res: Response) => {
   const orders = await prismaDB.order.findMany({
     where: {
       restaurantId: outlet.id,
-      orderStatus: "COMPLETED",
-      isPaid: true,
+      orderStatus: { in: ["COMPLETED", "INCOMMING", "FOODREADY", "SERVED"] },
       staffId: staffId,
       createdAt: {
         gte: startDate,
@@ -1154,22 +1157,21 @@ export const getStaffOrderStats = async (req: Request, res: Response) => {
   });
 
   const totalOrders = orders.length;
-  const totalAmount = orders.reduce(
-    (total, order) => total + Number(order.totalAmount),
-    0
-  );
-  const totalNetPrice = orders.reduce(
-    (total, order) => total + Number(order.totalNetPrice),
-    0
-  );
-  const totalGstPrice = orders.reduce(
-    (total, order) => total + Number(order.gstPrice),
-    0
-  );
-  const totalGrossProfit = orders.reduce(
-    (total, order) => total + Number(order.totalGrossProfit),
-    0
-  );
+  const totalAmount = orders
+    .filter((order) => order.orderStatus === "COMPLETED")
+    .reduce((total, order) => total + Number(order.totalAmount), 0);
+
+  const totalNetPrice = orders
+    .filter((order) => order.orderStatus === "COMPLETED")
+    .reduce((total, order) => total + Number(order.totalNetPrice), 0);
+
+  const totalGstPrice = orders
+    .filter((order) => order.orderStatus === "COMPLETED")
+    .reduce((total, order) => total + Number(order.gstPrice), 0);
+
+  const totalGrossProfit = orders
+    .filter((order) => order.orderStatus === "COMPLETED")
+    .reduce((total, order) => total + Number(order.totalGrossProfit), 0);
 
   return res.json({
     success: true,
