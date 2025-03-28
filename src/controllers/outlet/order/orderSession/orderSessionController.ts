@@ -174,6 +174,13 @@ export const billingOrderSession = async (req: Request, res: Response) => {
     throw new NotFoundException("Order Session not Found", ErrorCode.NOT_FOUND);
   }
 
+  if (orderSession?.sessionStatus === "COMPLETED") {
+    throw new BadRequestsException(
+      "Payment and Bill Already Completed",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+
   const cashRegister = await prismaDB.cashRegister.findFirst({
     where: {
       id: cashRegisterId,

@@ -123,6 +123,9 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
     if (!(orderSession === null || orderSession === void 0 ? void 0 : orderSession.id)) {
         throw new not_found_1.NotFoundException("Order Session not Found", root_1.ErrorCode.NOT_FOUND);
     }
+    if ((orderSession === null || orderSession === void 0 ? void 0 : orderSession.sessionStatus) === "COMPLETED") {
+        throw new bad_request_1.BadRequestsException("Payment and Bill Already Completed", root_1.ErrorCode.INTERNAL_EXCEPTION);
+    }
     const cashRegister = yield __1.prismaDB.cashRegister.findFirst({
         where: {
             id: cashRegisterId,

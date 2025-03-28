@@ -1430,7 +1430,7 @@ outletRoute.get(
 
 outletRoute.get(
   "/:outletId/settings/print-access",
-  isAuthMiddelware,
+  // isAuthMiddelware,
   errorHandler(getLocalPrintSetup)
 );
 

@@ -905,6 +905,7 @@ model PrintDetails {
   logo            String?
   footer          String?
   googleReviewUrl String?
+  localPrintUrl   String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }

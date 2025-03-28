@@ -934,6 +934,7 @@ const printDetailsSchema = z.object({
   logo: z.string().optional(),
   footer: z.string().optional(),
   googleReviewUrl: z.string().optional(),
+  localPrintUrl: z.string().optional(),
 });
 
 export const createPrintDetails = async (req: Request, res: Response) => {
@@ -966,6 +967,7 @@ export const createPrintDetails = async (req: Request, res: Response) => {
       footer: validatedData.data.footer,
       googleReviewUrl: validatedData.data.googleReviewUrl,
       restaurantId: outlet.id,
+      localPrintUrl: validatedData.data.localPrintUrl,
     },
   });
 
