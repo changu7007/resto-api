@@ -267,6 +267,7 @@ import {
   printBill,
   printKOT,
   printTCP,
+  updateLocalPrintUrl,
   updatePrintDetails,
   updatePrinter,
   updatePrintLocation,
@@ -1462,6 +1463,11 @@ outletRoute.get(
   "/:outletId/print-details",
   isAuthMiddelware,
   errorHandler(getPrintDetails)
+);
+
+outletRoute.patch(
+  "/:outletId/print-details/update-local-print-url",
+  errorHandler(updateLocalPrintUrl)
 );
 
 export default outletRoute;

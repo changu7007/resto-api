@@ -300,4 +300,5 @@ outletRoute.patch("/:outletId/tables/:tableId/transfer", auth_1.isAuthMiddelware
 outletRoute.post("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.createPrintDetails));
 outletRoute.patch("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrintDetails));
 outletRoute.get("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintDetails));
+outletRoute.patch("/:outletId/print-details/update-local-print-url", (0, error_handler_1.errorHandler)(printer_controller_1.updateLocalPrintUrl));
 exports.default = outletRoute;

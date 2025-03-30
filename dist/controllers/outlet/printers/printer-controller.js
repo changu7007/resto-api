@@ -32,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPrintDetails = exports.updatePrintDetails = exports.createPrintDetails = exports.printTCP = exports.printBill = exports.printKOT = exports.getPrinterById = exports.getPrintersForLocation = exports.getPrintLocationsByTypes = exports.getPrintLocationsByTypesForApp = exports.deletePrintLocation = exports.updatePrintLocation = exports.deletePrinter = exports.updatePrinter = exports.getPrinters = exports.getPrintLocations = exports.assignPrinterToLocation = exports.createPrintLocation = exports.createPrinter = void 0;
+exports.updateLocalPrintUrl = exports.getPrintDetails = exports.updatePrintDetails = exports.createPrintDetails = exports.printTCP = exports.printBill = exports.printKOT = exports.getPrinterById = exports.getPrintersForLocation = exports.getPrintLocationsByTypes = exports.getPrintLocationsByTypesForApp = exports.deletePrintLocation = exports.updatePrintLocation = exports.deletePrinter = exports.updatePrinter = exports.getPrinters = exports.getPrintLocations = exports.assignPrinterToLocation = exports.createPrintLocation = exports.createPrinter = void 0;
 const z = __importStar(require("zod"));
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -854,3 +854,21 @@ const getPrintDetails = (req, res) => __awaiter(void 0, void 0, void 0, function
     });
 });
 exports.getPrintDetails = getPrintDetails;
+const updateLocalPrintUrl = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!outlet) {
+        throw new not_found_1.NotFoundException("Outlet not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const { url } = req.body;
+    const printDetails = yield __1.prismaDB.printDetails.update({
+        where: { restaurantId: outlet.id },
+        data: { localPrintUrl: url },
+    });
+    return res.json({
+        success: true,
+        message: "Local print URL updated successfully",
+        data: printDetails,
+    });
+});
+exports.updateLocalPrintUrl = updateLocalPrintUrl;

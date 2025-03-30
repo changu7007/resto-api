@@ -1028,3 +1028,25 @@ export const getPrintDetails = async (req: Request, res: Response) => {
     data: printDetails,
   });
 };
+
+export const updateLocalPrintUrl = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet) {
+    throw new NotFoundException("Outlet not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const { url } = req.body;
+
+  const printDetails = await prismaDB.printDetails.update({
+    where: { restaurantId: outlet.id },
+    data: { localPrintUrl: url },
+  });
+
+  return res.json({
+    success: true,
+    message: "Local print URL updated successfully",
+    data: printDetails,
+  });
+};
