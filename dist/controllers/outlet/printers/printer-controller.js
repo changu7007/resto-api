@@ -777,6 +777,7 @@ const printDetailsSchema = z.object({
     logo: z.string().optional(),
     footer: z.string().optional(),
     googleReviewUrl: z.string().optional(),
+    printFormat: z.nativeEnum(client_1.PrintFormat).optional(),
     localPrintUrl: z.string().optional(),
 });
 const createPrintDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -804,6 +805,7 @@ const createPrintDetails = (req, res) => __awaiter(void 0, void 0, void 0, funct
             googleReviewUrl: validatedData.data.googleReviewUrl,
             restaurantId: outlet.id,
             localPrintUrl: validatedData.data.localPrintUrl,
+            printFormat: validatedData.data.printFormat,
         },
     });
     return res.json({

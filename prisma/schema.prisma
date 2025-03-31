@@ -891,9 +891,9 @@ model SplitPayment {
 }
 
 model PrintDetails {
-  id              String     @id @default(auto()) @map("_id") @db.ObjectId
-  restaurantId    String     @unique @db.ObjectId
-  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  restaurantId    String      @unique @db.ObjectId
+  restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   restaurantName  String
   description     String?
   address         String
@@ -906,8 +906,14 @@ model PrintDetails {
   footer          String?
   googleReviewUrl String?
   localPrintUrl   String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  printFormat     PrintFormat @default(TEXT)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+enum PrintFormat {
+  TEXT
+  IMAGE
 }
 
 enum PaymentMethod {

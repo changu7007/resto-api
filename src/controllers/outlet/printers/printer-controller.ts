@@ -5,7 +5,7 @@ import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { BadRequestsException } from "../../../exceptions/bad-request";
-import { PrinterSize, PrintLocationType } from "@prisma/client";
+import { PrinterSize, PrintFormat, PrintLocationType } from "@prisma/client";
 import { PrintManager } from "../../../services/printer/print-manager";
 import { PrintContent, PrintResult } from "../../../services/printer/types";
 import net from "net";
@@ -934,6 +934,7 @@ const printDetailsSchema = z.object({
   logo: z.string().optional(),
   footer: z.string().optional(),
   googleReviewUrl: z.string().optional(),
+  printFormat: z.nativeEnum(PrintFormat).optional(),
   localPrintUrl: z.string().optional(),
 });
 
@@ -968,6 +969,7 @@ export const createPrintDetails = async (req: Request, res: Response) => {
       googleReviewUrl: validatedData.data.googleReviewUrl,
       restaurantId: outlet.id,
       localPrintUrl: validatedData.data.localPrintUrl,
+      printFormat: validatedData.data.printFormat,
     },
   });
 
