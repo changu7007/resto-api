@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getParentOrder = exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.menuCardSchema = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionCancelPatch = exports.orderessionNamePatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.postOrderForUser = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.getParentOrder = exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.menuCardSchema = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionCancelPatch = exports.orderessionNamePatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.postOrderForUser = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllActiveStaffSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -68,6 +68,30 @@ const getAllActiveSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0
     });
 });
 exports.getAllActiveSessionOrders = getAllActiveSessionOrders;
+const getAllActiveStaffSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    // @ts-ignore
+    const { id } = req.user;
+    const redisOrderActiveSession = yield redis_1.redis.get(`active-staff-os-${id}-${outletId}`);
+    if (redisOrderActiveSession) {
+        return res.json({
+            success: true,
+            activeOrders: JSON.parse(redisOrderActiveSession),
+            message: "FETCHED UP ⚡",
+        });
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const activeOrders = yield (0, get_order_1.getFetchStaffActiveOrderSessionToRedis)(outlet.id, id);
+    return res.json({
+        success: true,
+        activeOrders: activeOrders,
+        message: "Fetched ✅",
+    });
+});
+exports.getAllActiveStaffSessionOrders = getAllActiveStaffSessionOrders;
 const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     const { outletId } = req.params;
@@ -946,6 +970,16 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             const checkTable = yield tx.table.findFirst({
                 where: { id: tableId, occupied: true },
             });
+            //alloted table for staff
+            const staffTables = yield tx.staff.findFirst({
+                where: {
+                    restaurantId: getOutlet.id,
+                    role: "WAITER",
+                    assignedTables: {
+                        has: tableId,
+                    },
+                },
+            });
             if (!checkTable) {
                 throw new bad_request_1.BadRequestsException("You Need to scan the Qr Code again to place Order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
             }
@@ -975,6 +1009,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                         username: validCustomer.customer.name,
                         phoneNo: validCustomer.customer.phoneNo,
                         customerId: validCustomer.id,
+                        staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id,
                         tableId,
                         restaurantId: getOutlet.id,
                         orderType,

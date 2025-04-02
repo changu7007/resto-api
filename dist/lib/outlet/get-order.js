@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFetchAllStaffOrderSessionToRedis = exports.getFetchActiveOrderSessionToRedis = exports.getFetchLiveOrderByStaffToRedis = exports.getFetchAllOrderByStaffToRedis = exports.getFetchLiveOrderToRedis = void 0;
+exports.getFetchAllStaffOrderSessionToRedis = exports.getFetchStaffActiveOrderSessionToRedis = exports.getFetchActiveOrderSessionToRedis = exports.getFetchLiveOrderByStaffToRedis = exports.getFetchAllOrderByStaffToRedis = exports.getFetchLiveOrderToRedis = void 0;
 const date_fns_1 = require("date-fns");
 const __1 = require("../..");
 const redis_1 = require("../../services/redis");
@@ -511,6 +511,135 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
     return formattedAllOrderData;
 });
 exports.getFetchActiveOrderSessionToRedis = getFetchActiveOrderSessionToRedis;
+const getFetchStaffActiveOrderSessionToRedis = (outletId, staffId) => __awaiter(void 0, void 0, void 0, function* () {
+    const activeOrders = yield __1.prismaDB.orderSession.findMany({
+        where: {
+            restaurantId: outletId,
+            active: true,
+            staffId: staffId,
+        },
+        include: {
+            table: true,
+            orders: {
+                include: {
+                    orderItems: {
+                        include: {
+                            selectedVariant: true,
+                            addOnSelected: {
+                                include: {
+                                    selectedAddOnVariantsId: true,
+                                },
+                            },
+                            menuItem: {
+                                include: {
+                                    category: true,
+                                    images: true,
+                                    menuItemVariants: {
+                                        include: {
+                                            variant: true,
+                                        },
+                                    },
+                                    menuGroupAddOns: {
+                                        include: {
+                                            addOnGroups: {
+                                                include: {
+                                                    addOnVariants: true,
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+    const formattedAllOrderData = activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => {
+        var _a;
+        return ({
+            id: order.id,
+            billNo: order.billId,
+            phoneNo: order.phoneNo,
+            active: order.active,
+            sessionStatus: order.sessionStatus,
+            userName: order.username,
+            isPaid: order.isPaid,
+            paymentmethod: order.paymentMethod,
+            orderMode: order.orderType,
+            table: (_a = order.table) === null || _a === void 0 ? void 0 : _a.name,
+            subTotal: order.subTotal,
+            orders: order.orders.map((order) => ({
+                id: order.id,
+                generatedOrderId: order.generatedOrderId,
+                mode: order.orderType,
+                orderStatus: order.orderStatus,
+                paid: order.isPaid,
+                totalNetPrice: order === null || order === void 0 ? void 0 : order.totalNetPrice,
+                gstPrice: order === null || order === void 0 ? void 0 : order.gstPrice,
+                totalGrossProfit: order === null || order === void 0 ? void 0 : order.totalGrossProfit,
+                totalAmount: order.totalAmount,
+                createdAt: (0, date_fns_1.formatDistanceToNow)(new Date(order.createdAt), {
+                    addSuffix: true,
+                }),
+                date: (0, date_fns_1.format)(order.createdAt, "PP"),
+                orderItems: order.orderItems.map((item) => ({
+                    id: item.id,
+                    menuItem: {
+                        id: item.menuItem.id,
+                        name: item.menuItem.name,
+                        shortCode: item.menuItem.shortCode,
+                        categoryId: item.menuItem.category.id,
+                        categoryName: item.menuItem.category.name,
+                        type: item.menuItem.type,
+                        price: item.menuItem.price,
+                        isVariants: item.menuItem.isVariants,
+                        isAddOns: item.menuItem.isAddons,
+                        images: item.menuItem.images.map((image) => ({
+                            id: image.id,
+                            url: image.url,
+                        })),
+                        menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+                            id: variant.id,
+                            variantName: variant.variant.name,
+                            price: variant.price,
+                            type: variant.price,
+                        })),
+                        menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
+                            id: groupAddOn.id,
+                            addOnGroupName: groupAddOn.addOnGroups.title,
+                            description: groupAddOn.addOnGroups.description,
+                            addonVariants: groupAddOn.addOnGroups.addOnVariants.map((addOnVariant) => ({
+                                id: addOnVariant.id,
+                                name: addOnVariant.name,
+                                price: addOnVariant.price,
+                                type: addOnVariant.type,
+                            })),
+                        })),
+                    },
+                    name: item.name,
+                    quantity: item.quantity,
+                    netPrice: item.netPrice,
+                    gst: item.gst,
+                    grossProfit: item.grossProfit,
+                    originalRate: item.originalRate,
+                    isVariants: item.isVariants,
+                    totalPrice: item.totalPrice,
+                    selectedVariant: item.selectedVariant,
+                    addOnSelected: item.addOnSelected,
+                })),
+            })),
+            date: order.createdAt,
+        });
+    });
+    yield redis_1.redis.set(`active-staff-os-${staffId}-${outletId}`, JSON.stringify(formattedAllOrderData));
+    return formattedAllOrderData;
+});
+exports.getFetchStaffActiveOrderSessionToRedis = getFetchStaffActiveOrderSessionToRedis;
 const getFetchAllStaffOrderSessionToRedis = (outletId, staffId) => __awaiter(void 0, void 0, void 0, function* () {
     const getAllOrders = yield __1.prismaDB.orderSession.findMany({
         where: {

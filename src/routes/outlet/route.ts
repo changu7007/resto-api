@@ -28,6 +28,7 @@ import {
   deleteOrderItem,
   existingOrderPatchApp,
   getAllActiveSessionOrders,
+  getAllActiveStaffSessionOrders,
   getAllOrderByStaff,
   getLiveOrders,
   getParentOrder,
@@ -555,6 +556,11 @@ outletRoute.get("/:outletId/live-orders", errorHandler(getLiveOrders));
 outletRoute.get(
   "/:outletId/active-session-orders",
   errorHandler(getAllActiveSessionOrders)
+);
+outletRoute.get(
+  "/:outletId/active-staff-session-orders",
+  isAuthMiddelware,
+  errorHandler(getAllActiveStaffSessionOrders)
 );
 
 outletRoute.post(

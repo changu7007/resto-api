@@ -97,6 +97,7 @@ outletRoute.patch("/:outletId/order-session-bulk-delete", auth_1.isAuthMiddelwar
 outletRoute.get("/:outletId/today-order-count", (0, error_handler_1.errorHandler)(orderOutletController_1.getTodayOrdersCount));
 outletRoute.get("/:outletId/live-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getLiveOrders));
 outletRoute.get("/:outletId/active-session-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getAllActiveSessionOrders));
+outletRoute.get("/:outletId/active-staff-session-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllActiveStaffSessionOrders));
 outletRoute.post("/:outletId/all-table-session-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllSessionOrders));
 outletRoute.post("/:outletId/all-table-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllOrders));
 outletRoute.get("/:outletId/all-staff-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllOrderByStaff));

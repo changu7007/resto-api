@@ -23,6 +23,7 @@ import {
   getFetchActiveOrderSessionToRedis,
   getFetchAllStaffOrderSessionToRedis,
   getFetchLiveOrderToRedis,
+  getFetchStaffActiveOrderSessionToRedis,
 } from "../../../lib/outlet/get-order";
 import { calculateTotalsForTakewayAndDelivery } from "./orderSession/orderSessionController";
 import { getYear } from "date-fns";
@@ -86,6 +87,44 @@ export const getAllActiveSessionOrders = async (
   }
 
   const activeOrders = await getFetchActiveOrderSessionToRedis(outlet.id);
+
+  return res.json({
+    success: true,
+    activeOrders: activeOrders,
+    message: "Fetched ✅",
+  });
+};
+
+export const getAllActiveStaffSessionOrders = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+  // @ts-ignore
+  const { id } = req.user;
+
+  const redisOrderActiveSession = await redis.get(
+    `active-staff-os-${id}-${outletId}`
+  );
+
+  if (redisOrderActiveSession) {
+    return res.json({
+      success: true,
+      activeOrders: JSON.parse(redisOrderActiveSession),
+      message: "FETCHED UP ⚡",
+    });
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const activeOrders = await getFetchStaffActiveOrderSessionToRedis(
+    outlet.id,
+    id
+  );
 
   return res.json({
     success: true,
@@ -1221,6 +1260,17 @@ export const postOrderForUser = async (req: Request, res: Response) => {
         where: { id: tableId, occupied: true },
       });
 
+      //alloted table for staff
+      const staffTables = await tx.staff.findFirst({
+        where: {
+          restaurantId: getOutlet.id,
+          role: "WAITER",
+          assignedTables: {
+            has: tableId,
+          },
+        },
+      });
+
       if (!checkTable) {
         throw new BadRequestsException(
           "You Need to scan the Qr Code again to place Order",
@@ -1256,6 +1306,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
               username: validCustomer.customer.name,
               phoneNo: validCustomer.customer.phoneNo,
               customerId: validCustomer.id,
+              staffId: staffTables?.id,
               tableId,
               restaurantId: getOutlet.id,
               orderType,
