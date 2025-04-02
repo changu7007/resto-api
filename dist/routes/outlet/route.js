@@ -289,8 +289,6 @@ outletRoute.post("/:outletId/printers/locations/:locationId/assign", auth_1.isAu
 outletRoute.get("/:outletId/print-locations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintLocationsByTypesForApp));
 outletRoute.get("/:outletId/pos/print-locations", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintLocationsByTypes));
 outletRoute.get("/:outletId/printers/location/:locationId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintersForLocation));
-outletRoute.post("/:outletId/print/kot", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.printKOT));
-outletRoute.post("/:outletId/print/bill", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.printBill));
 outletRoute.post("/:outletId/print/tcp", (0, error_handler_1.errorHandler)(printer_controller_1.printTCP));
 outletRoute.get("/:outletId/order-item/:orderItemId/parent-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getParentOrder));
 outletRoute.get("/:outletId/settings/print-access", 

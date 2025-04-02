@@ -265,8 +265,6 @@ import {
   getPrintLocations,
   getPrintLocationsByTypes,
   getPrintLocationsByTypesForApp,
-  printBill,
-  printKOT,
   printTCP,
   updateLocalPrintUrl,
   updatePrintDetails,
@@ -1413,18 +1411,6 @@ outletRoute.get(
   "/:outletId/printers/location/:locationId",
   isAuthMiddelware,
   errorHandler(getPrintersForLocation)
-);
-
-outletRoute.post(
-  "/:outletId/print/kot",
-  isAuthMiddelware,
-  errorHandler(printKOT)
-);
-
-outletRoute.post(
-  "/:outletId/print/bill",
-  isAuthMiddelware,
-  errorHandler(printBill)
 );
 
 outletRoute.post("/:outletId/print/tcp", errorHandler(printTCP));

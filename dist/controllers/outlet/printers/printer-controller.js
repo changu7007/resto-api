@@ -32,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateLocalPrintUrl = exports.getPrintDetails = exports.updatePrintDetails = exports.createPrintDetails = exports.printTCP = exports.printBill = exports.printKOT = exports.getPrinterById = exports.getPrintersForLocation = exports.getPrintLocationsByTypes = exports.getPrintLocationsByTypesForApp = exports.deletePrintLocation = exports.updatePrintLocation = exports.deletePrinter = exports.updatePrinter = exports.getPrinters = exports.getPrintLocations = exports.assignPrinterToLocation = exports.createPrintLocation = exports.createPrinter = void 0;
+exports.updateLocalPrintUrl = exports.getPrintDetails = exports.updatePrintDetails = exports.createPrintDetails = exports.printTCP = exports.getPrinterById = exports.getPrintersForLocation = exports.getPrintLocationsByTypes = exports.getPrintLocationsByTypesForApp = exports.deletePrintLocation = exports.updatePrintLocation = exports.deletePrinter = exports.updatePrinter = exports.getPrinters = exports.getPrintLocations = exports.assignPrinterToLocation = exports.createPrintLocation = exports.createPrinter = void 0;
 const z = __importStar(require("zod"));
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -40,7 +40,6 @@ const root_1 = require("../../../exceptions/root");
 const __1 = require("../../..");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const client_1 = require("@prisma/client");
-const print_manager_1 = require("../../../services/printer/print-manager");
 const ws_1 = require("../../../services/ws");
 // Validation schemas
 const printerSchema = z.object({
@@ -557,164 +556,6 @@ const getPrinterById = (req, res) => __awaiter(void 0, void 0, void 0, function*
     });
 });
 exports.getPrinterById = getPrinterById;
-// Print KOT
-const printKOT = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { outletId } = req.params;
-    const outlet = yield (0, outlet_1.getOutletById)(outletId);
-    if (!outlet) {
-        throw new not_found_1.NotFoundException("Outlet not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
-    }
-    // Get printers for KOT location type
-    const kotPrinters = yield __1.prismaDB.printer.findMany({
-        where: {
-            restaurantId: outlet.id,
-            isActive: true,
-            printLocations: {
-                some: {
-                    printLocation: {
-                        type: client_1.PrintLocationType.KITCHEN,
-                        isActive: true,
-                    },
-                },
-            },
-        },
-        include: {
-            printLocations: {
-                include: {
-                    printLocation: true,
-                },
-            },
-        },
-    });
-    if (!kotPrinters || kotPrinters.length === 0) {
-        throw new bad_request_1.BadRequestsException("No active KOT printers found", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-    try {
-        const printData = req.body;
-        const printManager = new print_manager_1.PrintManager();
-        // Format the content for KOT printing
-        const printContent = {
-            type: "KOT",
-            content: {
-                header: {
-                    restaurantName: printData.restaurantName,
-                    customerName: printData.name,
-                    orderType: printData.orderType,
-                    date: printData.date,
-                },
-                items: printData.items,
-                footer: {
-                    totalItems: printData.totalItems,
-                },
-                note: printData.note,
-            },
-        };
-        // Print to all KOT printers
-        const printResults = yield Promise.all(kotPrinters.map((printer) => printManager.print(printer, printContent)));
-        // Check if at least one printer succeeded
-        const success = printResults.some((result) => result.success);
-        if (!success) {
-            throw new Error("Failed to print to any KOT printer");
-        }
-        return res.json({
-            success: true,
-            message: "KOT printed successfully",
-        });
-    }
-    catch (error) {
-        console.error("KOT Print error:", error);
-        throw new bad_request_1.BadRequestsException("Failed to print KOT", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-});
-exports.printKOT = printKOT;
-// Print Bill
-const printBill = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { outletId } = req.params;
-    const outlet = yield (0, outlet_1.getOutletById)(outletId);
-    if (!outlet) {
-        throw new not_found_1.NotFoundException("Outlet not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
-    }
-    // Get printers for BILL location type
-    const billPrinters = yield __1.prismaDB.printer.findMany({
-        where: {
-            restaurantId: outlet.id,
-            isActive: true,
-            printLocations: {
-                some: {
-                    printLocation: {
-                        type: client_1.PrintLocationType.BILLDESK,
-                        isActive: true,
-                    },
-                },
-            },
-        },
-        include: {
-            printLocations: {
-                include: {
-                    printLocation: true,
-                },
-            },
-        },
-    });
-    if (!billPrinters || billPrinters.length === 0) {
-        throw new bad_request_1.BadRequestsException("No active bill printers found", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-    try {
-        const printData = req.body;
-        const printManager = new print_manager_1.PrintManager();
-        // Format the content for bill printing
-        const printContent = {
-            type: "BILL",
-            content: {
-                header: {
-                    restaurantName: printData.restaurantName,
-                    customerName: printData.name,
-                    orderType: printData.orderType,
-                    date: printData.date,
-                },
-                items: printData.items,
-                summary: {
-                    subTotal: printData.totalPrice - printData.gst,
-                    sgst: printData.gst / 2,
-                    cgst: printData.gst / 2,
-                    total: printData.totalPrice,
-                    rounded: Math.round(printData.totalPrice),
-                },
-                payment: printData.isSplitPayment
-                    ? {
-                        type: "SPLIT",
-                        details: printData.splitPayments,
-                    }
-                    : {
-                        type: "SINGLE",
-                        details: [
-                            {
-                                method: printData.paymentMethod || "CASH",
-                                amount: printData.totalPrice,
-                            },
-                        ],
-                    },
-                note: printData.note,
-            },
-        };
-        // Print to all bill printers
-        const printResults = yield Promise.all(billPrinters.map((printer) => printManager.print(printer, printContent)));
-        // Check if at least one printer succeeded
-        const success = printResults.some((result) => result.success);
-        if (!success) {
-            throw new Error("Failed to print to any bill printer");
-        }
-        return res.json({
-            success: true,
-            message: "Bill printed successfully",
-        });
-    }
-    catch (error) {
-        console.error("Bill Print error:", error);
-        throw new bad_request_1.BadRequestsException("Failed to print bill", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-});
-exports.printBill = printBill;
 const printTCP = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
