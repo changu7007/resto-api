@@ -55,9 +55,10 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             restaurantId: outletId,
             staffId: staffId,
             orderStatus: "COMPLETED",
+            isPaid: true,
             updatedAt: {
-                gte: lastMonth,
-                lte: today,
+                gte: (0, date_fns_1.startOfDay)(today),
+                lte: (0, date_fns_1.endOfDay)(today),
             },
         },
         _sum: {
@@ -69,6 +70,7 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             restaurantId: outletId,
             staffId: staffId,
             orderStatus: "COMPLETED",
+            isPaid: true,
             updatedAt: {
                 gte: (0, date_fns_1.subDays)(lastMonth, 30),
                 lte: lastMonth,
@@ -129,8 +131,7 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 by: ["orderType"],
                 where: {
                     restaurantId: outletId,
-                    orderStatus: "COMPLETED",
-                    updatedAt: {
+                    createdAt: {
                         gte: hourStart,
                         lt: hourEnd,
                     },
@@ -157,7 +158,6 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                         $expr: {
                             $eq: ["$restaurantId", { $toObjectId: outletId }],
                         },
-                        orderStatus: { $eq: "COMPLETED" },
                     },
                 },
                 {
@@ -205,7 +205,6 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                         $expr: {
                             $eq: ["$restaurantId", { $toObjectId: outletId }],
                         },
-                        orderStatus: "COMPLETED",
                     },
                 },
                 {
@@ -261,7 +260,7 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             by: ["orderType"],
             where: {
                 restaurantId: outletId,
-                updatedAt: {
+                createdAt: {
                     gte: (0, date_fns_1.startOfDay)(new Date()),
                 },
             },
@@ -271,7 +270,7 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             by: ["orderType"],
             where: {
                 restaurantId: outletId,
-                updatedAt: {
+                createdAt: {
                     gte: (0, date_fns_1.startOfDay)((0, date_fns_1.subDays)(new Date(), 1)),
                     lt: (0, date_fns_1.startOfDay)(new Date()),
                 },

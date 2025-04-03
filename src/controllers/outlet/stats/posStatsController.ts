@@ -12,8 +12,6 @@ import {
   subMonths,
 } from "date-fns";
 import { DateTime } from "luxon";
-import { ColumnFilters } from "../../../schema/staff";
-import { ColumnSort } from "../../../schema/staff";
 
 // Helper function to calculate percentage change
 const calculatePercentageChange = (
@@ -69,9 +67,10 @@ export const getPosStats = async (req: Request, res: Response) => {
       restaurantId: outletId,
       staffId: staffId,
       orderStatus: "COMPLETED",
+      isPaid: true,
       updatedAt: {
-        gte: lastMonth,
-        lte: today,
+        gte: startOfDay(today),
+        lte: endOfDay(today),
       },
     },
     _sum: {
@@ -84,6 +83,7 @@ export const getPosStats = async (req: Request, res: Response) => {
       restaurantId: outletId,
       staffId: staffId,
       orderStatus: "COMPLETED",
+      isPaid: true,
       updatedAt: {
         gte: subDays(lastMonth, 30),
         lte: lastMonth,
@@ -150,8 +150,8 @@ export const getPosStats = async (req: Request, res: Response) => {
           by: ["orderType"],
           where: {
             restaurantId: outletId,
-            orderStatus: "COMPLETED",
-            updatedAt: {
+
+            createdAt: {
               gte: hourStart,
               lt: hourEnd,
             },
@@ -184,7 +184,6 @@ export const getPosStats = async (req: Request, res: Response) => {
             $expr: {
               $eq: ["$restaurantId", { $toObjectId: outletId }],
             },
-            orderStatus: { $eq: "COMPLETED" },
           },
         },
         {
@@ -242,7 +241,6 @@ export const getPosStats = async (req: Request, res: Response) => {
             $expr: {
               $eq: ["$restaurantId", { $toObjectId: outletId }],
             },
-            orderStatus: "COMPLETED",
           },
         },
         {
@@ -308,7 +306,7 @@ export const getPosStats = async (req: Request, res: Response) => {
       by: ["orderType"],
       where: {
         restaurantId: outletId,
-        updatedAt: {
+        createdAt: {
           gte: startOfDay(new Date()),
         },
       },
@@ -319,7 +317,7 @@ export const getPosStats = async (req: Request, res: Response) => {
       by: ["orderType"],
       where: {
         restaurantId: outletId,
-        updatedAt: {
+        createdAt: {
           gte: startOfDay(subDays(new Date(), 1)),
           lt: startOfDay(new Date()),
         },
