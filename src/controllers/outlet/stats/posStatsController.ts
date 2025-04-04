@@ -58,47 +58,49 @@ export const getPosStats = async (req: Request, res: Response) => {
     operatingHours.push(i % 24);
   }
 
-  // Get today's date range in restaurant's timezone
+  // Start and end of today in the restaurant's time zone
   const todayStart = DateTime.now()
     .setZone(timeZone)
     .startOf("day")
     .toUTC()
     .toISO();
-  const todayEnd = DateTime.now()
-    .setZone(timeZone)
-    .endOf("day")
-    .toUTC()
-    .toISO();
+  const todayEnd =
+    DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO() ??
+    new Date().toISOString();
 
-  const currentRevenue = await prismaDB.order.aggregate({
+  if (!todayStart || !todayEnd) {
+    throw new Error("Failed to calculate today's date range.");
+  }
+
+  const currentRevenue = await prismaDB.orderSession.aggregate({
     where: {
       restaurantId: outletId,
       staffId: staffId,
-      orderStatus: "COMPLETED",
+      sessionStatus: "COMPLETED",
       isPaid: true,
       updatedAt: {
-        gte: startOfDay(today),
-        lte: endOfDay(today),
+        gte: new Date(todayStart),
+        lte: new Date(todayEnd),
       },
     },
     _sum: {
-      totalAmount: true,
+      subTotal: true,
     },
   });
 
-  const previousRevenue = await prismaDB.order.aggregate({
+  const previousRevenue = await prismaDB.orderSession.aggregate({
     where: {
       restaurantId: outletId,
       staffId: staffId,
-      orderStatus: "COMPLETED",
+      sessionStatus: "COMPLETED",
       isPaid: true,
       updatedAt: {
-        gte: subDays(lastMonth, 30),
-        lte: lastMonth,
+        gte: new Date(todayStart),
+        lte: new Date(todayEnd),
       },
     },
     _sum: {
-      totalAmount: true,
+      subTotal: true,
     },
   });
 
@@ -120,8 +122,8 @@ export const getPosStats = async (req: Request, res: Response) => {
       staffId: staffId,
       orderStatus: "COMPLETED",
       updatedAt: {
-        gte: startOfDay(today),
-        lte: endOfDay(today),
+        gte: new Date(todayStart),
+        lte: new Date(todayEnd),
       },
     },
     _avg: {
@@ -480,10 +482,10 @@ export const getPosStats = async (req: Request, res: Response) => {
     success: true,
     data: {
       totalSalesRevenue: {
-        amount: currentRevenue._sum.totalAmount || 0,
+        amount: currentRevenue._sum.subTotal || 0,
         percentageChange: calculatePercentageChange(
-          currentRevenue._sum.totalAmount || 0,
-          previousRevenue._sum.totalAmount || 0
+          currentRevenue._sum.subTotal || 0,
+          previousRevenue._sum.subTotal || 0
         ).toFixed(2),
       },
       activeOrders,
