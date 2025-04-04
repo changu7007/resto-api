@@ -1021,20 +1021,6 @@ export const updateItembyId = async (req: Request, res: Response) => {
 
   const slug = generateSlug(validateFields?.name);
 
-  const checkSlug = await prismaDB.menuItem.findFirst({
-    where: {
-      restaurantId: outlet.id,
-      slug,
-    },
-  });
-
-  if (checkSlug) {
-    throw new BadRequestsException(
-      "Item already exists",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
-
   const menuItem = await getItemByOutletId(outlet.id, itemId);
 
   if (!menuItem?.id) {
@@ -1170,6 +1156,7 @@ export const updateItembyId = async (req: Request, res: Response) => {
       },
       data: {
         name: validateFields?.name,
+        slug,
         shortCode: validateFields?.shortCode,
         description: validateFields?.description,
         categoryId: validateFields?.categoryId,

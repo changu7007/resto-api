@@ -811,15 +811,6 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     const slug = (0, utils_1.generateSlug)(validateFields === null || validateFields === void 0 ? void 0 : validateFields.name);
-    const checkSlug = yield __1.prismaDB.menuItem.findFirst({
-        where: {
-            restaurantId: outlet.id,
-            slug,
-        },
-    });
-    if (checkSlug) {
-        throw new bad_request_1.BadRequestsException("Item already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
     const menuItem = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
     if (!(menuItem === null || menuItem === void 0 ? void 0 : menuItem.id)) {
         throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
@@ -929,6 +920,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
             },
             data: {
                 name: validateFields === null || validateFields === void 0 ? void 0 : validateFields.name,
+                slug,
                 shortCode: validateFields === null || validateFields === void 0 ? void 0 : validateFields.shortCode,
                 description: validateFields === null || validateFields === void 0 ? void 0 : validateFields.description,
                 categoryId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.categoryId,
