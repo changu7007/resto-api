@@ -9,29 +9,16 @@ import {
   getOutletById,
 } from "../../../lib/outlet";
 import {
-  getFetchActiveOrderSessionToRedis,
   getFetchAllOrderByStaffToRedis,
-  getFetchAllStaffOrderSessionToRedis,
   getFetchLiveOrderByStaffToRedis,
-  getFetchLiveOrderToRedis,
 } from "../../../lib/outlet/get-order";
 import { redis } from "../../../services/redis";
 import { prismaDB } from "../../..";
-import {
-  getFetchAllAreastoRedis,
-  getFetchAllTablesToRedis,
-} from "../../../lib/outlet/get-tables";
-import { getFetchAllNotificationToRedis } from "../../../lib/outlet/get-items";
+
 import { websocketManager } from "../../../services/ws";
 import { BadRequestsException } from "../../../exceptions/bad-request";
-import {
-  OrderStatus,
-  OrderType,
-  CashRegister,
-  PaymentMethod,
-} from "@prisma/client";
+import { OrderStatus, OrderType, CashRegister } from "@prisma/client";
 import { getYear } from "date-fns";
-import { getfetchOutletStocksToRedis } from "../../../lib/outlet/get-inventory";
 import { inviteCode, menuCardSchema } from "./orderOutletController";
 
 export const getByStaffLiveOrders = async (req: Request, res: Response) => {
@@ -398,9 +385,26 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
               });
 
               if (rawMaterial) {
-                const decrementStock =
-                  (Number(ingredient.quantity) * Number(item.quantity || 1)) /
-                  Number(rawMaterial.conversionFactor);
+                let decrementStock = 0;
+
+                // Check if the ingredient's unit matches the purchase unit or consumption unit
+                if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                  // If MOU is linked to purchaseUnit, multiply directly with quantity
+                  decrementStock =
+                    Number(ingredient.quantity) * Number(item.quantity || 1);
+                } else if (
+                  ingredient.unitId === rawMaterial.consumptionUnitId
+                ) {
+                  // If MOU is linked to consumptionUnit, apply conversion factor
+                  decrementStock =
+                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                    Number(rawMaterial.conversionFactor || 1);
+                } else {
+                  // Default fallback if MOU doesn't match either unit
+                  decrementStock =
+                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                    Number(rawMaterial.conversionFactor || 1);
+                }
 
                 if (Number(rawMaterial.currentStock) < decrementStock) {
                   throw new BadRequestsException(

@@ -749,8 +749,25 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                         where: { id: ingredient.rawMaterialId },
                     });
                     if (rawMaterial) {
-                        const decrementStock = (Number(ingredient.quantity) * Number(item.quantity || 1)) /
-                            Number(rawMaterial.conversionFactor);
+                        let decrementStock = 0;
+                        // Check if the ingredient's unit matches the purchase unit or consumption unit
+                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                            // If MOU is linked to purchaseUnit, multiply directly with quantity
+                            decrementStock =
+                                Number(ingredient.quantity) * Number(item.quantity || 1);
+                        }
+                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                            // If MOU is linked to consumptionUnit, apply conversion factor
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        else {
+                            // Default fallback if MOU doesn't match either unit
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
                         if (Number(rawMaterial.currentStock) < decrementStock) {
                             throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
                         }
@@ -1082,8 +1099,27 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                             where: { id: ingredient.rawMaterialId },
                         });
                         if (rawMaterial) {
-                            const decrementStock = (Number(ingredient.quantity) * Number(item.quantity || 1)) /
-                                Number(rawMaterial.conversionFactor);
+                            let decrementStock = 0;
+                            // Check if the ingredient's unit matches the purchase unit or consumption unit
+                            if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                                // If MOU is linked to purchaseUnit, multiply directly with quantity
+                                decrementStock =
+                                    Number(ingredient.quantity) * Number(item.quantity || 1);
+                            }
+                            else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                                // If MOU is linked to consumptionUnit, apply conversion factor
+                                decrementStock =
+                                    (Number(ingredient.quantity) *
+                                        Number(item.quantity || 1)) /
+                                        Number(rawMaterial.conversionFactor || 1);
+                            }
+                            else {
+                                // Default fallback if MOU doesn't match either unit
+                                decrementStock =
+                                    (Number(ingredient.quantity) *
+                                        Number(item.quantity || 1)) /
+                                        Number(rawMaterial.conversionFactor || 1);
+                            }
                             if (Number(rawMaterial.currentStock) < decrementStock) {
                                 throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
                             }

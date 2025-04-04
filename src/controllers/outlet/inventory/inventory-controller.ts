@@ -1912,6 +1912,9 @@ export const allStocks = async (req: Request, res: Response) => {
     name: rawItem?.name,
     consumptionUnit: rawItem.consumptionUnit.name,
     stock: `${rawItem.currentStock?.toFixed(2)} - ${rawItem?.purchasedUnit}`,
+    minStockLevel: `${rawItem?.minimumStockLevel?.toFixed(2)} - ${
+      rawItem?.minimumStockUnit?.name
+    }`,
     purchasedPrice: rawItem?.purchasedPrice,
     lastPurchasedPrice: rawItem?.lastPurchasedPrice,
     purchasedPricePerItem: rawItem?.purchasedPricePerItem,
@@ -3258,6 +3261,9 @@ export const allTableStocks = async (req: Request, res: Response) => {
     name: rawItem?.name,
     consumptionUnit: rawItem?.consumptionUnit?.name,
     stock: `${rawItem?.currentStock?.toFixed(2)} - ${rawItem?.purchasedUnit}`,
+    minStockLevel: `${rawItem?.minimumStockLevel?.toFixed(2)} - ${
+      rawItem?.minimumStockUnit?.name
+    }`,
     purchasedPrice: rawItem?.purchasedPrice,
     lastPurchasedPrice: rawItem?.lastPurchasedPrice,
     purchasedPricePerItem: rawItem?.purchasedPricePerItem,

@@ -48,8 +48,16 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         operatingHours.push(i % 24);
     }
     // Get today's date range in restaurant's timezone
-    const todayStart = luxon_1.DateTime.now().setZone(timeZone).startOf("day").toJSDate();
-    const todayEnd = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toJSDate();
+    const todayStart = luxon_1.DateTime.now()
+        .setZone(timeZone)
+        .startOf("day")
+        .toUTC()
+        .toISO();
+    const todayEnd = luxon_1.DateTime.now()
+        .setZone(timeZone)
+        .endOf("day")
+        .toUTC()
+        .toISO();
     const currentRevenue = yield __1.prismaDB.order.aggregate({
         where: {
             restaurantId: outletId,
@@ -123,30 +131,114 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     });
     // Get today's orders by hour
     const getTodayOrdersByHour = () => __awaiter(void 0, void 0, void 0, function* () {
-        const ordersByHour = yield Promise.all(operatingHours.map((hour) => __awaiter(void 0, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
-            const hourStart = (0, date_fns_1.set)(todayStart, { hours: hour });
-            const hourEnd = (0, date_fns_1.set)(todayStart, { hours: hour + 1 });
-            const orders = yield __1.prismaDB.order.groupBy({
-                by: ["orderType"],
-                where: {
-                    restaurantId: outletId,
-                    createdAt: {
-                        gte: hourStart,
-                        lt: hourEnd,
-                    },
+        var _a;
+        // Start and end of today in the restaurant's time zone
+        const todayStart = luxon_1.DateTime.now()
+            .setZone(timeZone)
+            .startOf("day")
+            .toUTC()
+            .toISO();
+        const todayEnd = (_a = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO()) !== null && _a !== void 0 ? _a : new Date().toISOString();
+        if (!todayStart || !todayEnd) {
+            throw new Error("Failed to calculate today's date range.");
+        }
+        // Get all orders for today
+        const orders = yield __1.prismaDB.order.groupBy({
+            by: ["createdAt"],
+            _count: {
+                id: true,
+            },
+            where: {
+                restaurantId: outletId,
+                createdAt: {
+                    gte: new Date(todayStart),
+                    lte: new Date(todayEnd),
                 },
-                _count: true,
+            },
+        });
+        // Get order statuses for today
+        const orderStatuses = yield __1.prismaDB.order.groupBy({
+            by: ["createdAt", "orderStatus"],
+            _count: {
+                id: true,
+            },
+            where: {
+                restaurantId: outletId,
+                createdAt: {
+                    gte: new Date(todayStart),
+                    lte: new Date(todayEnd),
+                },
+            },
+        });
+        // Get orders by type for today
+        const ordersByType = yield __1.prismaDB.order.groupBy({
+            by: ["createdAt", "orderType"],
+            _count: {
+                id: true,
+            },
+            where: {
+                restaurantId: outletId,
+                createdAt: {
+                    gte: new Date(todayStart),
+                    lte: new Date(todayEnd),
+                },
+            },
+        });
+        // Generate data only for outlet operating hours
+        const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => (startHour + i) % 24);
+        const ordersByHour = hours.map((hour) => {
+            // Filter orders for this hour
+            const ordersAtHour = orders.filter((order) => {
+                const orderHour = luxon_1.DateTime.fromJSDate(order.createdAt, {
+                    zone: timeZone,
+                }).hour;
+                return orderHour === hour;
             });
+            // Count total orders for this hour
+            const count = ordersAtHour.reduce((sum, order) => sum + order._count.id, 0);
+            // Get order statuses for this hour
+            const statuses = orderStatuses
+                .filter((status) => {
+                const statusHour = luxon_1.DateTime.fromJSDate(status.createdAt, {
+                    zone: timeZone,
+                }).hour;
+                return statusHour === hour;
+            })
+                .reduce((acc, status) => {
+                acc[status.orderStatus] = status._count.id;
+                return acc;
+            }, {});
+            // Get orders by type for this hour
+            const typeOrders = ordersByType.filter((order) => {
+                const orderHour = luxon_1.DateTime.fromJSDate(order.createdAt, {
+                    zone: timeZone,
+                }).hour;
+                return orderHour === hour;
+            });
+            // Calculate counts for each order type
+            const dineInCount = typeOrders
+                .filter((o) => o.orderType === "DINEIN")
+                .reduce((sum, o) => sum + o._count.id, 0);
+            const takeawayCount = typeOrders
+                .filter((o) => o.orderType === "TAKEAWAY")
+                .reduce((sum, o) => sum + o._count.id, 0);
+            const deliveryCount = typeOrders
+                .filter((o) => o.orderType === "DELIVERY")
+                .reduce((sum, o) => sum + o._count.id, 0);
+            const expressCount = typeOrders
+                .filter((o) => o.orderType === "EXPRESS")
+                .reduce((sum, o) => sum + o._count.id, 0);
             return {
                 hour: `${hour.toString().padStart(2, "0")}:00`,
-                dineIn: (_b = (_a = orders === null || orders === void 0 ? void 0 : orders.find((s) => (s === null || s === void 0 ? void 0 : s.orderType) === "DINEIN")) === null || _a === void 0 ? void 0 : _a._count) !== null && _b !== void 0 ? _b : 0,
-                takeaway: (_d = (_c = orders === null || orders === void 0 ? void 0 : orders.find((s) => (s === null || s === void 0 ? void 0 : s.orderType) === "TAKEAWAY")) === null || _c === void 0 ? void 0 : _c._count) !== null && _d !== void 0 ? _d : 0,
-                delivery: (_f = (_e = orders === null || orders === void 0 ? void 0 : orders.find((s) => (s === null || s === void 0 ? void 0 : s.orderType) === "DELIVERY")) === null || _e === void 0 ? void 0 : _e._count) !== null && _f !== void 0 ? _f : 0,
-                express: (_h = (_g = orders === null || orders === void 0 ? void 0 : orders.find((s) => (s === null || s === void 0 ? void 0 : s.orderType) === "EXPRESS")) === null || _g === void 0 ? void 0 : _g._count) !== null && _h !== void 0 ? _h : 0,
-                total: (_j = orders === null || orders === void 0 ? void 0 : orders.reduce((acc, o) => acc + o._count, 0)) !== null && _j !== void 0 ? _j : 0,
+                count,
+                status: statuses,
+                dineIn: dineInCount,
+                takeaway: takeawayCount,
+                delivery: deliveryCount,
+                express: expressCount,
+                total: count,
             };
-        })));
+        });
         return ordersByHour;
     });
     // Modified getDailyOrderStats to use operating hours
@@ -255,7 +347,7 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     });
     // Calculate growth percentages
     const calculateGrowth = () => __awaiter(void 0, void 0, void 0, function* () {
-        var _k, _l, _m, _o, _p, _q, _r, _s;
+        var _b, _c, _d, _e, _f, _g, _h, _j;
         const today = yield __1.prismaDB.order.groupBy({
             by: ["orderType"],
             where: {
@@ -278,10 +370,10 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             _count: true,
         });
         return {
-            dineIn: calculatePercentageChange(((_k = today.find((t) => t.orderType === "DINEIN")) === null || _k === void 0 ? void 0 : _k._count) || 0, ((_l = yesterday.find((t) => t.orderType === "DINEIN")) === null || _l === void 0 ? void 0 : _l._count) || 0),
-            express: calculatePercentageChange(((_m = today.find((t) => t.orderType === "EXPRESS")) === null || _m === void 0 ? void 0 : _m._count) || 0, ((_o = yesterday.find((t) => t.orderType === "EXPRESS")) === null || _o === void 0 ? void 0 : _o._count) || 0),
-            takeaway: calculatePercentageChange(((_p = today.find((t) => t.orderType === "TAKEAWAY")) === null || _p === void 0 ? void 0 : _p._count) || 0, ((_q = yesterday.find((t) => t.orderType === "TAKEAWAY")) === null || _q === void 0 ? void 0 : _q._count) || 0),
-            delivery: calculatePercentageChange(((_r = today.find((t) => t.orderType === "DELIVERY")) === null || _r === void 0 ? void 0 : _r._count) || 0, ((_s = yesterday.find((t) => t.orderType === "DELIVERY")) === null || _s === void 0 ? void 0 : _s._count) || 0),
+            dineIn: calculatePercentageChange(((_b = today.find((t) => t.orderType === "DINEIN")) === null || _b === void 0 ? void 0 : _b._count) || 0, ((_c = yesterday.find((t) => t.orderType === "DINEIN")) === null || _c === void 0 ? void 0 : _c._count) || 0),
+            express: calculatePercentageChange(((_d = today.find((t) => t.orderType === "EXPRESS")) === null || _d === void 0 ? void 0 : _d._count) || 0, ((_e = yesterday.find((t) => t.orderType === "EXPRESS")) === null || _e === void 0 ? void 0 : _e._count) || 0),
+            takeaway: calculatePercentageChange(((_f = today.find((t) => t.orderType === "TAKEAWAY")) === null || _f === void 0 ? void 0 : _f._count) || 0, ((_g = yesterday.find((t) => t.orderType === "TAKEAWAY")) === null || _g === void 0 ? void 0 : _g._count) || 0),
+            delivery: calculatePercentageChange(((_h = today.find((t) => t.orderType === "DELIVERY")) === null || _h === void 0 ? void 0 : _h._count) || 0, ((_j = yesterday.find((t) => t.orderType === "DELIVERY")) === null || _j === void 0 ? void 0 : _j._count) || 0),
         };
     });
     const [dailyStats, weeklyStats, growth, todayOrdersByHour] = yield Promise.all([
@@ -1054,7 +1146,7 @@ const getVendorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
     });
     // Calculate vendor metrics
     const vendorsWithMetrics = yield Promise.all(vendors.map((vendor) => __awaiter(void 0, void 0, void 0, function* () {
-        var _t;
+        var _k;
         // Get total orders
         const totalOrders = yield __1.prismaDB.purchase.count({
             where: {
@@ -1072,7 +1164,7 @@ const getVendorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
             phone: "Missing", // Add to schema if needed
             email: "Missing", // Add to schema if needed
             totalOrders,
-            lastOrder: ((_t = vendor.purchases[0]) === null || _t === void 0 ? void 0 : _t.createdAt.toISOString().split("T")[0]) || null,
+            lastOrder: ((_k = vendor.purchases[0]) === null || _k === void 0 ? void 0 : _k.createdAt.toISOString().split("T")[0]) || null,
             rating,
             status: "ACTIVE", // Add status field to schema if needed
             createdAt: vendor.createdAt,
@@ -1095,7 +1187,7 @@ const getVendorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.getVendorStats = getVendorStats;
 const getPOSDashboardStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _u;
+    var _l;
     const { outletId } = req.params;
     const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!getOutlet) {
@@ -1167,7 +1259,7 @@ const getPOSDashboardStats = (req, res) => __awaiter(void 0, void 0, void 0, fun
             },
             stock: {
                 recentStockPurchases: recentStockPurchases.length,
-                lastUpdateTime: (_u = recentStockPurchases[0]) === null || _u === void 0 ? void 0 : _u.updatedAt.toISOString(),
+                lastUpdateTime: (_l = recentStockPurchases[0]) === null || _l === void 0 ? void 0 : _l.updatedAt.toISOString(),
             },
         },
     });

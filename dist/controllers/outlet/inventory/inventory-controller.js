@@ -1517,16 +1517,17 @@ const allStocks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         },
     });
     const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
-        var _a, _b;
+        var _a, _b, _c, _d;
         return ({
             id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
             name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
             consumptionUnit: rawItem.consumptionUnit.name,
             stock: `${(_a = rawItem.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            minStockLevel: `${(_b = rawItem === null || rawItem === void 0 ? void 0 : rawItem.minimumStockLevel) === null || _b === void 0 ? void 0 : _b.toFixed(2)} - ${(_c = rawItem === null || rawItem === void 0 ? void 0 : rawItem.minimumStockUnit) === null || _c === void 0 ? void 0 : _c.name}`,
             purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
             lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
             purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
-            purchasedStock: `${(_b = rawItem.currentStock) === null || _b === void 0 ? void 0 : _b.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            purchasedStock: `${(_d = rawItem.currentStock) === null || _d === void 0 ? void 0 : _d.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
             createdAt: rawItem.createdAt,
         });
     });
@@ -2643,16 +2644,17 @@ const allTableStocks = (req, res) => __awaiter(void 0, void 0, void 0, function*
         orderBy,
     });
     const formattedStocks = rawMaterials === null || rawMaterials === void 0 ? void 0 : rawMaterials.map((rawItem) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e;
         return ({
             id: rawItem === null || rawItem === void 0 ? void 0 : rawItem.id,
             name: rawItem === null || rawItem === void 0 ? void 0 : rawItem.name,
             consumptionUnit: (_a = rawItem === null || rawItem === void 0 ? void 0 : rawItem.consumptionUnit) === null || _a === void 0 ? void 0 : _a.name,
             stock: `${(_b = rawItem === null || rawItem === void 0 ? void 0 : rawItem.currentStock) === null || _b === void 0 ? void 0 : _b.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            minStockLevel: `${(_c = rawItem === null || rawItem === void 0 ? void 0 : rawItem.minimumStockLevel) === null || _c === void 0 ? void 0 : _c.toFixed(2)} - ${(_d = rawItem === null || rawItem === void 0 ? void 0 : rawItem.minimumStockUnit) === null || _d === void 0 ? void 0 : _d.name}`,
             purchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPrice,
             lastPurchasedPrice: rawItem === null || rawItem === void 0 ? void 0 : rawItem.lastPurchasedPrice,
             purchasedPricePerItem: rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedPricePerItem,
-            purchasedStock: `${(_c = rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedStock) === null || _c === void 0 ? void 0 : _c.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
+            purchasedStock: `${(_e = rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedStock) === null || _e === void 0 ? void 0 : _e.toFixed(2)} - ${rawItem === null || rawItem === void 0 ? void 0 : rawItem.purchasedUnit}`,
             createdAt: rawItem === null || rawItem === void 0 ? void 0 : rawItem.createdAt,
         });
     });

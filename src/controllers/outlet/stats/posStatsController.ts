@@ -59,8 +59,16 @@ export const getPosStats = async (req: Request, res: Response) => {
   }
 
   // Get today's date range in restaurant's timezone
-  const todayStart = DateTime.now().setZone(timeZone).startOf("day").toJSDate();
-  const todayEnd = DateTime.now().setZone(timeZone).endOf("day").toJSDate();
+  const todayStart = DateTime.now()
+    .setZone(timeZone)
+    .startOf("day")
+    .toUTC()
+    .toISO();
+  const todayEnd = DateTime.now()
+    .setZone(timeZone)
+    .endOf("day")
+    .toUTC()
+    .toISO();
 
   const currentRevenue = await prismaDB.order.aggregate({
     where: {
@@ -141,36 +149,135 @@ export const getPosStats = async (req: Request, res: Response) => {
 
   // Get today's orders by hour
   const getTodayOrdersByHour = async () => {
-    const ordersByHour = await Promise.all(
-      operatingHours.map(async (hour) => {
-        const hourStart = set(todayStart, { hours: hour });
-        const hourEnd = set(todayStart, { hours: hour + 1 });
+    // Start and end of today in the restaurant's time zone
+    const todayStart = DateTime.now()
+      .setZone(timeZone)
+      .startOf("day")
+      .toUTC()
+      .toISO();
+    const todayEnd =
+      DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO() ??
+      new Date().toISOString();
 
-        const orders = await prismaDB.order.groupBy({
-          by: ["orderType"],
-          where: {
-            restaurantId: outletId,
+    if (!todayStart || !todayEnd) {
+      throw new Error("Failed to calculate today's date range.");
+    }
 
-            createdAt: {
-              gte: hourStart,
-              lt: hourEnd,
-            },
-          },
-          _count: true,
-        });
+    // Get all orders for today
+    const orders = await prismaDB.order.groupBy({
+      by: ["createdAt"],
+      _count: {
+        id: true,
+      },
+      where: {
+        restaurantId: outletId,
+        createdAt: {
+          gte: new Date(todayStart),
+          lte: new Date(todayEnd),
+        },
+      },
+    });
 
-        return {
-          hour: `${hour.toString().padStart(2, "0")}:00`,
-          dineIn: orders?.find((s) => s?.orderType === "DINEIN")?._count ?? 0,
-          takeaway:
-            orders?.find((s) => s?.orderType === "TAKEAWAY")?._count ?? 0,
-          delivery:
-            orders?.find((s) => s?.orderType === "DELIVERY")?._count ?? 0,
-          express: orders?.find((s) => s?.orderType === "EXPRESS")?._count ?? 0,
-          total: orders?.reduce((acc, o) => acc + o._count, 0) ?? 0,
-        };
-      })
+    // Get order statuses for today
+    const orderStatuses = await prismaDB.order.groupBy({
+      by: ["createdAt", "orderStatus"],
+      _count: {
+        id: true,
+      },
+      where: {
+        restaurantId: outletId,
+        createdAt: {
+          gte: new Date(todayStart),
+          lte: new Date(todayEnd),
+        },
+      },
+    });
+
+    // Get orders by type for today
+    const ordersByType = await prismaDB.order.groupBy({
+      by: ["createdAt", "orderType"],
+      _count: {
+        id: true,
+      },
+      where: {
+        restaurantId: outletId,
+        createdAt: {
+          gte: new Date(todayStart),
+          lte: new Date(todayEnd),
+        },
+      },
+    });
+
+    // Generate data only for outlet operating hours
+    const hours = Array.from(
+      { length: endHour - startHour + 1 },
+      (_, i) => (startHour + i) % 24
     );
+
+    const ordersByHour = hours.map((hour) => {
+      // Filter orders for this hour
+      const ordersAtHour = orders.filter((order) => {
+        const orderHour = DateTime.fromJSDate(order.createdAt, {
+          zone: timeZone,
+        }).hour;
+        return orderHour === hour;
+      });
+
+      // Count total orders for this hour
+      const count = ordersAtHour.reduce(
+        (sum, order) => sum + order._count.id,
+        0
+      );
+
+      // Get order statuses for this hour
+      const statuses = orderStatuses
+        .filter((status) => {
+          const statusHour = DateTime.fromJSDate(status.createdAt, {
+            zone: timeZone,
+          }).hour;
+          return statusHour === hour;
+        })
+        .reduce((acc, status) => {
+          acc[status.orderStatus] = status._count.id;
+          return acc;
+        }, {} as Record<string, number>);
+
+      // Get orders by type for this hour
+      const typeOrders = ordersByType.filter((order) => {
+        const orderHour = DateTime.fromJSDate(order.createdAt, {
+          zone: timeZone,
+        }).hour;
+        return orderHour === hour;
+      });
+
+      // Calculate counts for each order type
+      const dineInCount = typeOrders
+        .filter((o) => o.orderType === "DINEIN")
+        .reduce((sum, o) => sum + o._count.id, 0);
+
+      const takeawayCount = typeOrders
+        .filter((o) => o.orderType === "TAKEAWAY")
+        .reduce((sum, o) => sum + o._count.id, 0);
+
+      const deliveryCount = typeOrders
+        .filter((o) => o.orderType === "DELIVERY")
+        .reduce((sum, o) => sum + o._count.id, 0);
+
+      const expressCount = typeOrders
+        .filter((o) => o.orderType === "EXPRESS")
+        .reduce((sum, o) => sum + o._count.id, 0);
+
+      return {
+        hour: `${hour.toString().padStart(2, "0")}:00`,
+        count,
+        status: statuses,
+        dineIn: dineInCount,
+        takeaway: takeawayCount,
+        delivery: deliveryCount,
+        express: expressCount,
+        total: count,
+      };
+    });
 
     return ordersByHour;
   };
