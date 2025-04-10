@@ -471,6 +471,12 @@ export const getAdminRegisterStatus = async (req: Request, res: Response) => {
     include: {
       staff: true,
       user: true,
+      transactions: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+      denominations: true,
     },
   });
 
@@ -483,6 +489,23 @@ export const getAdminRegisterStatus = async (req: Request, res: Response) => {
       type: reg.staff ? "Staff" : "Admin",
       registerId: reg.id,
       openedAt: reg.openedAt,
+      balances: {
+        opening: {
+          total: reg?.openingBalance || 0,
+          cash: reg?.openingCashBalance || 0,
+          upi: reg?.openingUPIBalance || 0,
+          card: reg?.openingCardBalance || 0,
+        },
+        current: {
+          total: reg ? calculateTotalBalance(reg.transactions) : 0,
+          cash: reg ? calculateBalanceByMethod(reg.transactions, "CASH") : 0,
+          upi: reg ? calculateBalanceByMethod(reg.transactions, "UPI") : 0,
+          card: reg
+            ? calculateBalanceByMethod(reg.transactions, "DEBIT") +
+              calculateBalanceByMethod(reg.transactions, "CREDIT")
+            : 0,
+        },
+      },
     })),
     lastTransactions: register?.transactions || [],
     sessionStarted: register?.openedAt || null,

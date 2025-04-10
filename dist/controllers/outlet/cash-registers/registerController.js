@@ -391,6 +391,12 @@ const getAdminRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, f
         include: {
             staff: true,
             user: true,
+            transactions: {
+                orderBy: {
+                    createdAt: "desc",
+                },
+            },
+            denominations: true,
         },
     });
     const registerStatus = {
@@ -404,6 +410,23 @@ const getAdminRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, f
                 type: reg.staff ? "Staff" : "Admin",
                 registerId: reg.id,
                 openedAt: reg.openedAt,
+                balances: {
+                    opening: {
+                        total: (reg === null || reg === void 0 ? void 0 : reg.openingBalance) || 0,
+                        cash: (reg === null || reg === void 0 ? void 0 : reg.openingCashBalance) || 0,
+                        upi: (reg === null || reg === void 0 ? void 0 : reg.openingUPIBalance) || 0,
+                        card: (reg === null || reg === void 0 ? void 0 : reg.openingCardBalance) || 0,
+                    },
+                    current: {
+                        total: reg ? calculateTotalBalance(reg.transactions) : 0,
+                        cash: reg ? calculateBalanceByMethod(reg.transactions, "CASH") : 0,
+                        upi: reg ? calculateBalanceByMethod(reg.transactions, "UPI") : 0,
+                        card: reg
+                            ? calculateBalanceByMethod(reg.transactions, "DEBIT") +
+                                calculateBalanceByMethod(reg.transactions, "CREDIT")
+                            : 0,
+                    },
+                },
             });
         }),
         lastTransactions: (register === null || register === void 0 ? void 0 : register.transactions) || [],
