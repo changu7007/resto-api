@@ -375,6 +375,14 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 });
             }
         }
+        // Delete any LOW_STOCK alerts for this restaurant
+        yield prisma.alert.deleteMany({
+            where: {
+                restaurantId: getOutlet.id,
+                type: "LOW_STOCK",
+                status: { in: ["PENDING", "ACKNOWLEDGED"] },
+            },
+        });
         return orderSession;
     }));
     // Post-transaction tasks
@@ -429,85 +437,131 @@ const existingOrderPatchForStaff = (req, res) => __awaiter(void 0, void 0, void 
         : orderMode === "EXPRESS"
             ? "FOODREADY"
             : "SERVED";
-    const orderSession = yield __1.prismaDB.orderSession.update({
-        where: {
-            restaurantId: getOutlet.id,
-            id: getOrder.id,
-        },
-        data: {
-            orderType: getOrder.orderType,
-            isPaid: isPaid,
-            restaurantId: getOutlet.id,
-            orders: {
-                create: {
-                    active: true,
-                    staffId: findStaff.id,
-                    restaurantId: getOutlet.id,
-                    isPaid: isPaid,
-                    orderStatus: orderStatus,
-                    totalNetPrice: totalNetPrice,
-                    gstPrice: gstPrice,
-                    totalAmount: totalAmount,
-                    totalGrossProfit: totalGrossProfit,
-                    generatedOrderId: generatedId,
-                    orderType: getOrder.orderType,
-                    createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name}-(${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
-                    orderItems: {
-                        create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
-                            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
-                            return ({
-                                menuId: item === null || item === void 0 ? void 0 : item.menuId,
-                                name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
-                                strike: false,
-                                isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
-                                originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
-                                quantity: item === null || item === void 0 ? void 0 : item.quantity,
-                                netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
-                                gst: item === null || item === void 0 ? void 0 : item.gst,
-                                grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
-                                totalPrice: item === null || item === void 0 ? void 0 : item.price,
-                                selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
-                                    ? {
-                                        create: {
-                                            sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
-                                            name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
-                                            type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
-                                            price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price),
-                                            gst: Number((_k = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _k === void 0 ? void 0 : _k.gst),
-                                            netPrice: Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice).toString(),
-                                            grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit),
-                                        },
-                                    }
-                                    : undefined,
-                                addOnSelected: {
-                                    create: (_o = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _o === void 0 ? void 0 : _o.map((addon) => {
-                                        var _a, _b, _c;
-                                        const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
-                                        return {
-                                            addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
-                                            name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
-                                            selectedAddOnVariantsId: {
-                                                create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
-                                                    var _a;
-                                                    const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
-                                                    return {
-                                                        selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
-                                                        name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
-                                                        type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
-                                                        price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
-                                                    };
-                                                }),
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        yield tx.orderSession.update({
+            where: {
+                restaurantId: getOutlet.id,
+                id: getOrder.id,
+            },
+            data: {
+                orderType: getOrder.orderType,
+                isPaid: isPaid,
+                restaurantId: getOutlet.id,
+                orders: {
+                    create: {
+                        active: true,
+                        staffId: findStaff.id,
+                        restaurantId: getOutlet.id,
+                        isPaid: isPaid,
+                        orderStatus: orderStatus,
+                        totalNetPrice: totalNetPrice,
+                        gstPrice: gstPrice,
+                        totalAmount: totalAmount,
+                        totalGrossProfit: totalGrossProfit,
+                        generatedOrderId: generatedId,
+                        orderType: getOrder.orderType,
+                        createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name}-(${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
+                        orderItems: {
+                            create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
+                                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+                                return ({
+                                    menuId: item === null || item === void 0 ? void 0 : item.menuId,
+                                    name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
+                                    strike: false,
+                                    isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
+                                    originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
+                                    quantity: item === null || item === void 0 ? void 0 : item.quantity,
+                                    netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
+                                    gst: item === null || item === void 0 ? void 0 : item.gst,
+                                    grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
+                                    totalPrice: item === null || item === void 0 ? void 0 : item.price,
+                                    selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
+                                        ? {
+                                            create: {
+                                                sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
+                                                name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
+                                                type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
+                                                price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price),
+                                                gst: Number((_k = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _k === void 0 ? void 0 : _k.gst),
+                                                netPrice: Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice).toString(),
+                                                grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit),
                                             },
-                                        };
-                                    }),
-                                },
-                            });
-                        }),
+                                        }
+                                        : undefined,
+                                    addOnSelected: {
+                                        create: (_o = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _o === void 0 ? void 0 : _o.map((addon) => {
+                                            var _a, _b, _c;
+                                            const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
+                                            return {
+                                                addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
+                                                name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
+                                                selectedAddOnVariantsId: {
+                                                    create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
+                                                        var _a;
+                                                        const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
+                                                        return {
+                                                            selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                                                            name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
+                                                            type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
+                                                            price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                                        };
+                                                    }),
+                                                },
+                                            };
+                                        }),
+                                    },
+                                });
+                            }),
+                        },
                     },
                 },
             },
-        },
-    });
+        });
+        // Update raw material stock if `chooseProfit` is "itemRecipe"
+        yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            const menuItem = yield tx.menuItem.findUnique({
+                where: { id: item.menuId },
+                include: { itemRecipe: { include: { ingredients: true } } },
+            });
+            if ((menuItem === null || menuItem === void 0 ? void 0 : menuItem.chooseProfit) === "itemRecipe" && menuItem.itemRecipe) {
+                yield Promise.all(menuItem.itemRecipe.ingredients.map((ingredient) => __awaiter(void 0, void 0, void 0, function* () {
+                    const rawMaterial = yield tx.rawMaterial.findUnique({
+                        where: { id: ingredient.rawMaterialId },
+                    });
+                    if (rawMaterial) {
+                        let decrementStock = 0;
+                        // Check if the ingredient's unit matches the purchase unit or consumption unit
+                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                            // If MOU is linked to purchaseUnit, multiply directly with quantity
+                            decrementStock =
+                                Number(ingredient.quantity) * Number(item.quantity || 1);
+                        }
+                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                            // If MOU is linked to consumptionUnit, apply conversion factor
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        else {
+                            // Default fallback if MOU doesn't match either unit
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        if (Number(rawMaterial.currentStock) < decrementStock) {
+                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                        }
+                        yield tx.rawMaterial.update({
+                            where: { id: rawMaterial.id },
+                            data: {
+                                currentStock: Number(rawMaterial.currentStock) - Number(decrementStock),
+                            },
+                        });
+                    }
+                })));
+            }
+        })));
+    }));
     yield __1.prismaDB.notification.create({
         data: {
             restaurantId: getOutlet.id,
@@ -516,6 +570,14 @@ const existingOrderPatchForStaff = (req, res) => __awaiter(void 0, void 0, void 
             orderType: getOrder.orderType === "DINEIN"
                 ? (_h = getOrder.table) === null || _h === void 0 ? void 0 : _h.name
                 : getOrder.orderType,
+        },
+    });
+    // Delete any LOW_STOCK alerts for this restaurant
+    yield __1.prismaDB.alert.deleteMany({
+        where: {
+            restaurantId: getOutlet.id,
+            type: "LOW_STOCK",
+            status: { in: ["PENDING", "ACKNOWLEDGED"] },
         },
     });
     yield Promise.all([
@@ -530,7 +592,7 @@ const existingOrderPatchForStaff = (req, res) => __awaiter(void 0, void 0, void 
     ws_1.websocketManager.notifyClients(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id, "NEW_ORDER_SESSION_UPDATED");
     return res.json({
         success: true,
-        orderSessionId: orderSession.id,
+        orderSessionId: orderId,
         kotNumber: generatedId,
         message: "Order Added from Captain ✅",
     });
@@ -579,6 +641,11 @@ const orderItemModificationByStaff = (req, res) => __awaiter(void 0, void 0, voi
                             addOnGroups: true,
                         },
                     },
+                    itemRecipe: {
+                        include: {
+                            ingredients: true,
+                        },
+                    },
                 },
             },
             selectedVariant: true,
@@ -589,7 +656,55 @@ const orderItemModificationByStaff = (req, res) => __awaiter(void 0, void 0, voi
         throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
     }
     const txs = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z;
+        var _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0;
+        // If menuItem's chooseProfit is "itemRecipe", update raw material stock
+        if (((_k = getOrderById.menuItem) === null || _k === void 0 ? void 0 : _k.chooseProfit) === "itemRecipe" &&
+            getOrderById.menuItem.itemRecipe) {
+            // Calculate the difference in quantity
+            const oldQuantity = getOrderById.quantity;
+            const newQuantity = validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity;
+            const quantityDiff = newQuantity - oldQuantity;
+            // If quantity has changed, update raw material stock
+            if (quantityDiff !== 0) {
+                for (const ingredient of getOrderById.menuItem.itemRecipe.ingredients) {
+                    const rawMaterial = yield prisma.rawMaterial.findUnique({
+                        where: { id: ingredient.rawMaterialId },
+                    });
+                    if (rawMaterial) {
+                        let stockAdjustment = 0;
+                        // Check if the ingredient's unit matches the purchase unit or consumption unit
+                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                            // If MOU is linked to purchaseUnit, multiply directly with quantity difference
+                            stockAdjustment = Number(ingredient.quantity) * quantityDiff;
+                        }
+                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                            // If MOU is linked to consumptionUnit, apply conversion factor
+                            stockAdjustment =
+                                (Number(ingredient.quantity) * quantityDiff) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        else {
+                            // Default fallback if MOU doesn't match either unit
+                            stockAdjustment =
+                                (Number(ingredient.quantity) * quantityDiff) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        // Check if the stock would go negative after adjustment
+                        const newStockLevel = Number(rawMaterial.currentStock) - Number(stockAdjustment);
+                        if (newStockLevel < 0) {
+                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}. Current stock: ${rawMaterial.currentStock}, Required: ${Math.abs(stockAdjustment)}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                        }
+                        // If quantity increased, decrement stock; if decreased, increment stock
+                        yield prisma.rawMaterial.update({
+                            where: { id: rawMaterial.id },
+                            data: {
+                                currentStock: newStockLevel,
+                            },
+                        });
+                    }
+                }
+            }
+        }
         yield prisma.orderItem.update({
             where: {
                 id: getOrderById.id,
@@ -601,45 +716,31 @@ const orderItemModificationByStaff = (req, res) => __awaiter(void 0, void 0, voi
                     ? {
                         update: {
                             where: {
-                                id: (_k = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.selectedVariant) === null || _k === void 0 ? void 0 : _k.id,
+                                id: (_l = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.selectedVariant) === null || _l === void 0 ? void 0 : _l.id,
                             },
                             data: {
                                 sizeVariantId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId,
-                                name: (_m = (_l = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _l === void 0 ? void 0 : _l.variant) === null || _m === void 0 ? void 0 : _m.name,
-                                price: parseFloat((_o = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _o === void 0 ? void 0 : _o.price),
-                                gst: Number((_p = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _p === void 0 ? void 0 : _p.gst),
-                                netPrice: parseFloat((_q = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _q === void 0 ? void 0 : _q.netPrice).toString(),
-                                grossProfit: Number((_r = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _r === void 0 ? void 0 : _r.grossProfit),
+                                name: (_o = (_m = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _m === void 0 ? void 0 : _m.variant) === null || _o === void 0 ? void 0 : _o.name,
+                                price: parseFloat((_p = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _p === void 0 ? void 0 : _p.price),
+                                gst: Number((_q = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _q === void 0 ? void 0 : _q.gst),
+                                netPrice: parseFloat((_r = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _r === void 0 ? void 0 : _r.netPrice).toString(),
+                                grossProfit: Number((_s = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _s === void 0 ? void 0 : _s.grossProfit),
                             },
                         },
                     }
                     : undefined,
-                // addOnSelected: {
-                //   set: [],
-                //   create: validateFields.addOnSelected.map((addOn) => ({
-                //     id: addOn.id,
-                //     name: addOn.name,
-                //     selectedAddOnVariantsId: {
-                //       create: addOn.selectedAddOnVariantsId.map((subVariant) => ({
-                //         id: subVariant.id,
-                //         name: subVariant.name,
-                //         price: subVariant.price,
-                //       })),
-                //     },
-                //   })),
-                // },
                 netPrice: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_s = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _s === void 0 ? void 0 : _s.netPrice).toString()
-                    : Number((_t = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _t === void 0 ? void 0 : _t.netPrice).toString(),
+                    ? Number((_t = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _t === void 0 ? void 0 : _t.netPrice).toString()
+                    : Number((_u = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _u === void 0 ? void 0 : _u.netPrice).toString(),
                 originalRate: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_u = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _u === void 0 ? void 0 : _u.price)
-                    : Number((_v = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _v === void 0 ? void 0 : _v.price),
+                    ? Number((_v = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _v === void 0 ? void 0 : _v.price)
+                    : Number((_w = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _w === void 0 ? void 0 : _w.price),
                 grossProfit: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_w = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _w === void 0 ? void 0 : _w.grossProfit)
-                    : Number((_x = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _x === void 0 ? void 0 : _x.grossProfit),
+                    ? Number((_x = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _x === void 0 ? void 0 : _x.grossProfit)
+                    : Number((_y = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _y === void 0 ? void 0 : _y.grossProfit),
                 gst: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? (_y = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _y === void 0 ? void 0 : _y.gst
-                    : (_z = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _z === void 0 ? void 0 : _z.gst,
+                    ? (_z = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _z === void 0 ? void 0 : _z.gst
+                    : (_0 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _0 === void 0 ? void 0 : _0.gst,
                 totalPrice: validateFields === null || validateFields === void 0 ? void 0 : validateFields.totalPrice,
             },
         });
@@ -686,6 +787,22 @@ const orderItemModificationByStaff = (req, res) => __awaiter(void 0, void 0, voi
                 totalAmount: totalAmount,
             },
         });
+        // Delete any alerts linked to this order
+        yield prisma.alert.deleteMany({
+            where: {
+                restaurantId: outlet.id,
+                OR: [
+                    {
+                        orderId: getOrder.order.id,
+                        status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                    },
+                    {
+                        type: "LOW_STOCK",
+                        status: { in: ["PENDING", "ACKNOWLEDGED"] },
+                    },
+                ],
+            },
+        });
     }));
     yield Promise.all([
         redis_1.redis.del(`active-os-${outletId}`),
@@ -703,10 +820,10 @@ const orderItemModificationByStaff = (req, res) => __awaiter(void 0, void 0, voi
 });
 exports.orderItemModificationByStaff = orderItemModificationByStaff;
 const getByStaffAllOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _0;
+    var _1;
     const { outletId } = req.params;
     // @ts-ignore
-    const staffId = (_0 = req === null || req === void 0 ? void 0 : req.user) === null || _0 === void 0 ? void 0 : _0.id;
+    const staffId = (_1 = req === null || req === void 0 ? void 0 : req.user) === null || _1 === void 0 ? void 0 : _1.id;
     // const redisLiveOrder = await redis.get(
     //   `all-staff-orders-${outletId}-${staffId}`
     // );
@@ -730,10 +847,10 @@ const getByStaffAllOrders = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.getByStaffAllOrders = getByStaffAllOrders;
 const orderStatusPatchByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _1;
+    var _2;
     const { orderId, outletId } = req.params;
     // @ts-ignore
-    const staffId = (_1 = req.user) === null || _1 === void 0 ? void 0 : _1.id;
+    const staffId = (_2 = req.user) === null || _2 === void 0 ? void 0 : _2.id;
     const validTypes = Object.values(client_1.OrderStatus);
     const { orderStatus } = req.body;
     if (!validTypes.includes(orderStatus)) {
@@ -801,10 +918,10 @@ const orderStatusPatchByStaff = (req, res) => __awaiter(void 0, void 0, void 0, 
 exports.orderStatusPatchByStaff = orderStatusPatchByStaff;
 //stats
 const getStaffOrderStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _2;
+    var _3;
     const { outletId } = req.params;
     // @ts-ignore
-    const staffId = (_2 = req.user) === null || _2 === void 0 ? void 0 : _2.id;
+    const staffId = (_3 = req.user) === null || _3 === void 0 ? void 0 : _3.id;
     const { period } = req.query;
     const now = new Date();
     const validPeriods = [
@@ -893,10 +1010,10 @@ const getStaffOrderStats = (req, res) => __awaiter(void 0, void 0, void 0, funct
 });
 exports.getStaffOrderStats = getStaffOrderStats;
 const getStaffOrdersRecentTenOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _3;
+    var _4;
     const { outletId } = req.params;
     // @ts-ignore
-    const staffId = (_3 = req.user) === null || _3 === void 0 ? void 0 : _3.id;
+    const staffId = (_4 = req.user) === null || _4 === void 0 ? void 0 : _4.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -953,11 +1070,11 @@ const getStaffOrdersRecentTenOrders = (req, res) => __awaiter(void 0, void 0, vo
 });
 exports.getStaffOrdersRecentTenOrders = getStaffOrdersRecentTenOrders;
 const acceptOrderFromPrime = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _4;
+    var _5;
     const { outletId } = req.params;
     const { orderId } = req.body;
     // @ts-ignore
-    const staffId = (_4 = req.user) === null || _4 === void 0 ? void 0 : _4.id;
+    const staffId = (_5 = req.user) === null || _5 === void 0 ? void 0 : _5.id;
     if (!staffId) {
         throw new bad_request_1.BadRequestsException("Staff ID is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }

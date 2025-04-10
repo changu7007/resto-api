@@ -20,14 +20,45 @@ const zod_1 = require("zod");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const getAllCashRegisters = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
+    const { date } = req.query;
     const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!getOutlet) {
         return res.status(404).json({ message: "Outlet not found" });
     }
+    // Parse the date parameter if provided
+    let startDate;
+    let endDate;
+    if (date && typeof date === "string") {
+        try {
+            // Parse the date string to a Date object
+            const parsedDate = (0, date_fns_1.parseISO)(date);
+            // Set the start and end of the day in IST (UTC+5:30)
+            // Note: JavaScript Date objects don't have timezone support, so we need to adjust manually
+            startDate = (0, date_fns_1.startOfDay)(parsedDate);
+            endDate = (0, date_fns_1.endOfDay)(parsedDate);
+            // Adjust for IST (UTC+5:30)
+            startDate = new Date(startDate.getTime() + 5.5 * 60 * 60 * 1000);
+            endDate = new Date(endDate.getTime() + 5.5 * 60 * 60 * 1000);
+        }
+        catch (error) {
+            return res
+                .status(400)
+                .json({ message: "Invalid date format. Use YYYY-MM-DD" });
+        }
+    }
+    // Build the where clause for the query
+    const whereClause = {
+        restaurantId: outletId,
+    };
+    // Add date filtering if date parameter is provided
+    if (startDate && endDate) {
+        whereClause.createdAt = {
+            gte: startDate,
+            lte: endDate,
+        };
+    }
     const cashRegisters = yield __1.prismaDB.cashRegister.findMany({
-        where: {
-            restaurantId: outletId,
-        },
+        where: whereClause,
         include: {
             staff: {
                 select: {
@@ -59,6 +90,7 @@ const getAllCashRegisters = (req, res) => __awaiter(void 0, void 0, void 0, func
     });
     // Calculate balances and format response
     const formattedRegisters = cashRegisters.map((register) => {
+        var _a, _b, _c, _d;
         // Calculate current balance and payment method totals
         const paymentTotals = register.transactions.reduce((acc, t) => {
             if (!acc[t.paymentMethod]) {
@@ -94,10 +126,14 @@ const getAllCashRegisters = (req, res) => __awaiter(void 0, void 0, void 0, func
             openedAt: register.openedAt,
             closedAt: register.closedAt,
             transactions: register.transactions.length,
+            cashTransactions: (_a = register === null || register === void 0 ? void 0 : register.transactions) === null || _a === void 0 ? void 0 : _a.filter((t) => t.paymentMethod === "CASH").length,
+            upiTransactions: (_b = register === null || register === void 0 ? void 0 : register.transactions) === null || _b === void 0 ? void 0 : _b.filter((t) => t.paymentMethod === "UPI").length,
+            cardTransactions: (_c = register === null || register === void 0 ? void 0 : register.transactions) === null || _c === void 0 ? void 0 : _c.filter((t) => t.paymentMethod === "DEBIT").length,
+            creditTransactions: (_d = register === null || register === void 0 ? void 0 : register.transactions) === null || _d === void 0 ? void 0 : _d.filter((t) => t.paymentMethod === "CREDIT").length,
             todayTransactions: todayTransactions.length,
             paymentTotals,
             denominations: register.denominations,
-            discrepancy: register.status === "CLOSED"
+            discrepancy: register.status === "CLOSED" || register.status === "FORCE_CLOSED"
                 ? register.actualBalance - currentBalance
                 : null,
         };
@@ -121,37 +157,62 @@ const getTransactionHistory = (req, res) => __awaiter(void 0, void 0, void 0, fu
     if (!getOutlet) {
         return res.status(404).json({ message: "Outlet not found" });
     }
-    const { page = 1, limit = 10, period, paymentMethod, type, source, search, } = req.query;
+    const { page = 1, limit = 10, period, paymentMethod, type, source, search, startDate, endDate, } = req.query;
     const pageNumber = parseInt(page);
     const pageSize = parseInt(limit);
     const skip = (pageNumber - 1) * pageSize;
     const outletStartDateTime = new Date(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.createdAt);
-    // Calculate date range based on period
-    let startDate = new Date();
-    let endDate = (0, date_fns_1.endOfToday)();
-    switch (period) {
-        case "today":
-            startDate = (0, date_fns_1.startOfToday)();
-            break;
-        case "yesterday":
-            startDate = (0, date_fns_1.startOfYesterday)();
-            endDate = (0, date_fns_1.startOfToday)();
-            break;
-        case "week":
-            startDate = (0, date_fns_1.startOfWeek)(new Date());
-            break;
-        case "month":
-            startDate = (0, date_fns_1.startOfMonth)(new Date());
-            break;
-        default:
-            startDate = outletStartDateTime;
+    // Calculate date range based on period or provided dates
+    let startDateObj = new Date();
+    let endDateObj = (0, date_fns_1.endOfToday)();
+    // If startDate and endDate are provided, use them
+    if (startDate &&
+        endDate &&
+        typeof startDate === "string" &&
+        typeof endDate === "string") {
+        try {
+            // Parse the date strings to Date objects
+            const parsedStartDate = (0, date_fns_1.parseISO)(startDate);
+            const parsedEndDate = (0, date_fns_1.parseISO)(endDate);
+            // Set the start and end of the day in IST (UTC+5:30)
+            startDateObj = (0, date_fns_1.startOfDay)(parsedStartDate);
+            endDateObj = (0, date_fns_1.endOfDay)(parsedEndDate);
+            // Adjust for IST (UTC+5:30)
+            startDateObj = new Date(startDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+            endDateObj = new Date(endDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+        }
+        catch (error) {
+            return res
+                .status(400)
+                .json({ message: "Invalid date format. Use YYYY-MM-DD" });
+        }
+    }
+    else {
+        // Use period-based date calculation if no specific dates provided
+        switch (period) {
+            case "today":
+                startDateObj = (0, date_fns_1.startOfToday)();
+                break;
+            case "yesterday":
+                startDateObj = (0, date_fns_1.startOfYesterday)();
+                endDateObj = (0, date_fns_1.startOfToday)();
+                break;
+            case "week":
+                startDateObj = (0, date_fns_1.startOfWeek)(new Date());
+                break;
+            case "month":
+                startDateObj = (0, date_fns_1.startOfMonth)(new Date());
+                break;
+            default:
+                startDateObj = outletStartDateTime;
+        }
     }
     // Build filter conditions
     const where = Object.assign(Object.assign(Object.assign(Object.assign({ register: {
             restaurantId: outletId,
         }, createdAt: {
-            gte: startDate,
-            lte: endDate,
+            gte: startDateObj,
+            lte: endDateObj,
         } }, (type ? { type: type } : {})), (paymentMethod ? { paymentMethod: paymentMethod } : {})), (source ? { source: source } : {})), (search
         ? {
             OR: [
@@ -213,11 +274,11 @@ const getTransactionHistory = (req, res) => __awaiter(void 0, void 0, void 0, fu
     // Calculate summary statistics
     const summary = yield __1.prismaDB.cashTransaction.groupBy({
         by: ["type", "paymentMethod"],
-        where: Object.assign({ register: { restaurantId: outletId } }, (startDate && endDate
+        where: Object.assign({ register: { restaurantId: outletId } }, (startDateObj && endDateObj
             ? {
                 createdAt: {
-                    gte: startDate,
-                    lte: endDate,
+                    gte: startDateObj,
+                    lte: endDateObj,
                 },
             }
             : {})),
@@ -227,17 +288,18 @@ const getTransactionHistory = (req, res) => __awaiter(void 0, void 0, void 0, fu
     });
     // Process summary data
     const summaryData = summary.reduce((acc, curr) => {
+        var _a, _b, _c, _d;
         if (curr.type === "CASH_IN") {
-            acc.totalIncome += curr._sum.amount || 0;
+            acc.totalIncome += ((_a = curr._sum) === null || _a === void 0 ? void 0 : _a.amount) || 0;
             acc.paymentMethodIncome[curr.paymentMethod] =
                 (acc.paymentMethodIncome[curr.paymentMethod] || 0) +
-                    (curr._sum.amount || 0);
+                    (((_b = curr._sum) === null || _b === void 0 ? void 0 : _b.amount) || 0);
         }
         else {
-            acc.totalExpense += curr._sum.amount || 0;
+            acc.totalExpense += ((_c = curr._sum) === null || _c === void 0 ? void 0 : _c.amount) || 0;
             acc.paymentMethodExpense[curr.paymentMethod] =
                 (acc.paymentMethodExpense[curr.paymentMethod] || 0) +
-                    (curr._sum.amount || 0);
+                    (((_d = curr._sum) === null || _d === void 0 ? void 0 : _d.amount) || 0);
         }
         return acc;
     }, {
@@ -446,12 +508,36 @@ const getTransactionHistoryForRegister = (req, res) => __awaiter(void 0, void 0,
     if (!getOutlet) {
         return res.status(404).json({ message: "Outlet not found" });
     }
-    const { page = 1, limit = 10, paymentMethod, type, source, search, registerId, } = req.query;
+    const { page = 1, limit = 10, paymentMethod, type, source, search, registerId, startDate, endDate, } = req.query;
     const pageNumber = parseInt(page);
     const pageSize = parseInt(limit);
     const skip = (pageNumber - 1) * pageSize;
+    // Parse the date parameters if provided
+    let startDateObj;
+    let endDateObj;
+    if (startDate &&
+        endDate &&
+        typeof startDate === "string" &&
+        typeof endDate === "string") {
+        try {
+            // Parse the date strings to Date objects
+            const parsedStartDate = (0, date_fns_1.parseISO)(startDate);
+            const parsedEndDate = (0, date_fns_1.parseISO)(endDate);
+            // Set the start and end of the day in IST (UTC+5:30)
+            startDateObj = (0, date_fns_1.startOfDay)(parsedStartDate);
+            endDateObj = (0, date_fns_1.endOfDay)(parsedEndDate);
+            // Adjust for IST (UTC+5:30)
+            startDateObj = new Date(startDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+            endDateObj = new Date(endDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+        }
+        catch (error) {
+            return res
+                .status(400)
+                .json({ message: "Invalid date format. Use YYYY-MM-DD" });
+        }
+    }
     // Build filter conditions
-    const where = Object.assign(Object.assign(Object.assign(Object.assign({ register: {
+    const where = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ register: {
             id: registerId,
             restaurantId: outletId,
         } }, (type ? { type: type } : {})), (paymentMethod ? { paymentMethod: paymentMethod } : {})), (source ? { source: source } : {})), (search
@@ -464,6 +550,13 @@ const getTransactionHistoryForRegister = (req, res) => __awaiter(void 0, void 0,
                     referenceId: { contains: search },
                 },
             ],
+        }
+        : {})), (startDateObj && endDateObj
+        ? {
+            createdAt: {
+                gte: startDateObj,
+                lte: endDateObj,
+            },
         }
         : {}));
     // Get total count for pagination
@@ -515,26 +608,32 @@ const getTransactionHistoryForRegister = (req, res) => __awaiter(void 0, void 0,
     // Calculate summary statistics
     const summary = yield __1.prismaDB.cashTransaction.groupBy({
         by: ["type", "paymentMethod"],
-        where: {
-            register: { id: registerId, restaurantId: outletId },
-        },
+        where: Object.assign({ register: { id: registerId, restaurantId: outletId } }, (startDateObj && endDateObj
+            ? {
+                createdAt: {
+                    gte: startDateObj,
+                    lte: endDateObj,
+                },
+            }
+            : {})),
         _sum: {
             amount: true,
         },
     });
     // Process summary data
     const summaryData = summary.reduce((acc, curr) => {
+        var _a, _b, _c, _d;
         if (curr.type === "CASH_IN") {
-            acc.totalIncome += curr._sum.amount || 0;
+            acc.totalIncome += ((_a = curr._sum) === null || _a === void 0 ? void 0 : _a.amount) || 0;
             acc.paymentMethodIncome[curr.paymentMethod] =
                 (acc.paymentMethodIncome[curr.paymentMethod] || 0) +
-                    (curr._sum.amount || 0);
+                    (((_b = curr._sum) === null || _b === void 0 ? void 0 : _b.amount) || 0);
         }
         else {
-            acc.totalExpense += curr._sum.amount || 0;
+            acc.totalExpense += ((_c = curr._sum) === null || _c === void 0 ? void 0 : _c.amount) || 0;
             acc.paymentMethodExpense[curr.paymentMethod] =
                 (acc.paymentMethodExpense[curr.paymentMethod] || 0) +
-                    (curr._sum.amount || 0);
+                    (((_d = curr._sum) === null || _d === void 0 ? void 0 : _d.amount) || 0);
         }
         return acc;
     }, {

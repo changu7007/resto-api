@@ -243,6 +243,29 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
                 },
             });
         }
+        // Get all orders in this order session
+        const orders = yield prisma.order.findMany({
+            where: {
+                orderSessionId: orderSession.id,
+                restaurantId: outlet.id,
+            },
+            select: {
+                id: true,
+            },
+        });
+        // Delete all alerts linked to any order in this order session
+        if (orders.length > 0) {
+            const orderIds = orders.map((order) => order.id);
+            yield prisma.alert.deleteMany({
+                where: {
+                    restaurantId: outlet.id,
+                    orderId: {
+                        in: orderIds,
+                    },
+                    status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                },
+            });
+        }
         return updatedOrderSession;
     })));
     const formattedOrders = (_a = result === null || result === void 0 ? void 0 : result.orders) === null || _a === void 0 ? void 0 : _a.map((order) => ({

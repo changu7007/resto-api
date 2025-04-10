@@ -202,6 +202,7 @@ class StaffCheckInServices {
                 }
                 // Calculate expected balance
                 const expectedBalance = this.calculateCurrentBalance(activeCheckIn.register.transactions);
+                const expectedBalanceCash = this.calculateCurrentBalance(activeCheckIn.register.transactions.filter((t) => t.paymentMethod === "CASH"));
                 const expectedBalanceUPI = this.calculateCurrentBalance(activeCheckIn.register.transactions.filter((t) => t.paymentMethod === "UPI"));
                 const expectedCardBalance = this.calculateCurrentBalance(activeCheckIn.register.transactions.filter((t) => t.paymentMethod === "DEBIT" || t.paymentMethod === "CREDIT"));
                 // Calculate discrepancy
@@ -218,7 +219,7 @@ class StaffCheckInServices {
                         closingUPIBalance: expectedBalanceUPI,
                         closingCardBalance: expectedCardBalance,
                         closingCashBalance: closingBalance,
-                        actualBalance: closingBalance + expectedBalanceUPI + expectedCardBalance,
+                        actualBalance: expectedBalanceCash + expectedBalanceUPI + expectedCardBalance,
                         closedAt: new Date(),
                         closingNotes: notes,
                         denominations: denominations

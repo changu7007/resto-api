@@ -116,6 +116,7 @@ import {
   getFinancialMetrics,
   getOrderHourWise,
   getRevenueAndExpenses,
+  getTodaysTransaction,
   lastSixMonthsOrders,
   orderStatsForOutlet,
   orderStatsForOutletByStaff,
@@ -1460,6 +1461,12 @@ outletRoute.get(
 outletRoute.patch(
   "/:outletId/print-details/update-local-print-url",
   errorHandler(updateLocalPrintUrl)
+);
+
+outletRoute.get(
+  "/:outletId/get-todays-cash-transactions",
+  isAuthMiddelware,
+  errorHandler(getTodaysTransaction)
 );
 
 export default outletRoute;

@@ -322,6 +322,31 @@ export const billingOrderSession = async (req: Request, res: Response) => {
       });
     }
 
+    // Get all orders in this order session
+    const orders = await prisma.order.findMany({
+      where: {
+        orderSessionId: orderSession.id,
+        restaurantId: outlet.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    // Delete all alerts linked to any order in this order session
+    if (orders.length > 0) {
+      const orderIds = orders.map((order) => order.id);
+      await prisma.alert.deleteMany({
+        where: {
+          restaurantId: outlet.id,
+          orderId: {
+            in: orderIds,
+          },
+          status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+        },
+      });
+    }
+
     return updatedOrderSession;
   });
 

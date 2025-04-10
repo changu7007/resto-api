@@ -60,6 +60,7 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
 
   const formattedOrderData = liveOrders?.map((order) => ({
     id: order.id,
+    billNo: order?.orderSession?.billId,
     generatedOrderId: order.generatedOrderId,
     name: order?.orderSession?.username,
     mode: order.orderType,
@@ -183,6 +184,7 @@ export const getFetchAllOrderByStaffToRedis = async (
 
   const formattedLiveOrders = liveOrders?.map((order) => ({
     id: order.id,
+    billNo: order?.orderSession?.billId,
     generatedOrderId: order.generatedOrderId,
     name: order?.orderSession?.username,
     mode: order.orderType,
@@ -323,6 +325,7 @@ export const getFetchLiveOrderByStaffToRedis = async (
 
   const formattedLiveOrders = liveOrders?.map((order) => ({
     id: order.id,
+    billNo: order?.orderSession?.billId,
     generatedOrderId: order.generatedOrderId,
     name: order?.orderSession?.username,
     mode: order.orderType,

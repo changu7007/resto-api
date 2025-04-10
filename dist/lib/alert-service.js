@@ -35,7 +35,7 @@ class AlertService {
                     restaurantId,
                     type: "LOW_STOCK",
                     priority: "HIGH",
-                    message: `Low stock alert : ${item.name}. (${(_a = item.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} ${item.consumptionUnit.name}) remaining`,
+                    message: `Low stock alert : ${item.name}. (${(_a = item.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} ${item.purchasedUnit}) remaining`,
                     metadata: { itemId: item.id, name: item.name },
                 });
             }
@@ -61,7 +61,7 @@ class AlertService {
                     restaurantId,
                     type: "ORDER_DELAY",
                     priority: "CRITICAL",
-                    message: `Order #${order.generatedOrderId} is delayed by more than 5 minutes`,
+                    message: `KOT #${order.generatedOrderId} is delayed by more than 5 minutes`,
                     metadata: { orderId: order.id },
                 });
             }
@@ -69,6 +69,7 @@ class AlertService {
     }
     // Check for not served Orders
     checkNotServedOrders(restaurantId) {
+        var _a, _b, _c;
         return __awaiter(this, void 0, void 0, function* () {
             const oneMinutesAgo = new Date(Date.now() - 1 * 60 * 1000);
             const delayedNotServedOrders = yield __1.prismaDB.order.findMany({
@@ -81,13 +82,22 @@ class AlertService {
                         lte: oneMinutesAgo,
                     },
                 },
+                include: {
+                    orderSession: {
+                        include: {
+                            table: true,
+                        },
+                    },
+                },
             });
             for (const order of delayedNotServedOrders) {
                 yield this.createAlert({
                     restaurantId,
                     type: "ORDER_NOTSERVED",
                     priority: "HIGH",
-                    message: `Order #${order.generatedOrderId} is not yet served to the customer`,
+                    message: `Order #${order.generatedOrderId} is not yet served to the ${(order === null || order === void 0 ? void 0 : order.orderType) === "DINEIN"
+                        ? (_b = (_a = order.orderSession) === null || _a === void 0 ? void 0 : _a.table) === null || _b === void 0 ? void 0 : _b.name
+                        : (_c = order.orderSession) === null || _c === void 0 ? void 0 : _c.username}`,
                     metadata: {
                         orderId: order === null || order === void 0 ? void 0 : order.id,
                         generatedOrderId: order === null || order === void 0 ? void 0 : order.generatedOrderId,

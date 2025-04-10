@@ -251,6 +251,12 @@ export class StaffCheckInServices {
         activeCheckIn.register.transactions
       );
 
+      const expectedBalanceCash = this.calculateCurrentBalance(
+        activeCheckIn.register.transactions.filter(
+          (t) => t.paymentMethod === "CASH"
+        )
+      );
+
       const expectedBalanceUPI = this.calculateCurrentBalance(
         activeCheckIn.register.transactions.filter(
           (t) => t.paymentMethod === "UPI"
@@ -281,7 +287,7 @@ export class StaffCheckInServices {
           closingCardBalance: expectedCardBalance,
           closingCashBalance: closingBalance,
           actualBalance:
-            closingBalance + expectedBalanceUPI + expectedCardBalance,
+            expectedBalanceCash + expectedBalanceUPI + expectedCardBalance,
           closedAt: new Date(),
           closingNotes: notes,
           denominations: denominations

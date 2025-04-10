@@ -155,6 +155,7 @@ enum SubscriptionPlan {
   STARTER
   STANDARD
   PREMIUM
+  PRO
   ENTERPRISE
 }
 
@@ -354,17 +355,21 @@ model SubscriptionBilling {
 }
 
 model Subsciption {
-  id               String           @id @default(auto()) @map("_id") @db.ObjectId
-  name             String
-  amount           Int
-  subscriptionPlan SubscriptionPlan
-  planType         PlanType
-  minOutlet        String
-  isPOS            Boolean
-  isStaffPrime     Boolean
-  isKOT            Boolean
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  amount            Int
+  subscriptionPlan  SubscriptionPlan
+  planType          PlanType
+  minOutlet         String
+  isPOS             Boolean
+  numberOfPOSAccess String           @default("")
+  isStaffPrime      Boolean
+  isKOT             Boolean
+  isPrinting        Boolean          @default(true)
+  multiBilling      Boolean          @default(false)
+  thirdPartyApps    Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 }
 
 enum PlanType {

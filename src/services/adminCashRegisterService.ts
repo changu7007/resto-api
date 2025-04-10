@@ -170,7 +170,9 @@ export class AdminCashRegisterService {
           closingUPIBalance: expectedBalances.upi,
           closingCardBalance: expectedBalances.card,
           actualBalance:
-            closingBalance + expectedBalances.upi + expectedBalances.card,
+            expectedBalances.cash +
+            expectedBalances.upi +
+            expectedBalances.card,
           closedAt: new Date(),
           closingNotes: notes,
           denominations: denominations

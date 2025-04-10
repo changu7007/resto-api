@@ -26,7 +26,7 @@ export class AlertService {
         priority: "HIGH",
         message: `Low stock alert : ${item.name}. (${item.currentStock?.toFixed(
           2
-        )} ${item.consumptionUnit.name}) remaining`,
+        )} ${item.purchasedUnit}) remaining`,
         metadata: { itemId: item.id, name: item.name },
       });
     }
@@ -53,7 +53,7 @@ export class AlertService {
         restaurantId,
         type: "ORDER_DELAY",
         priority: "CRITICAL",
-        message: `Order #${order.generatedOrderId} is delayed by more than 5 minutes`,
+        message: `KOT #${order.generatedOrderId} is delayed by more than 5 minutes`,
         metadata: { orderId: order.id },
       });
     }
@@ -73,6 +73,13 @@ export class AlertService {
           lte: oneMinutesAgo,
         },
       },
+      include: {
+        orderSession: {
+          include: {
+            table: true,
+          },
+        },
+      },
     });
 
     for (const order of delayedNotServedOrders) {
@@ -80,7 +87,11 @@ export class AlertService {
         restaurantId,
         type: "ORDER_NOTSERVED",
         priority: "HIGH",
-        message: `Order #${order.generatedOrderId} is not yet served to the customer`,
+        message: `Order #${order.generatedOrderId} is not yet served to the ${
+          order?.orderType === "DINEIN"
+            ? order.orderSession?.table?.name
+            : order.orderSession?.username
+        }`,
         metadata: {
           orderId: order?.id,
           generatedOrderId: order?.generatedOrderId,

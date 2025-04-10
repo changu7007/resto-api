@@ -1920,18 +1920,9 @@ export const getCategoryContributionStats = async (
   const { outletId } = req.params;
 
   const outlet = await getOutletById(outletId);
-  // @ts-ignore
-  let userId = req.user?.id;
 
   if (!outlet?.id) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
-  }
-
-  if (userId !== outlet.adminId) {
-    throw new UnauthorizedException(
-      "Unauthorized Access",
-      ErrorCode.UNAUTHORIZED
-    );
   }
 
   // Fetch orders and related category data
@@ -1980,5 +1971,137 @@ export const getCategoryContributionStats = async (
   return res.json({
     success: true,
     categoryContributionStats: stats,
+  });
+};
+
+//todays transaction
+
+export const getTodaysTransaction = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const outlet = await getOutletById(outletId);
+
+  const { page = 1, limit = 10 } = req.query;
+
+  const pageNumber = parseInt(page as string);
+  const pageSize = parseInt(limit as string);
+  const skip = (pageNumber - 1) * pageSize;
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const todayStart = DateTime.now()
+    .setZone("Asia/Kolkata")
+    .startOf("day")
+    .toUTC()
+    .toISO()!;
+
+  const where = {
+    register: {
+      restaurantId: outletId,
+      createdAt: {
+        gte: new Date(todayStart),
+      },
+    },
+  };
+
+  const total = await prismaDB.cashTransaction.count({ where });
+
+  // Get all transactions for today (including those from registers)
+  const allTransactions = await prismaDB.cashTransaction.findMany({
+    where,
+    include: {
+      order: {
+        select: {
+          id: true,
+          billId: true,
+          orderType: true,
+          subTotal: true,
+          paymentMethod: true,
+          orders: {
+            select: {
+              orderItems: {
+                select: {
+                  name: true,
+                  quantity: true,
+                  isVariants: true,
+                  selectedVariant: true,
+                },
+              },
+            },
+          },
+          createdAt: true,
+        },
+      },
+      expense: {
+        select: {
+          id: true,
+          category: true,
+          amount: true,
+          description: true,
+          date: true,
+        },
+      },
+      staff: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    skip,
+    take: pageSize,
+  });
+
+  // Calculate summary statistics
+  const totalCashIn = allTransactions
+    .filter((t) => t.type === "CASH_IN")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalCashOut = allTransactions
+    .filter((t) => t.type === "CASH_OUT")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const transactionCount = allTransactions.length;
+  const orderCount = allTransactions.filter((t) => t.source === "ORDER").length;
+  const expenseCount = allTransactions.filter(
+    (t) => t.source === "EXPENSE"
+  ).length;
+  const manualCount = allTransactions.filter(
+    (t) => t.source === "MANUAL"
+  ).length;
+
+  return res.json({
+    success: true,
+    data: {
+      transactions: allTransactions,
+      pagination: {
+        total,
+        page: pageNumber,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+        hasMore: pageNumber * pageSize < total,
+      },
+      summary: {
+        totalCashIn,
+        totalCashOut,
+        netCash: totalCashIn - totalCashOut,
+        transactionCount,
+        orderCount,
+        expenseCount,
+        manualCount,
+      },
+    },
   });
 };

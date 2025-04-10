@@ -300,4 +300,5 @@ outletRoute.post("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_
 outletRoute.patch("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrintDetails));
 outletRoute.get("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintDetails));
 outletRoute.patch("/:outletId/print-details/update-local-print-url", (0, error_handler_1.errorHandler)(printer_controller_1.updateLocalPrintUrl));
+outletRoute.get("/:outletId/get-todays-cash-transactions", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getTodaysTransaction));
 exports.default = outletRoute;

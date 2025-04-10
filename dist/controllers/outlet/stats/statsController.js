@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCategoryContributionStats = exports.getOrderHourWise = exports.expenseMetrics = exports.getFinancialMetrics = exports.totalInventory = exports.cashFlowStats = exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = exports.getRevenueAndExpenses = exports.setupCacheInvalidation = exports.getDashboardMetrics = void 0;
+exports.getTodaysTransaction = exports.getCategoryContributionStats = exports.getOrderHourWise = exports.expenseMetrics = exports.getFinancialMetrics = exports.totalInventory = exports.cashFlowStats = exports.lastSixMonthsOrders = exports.outletTopSellingItems = exports.orderStatsForOutletByStaff = exports.orderStatsForOutlet = exports.getRevenueAndExpenses = exports.setupCacheInvalidation = exports.getDashboardMetrics = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -21,7 +21,6 @@ const utils_1 = require("../../../lib/utils");
 const get_users_1 = require("../../../lib/get-users");
 const date_fns_1 = require("date-fns");
 const bad_request_1 = require("../../../exceptions/bad-request");
-const unauthorized_1 = require("../../../exceptions/unauthorized");
 const luxon_1 = require("luxon");
 const redis_1 = require("../../../services/redis");
 const ioredis_1 = __importDefault(require("ioredis"));
@@ -1545,16 +1544,10 @@ const generateVibrantColor = () => {
     return `#${randomColor.padStart(6, "0")}`;
 };
 const getCategoryContributionStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _g;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
-    // @ts-ignore
-    let userId = (_g = req.user) === null || _g === void 0 ? void 0 : _g.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
-    }
-    if (userId !== outlet.adminId) {
-        throw new unauthorized_1.UnauthorizedException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }
     // Fetch orders and related category data
     const orderItems = yield __1.prismaDB.orderItem.findMany({
@@ -1595,3 +1588,119 @@ const getCategoryContributionStats = (req, res) => __awaiter(void 0, void 0, voi
     });
 });
 exports.getCategoryContributionStats = getCategoryContributionStats;
+//todays transaction
+const getTodaysTransaction = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    const { page = 1, limit = 10 } = req.query;
+    const pageNumber = parseInt(page);
+    const pageSize = parseInt(limit);
+    const skip = (pageNumber - 1) * pageSize;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const todayStart = luxon_1.DateTime.now()
+        .setZone("Asia/Kolkata")
+        .startOf("day")
+        .toUTC()
+        .toISO();
+    const where = {
+        register: {
+            restaurantId: outletId,
+            createdAt: {
+                gte: new Date(todayStart),
+            },
+        },
+    };
+    const total = yield __1.prismaDB.cashTransaction.count({ where });
+    // Get all transactions for today (including those from registers)
+    const allTransactions = yield __1.prismaDB.cashTransaction.findMany({
+        where,
+        include: {
+            order: {
+                select: {
+                    id: true,
+                    billId: true,
+                    orderType: true,
+                    subTotal: true,
+                    paymentMethod: true,
+                    orders: {
+                        select: {
+                            orderItems: {
+                                select: {
+                                    name: true,
+                                    quantity: true,
+                                    isVariants: true,
+                                    selectedVariant: true,
+                                },
+                            },
+                        },
+                    },
+                    createdAt: true,
+                },
+            },
+            expense: {
+                select: {
+                    id: true,
+                    category: true,
+                    amount: true,
+                    description: true,
+                    date: true,
+                },
+            },
+            staff: {
+                select: {
+                    id: true,
+                    name: true,
+                    role: true,
+                },
+            },
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    role: true,
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+        skip,
+        take: pageSize,
+    });
+    // Calculate summary statistics
+    const totalCashIn = allTransactions
+        .filter((t) => t.type === "CASH_IN")
+        .reduce((sum, t) => sum + t.amount, 0);
+    const totalCashOut = allTransactions
+        .filter((t) => t.type === "CASH_OUT")
+        .reduce((sum, t) => sum + t.amount, 0);
+    const transactionCount = allTransactions.length;
+    const orderCount = allTransactions.filter((t) => t.source === "ORDER").length;
+    const expenseCount = allTransactions.filter((t) => t.source === "EXPENSE").length;
+    const manualCount = allTransactions.filter((t) => t.source === "MANUAL").length;
+    return res.json({
+        success: true,
+        data: {
+            transactions: allTransactions,
+            pagination: {
+                total,
+                page: pageNumber,
+                pageSize,
+                totalPages: Math.ceil(total / pageSize),
+                hasMore: pageNumber * pageSize < total,
+            },
+            summary: {
+                totalCashIn,
+                totalCashOut,
+                netCash: totalCashIn - totalCashOut,
+                transactionCount,
+                orderCount,
+                expenseCount,
+                manualCount,
+            },
+        },
+    });
+});
+exports.getTodaysTransaction = getTodaysTransaction;

@@ -506,6 +506,15 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
       }
     }
 
+    // Delete any LOW_STOCK alerts for this restaurant
+    await prisma.alert.deleteMany({
+      where: {
+        restaurantId: getOutlet.id,
+        type: "LOW_STOCK",
+        status: { in: ["PENDING", "ACKNOWLEDGED"] },
+      },
+    });
+
     return orderSession;
   });
   // Post-transaction tasks
@@ -528,6 +537,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     message: "Order Created from Captain ✅",
   });
 };
+
 export const existingOrderPatchForStaff = async (
   req: Request,
   res: Response
@@ -594,106 +604,166 @@ export const existingOrderPatchForStaff = async (
       ? "FOODREADY"
       : "SERVED";
 
-  const orderSession = await prismaDB.orderSession.update({
-    where: {
-      restaurantId: getOutlet.id,
-      id: getOrder.id,
-    },
-    data: {
-      orderType: getOrder.orderType,
-      isPaid: isPaid,
-      restaurantId: getOutlet.id,
-      orders: {
-        create: {
-          active: true,
-          staffId: findStaff.id,
-          restaurantId: getOutlet.id,
-          isPaid: isPaid,
-          orderStatus: orderStatus,
-          totalNetPrice: totalNetPrice,
-          gstPrice: gstPrice,
-          totalAmount: totalAmount,
-          totalGrossProfit: totalGrossProfit,
-          generatedOrderId: generatedId,
-          orderType: getOrder.orderType,
-          createdBy: `${findStaff?.name}-(${findStaff?.role})`,
-          orderItems: {
-            create: orderItems?.map((item: any) => ({
-              menuId: item?.menuId,
-              name: item?.menuItem?.name,
-              strike: false,
-              isVariants: item?.menuItem?.isVariants,
-              originalRate: item?.originalPrice,
-              quantity: item?.quantity,
-              netPrice: item?.netPrice.toString(),
-              gst: item?.gst,
-              grossProfit: item?.grossProfit,
-              totalPrice: item?.price,
-              selectedVariant: item?.sizeVariantsId
-                ? {
-                    create: {
-                      sizeVariantId: item?.sizeVariantsId,
-                      name: item?.menuItem?.menuItemVariants?.find(
-                        (variant: any) => variant?.id === item?.sizeVariantsId
-                      )?.variantName,
-                      type: item?.menuItem?.menuItemVariants?.find(
-                        (variant: any) => variant?.id === item?.sizeVariantsId
-                      )?.type,
-                      price: Number(
-                        item?.menuItem.menuItemVariants.find(
-                          (v: any) => v?.id === item?.sizeVariantsId
-                        )?.price as string
-                      ),
-                      gst: Number(
-                        item?.menuItem.menuItemVariants.find(
-                          (v: any) => v?.id === item?.sizeVariantsId
-                        )?.gst
-                      ),
-                      netPrice: Number(
-                        item?.menuItem.menuItemVariants.find(
-                          (v: any) => v?.id === item?.sizeVariantsId
-                        )?.netPrice as string
-                      ).toString(),
-                      grossProfit: Number(
-                        item?.menuItem.menuItemVariants.find(
-                          (v: any) => v?.id === item?.sizeVariantsId
-                        )?.grossProfit
-                      ),
-                    },
-                  }
-                : undefined,
-              addOnSelected: {
-                create: item?.addOnSelected?.map((addon: any) => {
-                  const groupAddOn = item?.menuItem?.menuGroupAddOns?.find(
-                    (gAddon: any) => gAddon?.id === addon?.id
-                  );
-                  return {
-                    addOnId: addon?.id,
-                    name: groupAddOn?.addOnGroupName,
-                    selectedAddOnVariantsId: {
-                      create: addon?.selectedVariantsId?.map(
-                        (addOnVariant: any) => {
-                          const matchedVaraint =
-                            groupAddOn?.addonVariants?.find(
-                              (variant: any) => variant?.id === addOnVariant?.id
-                            );
-                          return {
-                            selectedAddOnVariantId: addOnVariant?.id,
-                            name: matchedVaraint?.name,
-                            type: matchedVaraint?.type,
-                            price: Number(matchedVaraint?.price),
-                          };
-                        }
-                      ),
-                    },
-                  };
-                }),
-              },
-            })),
+  await prismaDB.$transaction(async (tx) => {
+    await tx.orderSession.update({
+      where: {
+        restaurantId: getOutlet.id,
+        id: getOrder.id,
+      },
+      data: {
+        orderType: getOrder.orderType,
+        isPaid: isPaid,
+        restaurantId: getOutlet.id,
+        orders: {
+          create: {
+            active: true,
+            staffId: findStaff.id,
+            restaurantId: getOutlet.id,
+            isPaid: isPaid,
+            orderStatus: orderStatus,
+            totalNetPrice: totalNetPrice,
+            gstPrice: gstPrice,
+            totalAmount: totalAmount,
+            totalGrossProfit: totalGrossProfit,
+            generatedOrderId: generatedId,
+            orderType: getOrder.orderType,
+            createdBy: `${findStaff?.name}-(${findStaff?.role})`,
+            orderItems: {
+              create: orderItems?.map((item: any) => ({
+                menuId: item?.menuId,
+                name: item?.menuItem?.name,
+                strike: false,
+                isVariants: item?.menuItem?.isVariants,
+                originalRate: item?.originalPrice,
+                quantity: item?.quantity,
+                netPrice: item?.netPrice.toString(),
+                gst: item?.gst,
+                grossProfit: item?.grossProfit,
+                totalPrice: item?.price,
+                selectedVariant: item?.sizeVariantsId
+                  ? {
+                      create: {
+                        sizeVariantId: item?.sizeVariantsId,
+                        name: item?.menuItem?.menuItemVariants?.find(
+                          (variant: any) => variant?.id === item?.sizeVariantsId
+                        )?.variantName,
+                        type: item?.menuItem?.menuItemVariants?.find(
+                          (variant: any) => variant?.id === item?.sizeVariantsId
+                        )?.type,
+                        price: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.price as string
+                        ),
+                        gst: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.gst
+                        ),
+                        netPrice: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.netPrice as string
+                        ).toString(),
+                        grossProfit: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.grossProfit
+                        ),
+                      },
+                    }
+                  : undefined,
+                addOnSelected: {
+                  create: item?.addOnSelected?.map((addon: any) => {
+                    const groupAddOn = item?.menuItem?.menuGroupAddOns?.find(
+                      (gAddon: any) => gAddon?.id === addon?.id
+                    );
+                    return {
+                      addOnId: addon?.id,
+                      name: groupAddOn?.addOnGroupName,
+                      selectedAddOnVariantsId: {
+                        create: addon?.selectedVariantsId?.map(
+                          (addOnVariant: any) => {
+                            const matchedVaraint =
+                              groupAddOn?.addonVariants?.find(
+                                (variant: any) =>
+                                  variant?.id === addOnVariant?.id
+                              );
+                            return {
+                              selectedAddOnVariantId: addOnVariant?.id,
+                              name: matchedVaraint?.name,
+                              type: matchedVaraint?.type,
+                              price: Number(matchedVaraint?.price),
+                            };
+                          }
+                        ),
+                      },
+                    };
+                  }),
+                },
+              })),
+            },
           },
         },
       },
-    },
+    });
+    // Update raw material stock if `chooseProfit` is "itemRecipe"
+    await Promise.all(
+      orderItems.map(async (item: any) => {
+        const menuItem = await tx.menuItem.findUnique({
+          where: { id: item.menuId },
+          include: { itemRecipe: { include: { ingredients: true } } },
+        });
+
+        if (menuItem?.chooseProfit === "itemRecipe" && menuItem.itemRecipe) {
+          await Promise.all(
+            menuItem.itemRecipe.ingredients.map(async (ingredient) => {
+              const rawMaterial = await tx.rawMaterial.findUnique({
+                where: { id: ingredient.rawMaterialId },
+              });
+
+              if (rawMaterial) {
+                let decrementStock = 0;
+
+                // Check if the ingredient's unit matches the purchase unit or consumption unit
+                if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                  // If MOU is linked to purchaseUnit, multiply directly with quantity
+                  decrementStock =
+                    Number(ingredient.quantity) * Number(item.quantity || 1);
+                } else if (
+                  ingredient.unitId === rawMaterial.consumptionUnitId
+                ) {
+                  // If MOU is linked to consumptionUnit, apply conversion factor
+                  decrementStock =
+                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                    Number(rawMaterial.conversionFactor || 1);
+                } else {
+                  // Default fallback if MOU doesn't match either unit
+                  decrementStock =
+                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                    Number(rawMaterial.conversionFactor || 1);
+                }
+
+                if (Number(rawMaterial.currentStock) < decrementStock) {
+                  throw new BadRequestsException(
+                    `Insufficient stock for raw material: ${rawMaterial.name}`,
+                    ErrorCode.UNPROCESSABLE_ENTITY
+                  );
+                }
+
+                await tx.rawMaterial.update({
+                  where: { id: rawMaterial.id },
+                  data: {
+                    currentStock:
+                      Number(rawMaterial.currentStock) - Number(decrementStock),
+                  },
+                });
+              }
+            })
+          );
+        }
+      })
+    );
   });
 
   await prismaDB.notification.create({
@@ -707,6 +777,16 @@ export const existingOrderPatchForStaff = async (
           : getOrder.orderType,
     },
   });
+
+  // Delete any LOW_STOCK alerts for this restaurant
+  await prismaDB.alert.deleteMany({
+    where: {
+      restaurantId: getOutlet.id,
+      type: "LOW_STOCK",
+      status: { in: ["PENDING", "ACKNOWLEDGED"] },
+    },
+  });
+
   await Promise.all([
     redis.del(`active-os-${outletId}`),
     redis.del(`liv-o-${outletId}`),
@@ -721,11 +801,12 @@ export const existingOrderPatchForStaff = async (
 
   return res.json({
     success: true,
-    orderSessionId: orderSession.id,
+    orderSessionId: orderId,
     kotNumber: generatedId,
     message: "Order Added from Captain ✅",
   });
 };
+
 export const orderItemModificationByStaff = async (
   req: Request,
   res: Response
@@ -778,6 +859,11 @@ export const orderItemModificationByStaff = async (
               addOnGroups: true,
             },
           },
+          itemRecipe: {
+            include: {
+              ingredients: true,
+            },
+          },
         },
       },
       selectedVariant: true,
@@ -793,6 +879,68 @@ export const orderItemModificationByStaff = async (
   }
 
   const txs = await prismaDB.$transaction(async (prisma) => {
+    // If menuItem's chooseProfit is "itemRecipe", update raw material stock
+    if (
+      getOrderById.menuItem?.chooseProfit === "itemRecipe" &&
+      getOrderById.menuItem.itemRecipe
+    ) {
+      // Calculate the difference in quantity
+      const oldQuantity = getOrderById.quantity;
+      const newQuantity = validateFields?.quantity;
+      const quantityDiff = newQuantity - oldQuantity;
+
+      // If quantity has changed, update raw material stock
+      if (quantityDiff !== 0) {
+        for (const ingredient of getOrderById.menuItem.itemRecipe.ingredients) {
+          const rawMaterial = await prisma.rawMaterial.findUnique({
+            where: { id: ingredient.rawMaterialId },
+          });
+
+          if (rawMaterial) {
+            let stockAdjustment = 0;
+
+            // Check if the ingredient's unit matches the purchase unit or consumption unit
+            if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+              // If MOU is linked to purchaseUnit, multiply directly with quantity difference
+              stockAdjustment = Number(ingredient.quantity) * quantityDiff;
+            } else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+              // If MOU is linked to consumptionUnit, apply conversion factor
+              stockAdjustment =
+                (Number(ingredient.quantity) * quantityDiff) /
+                Number(rawMaterial.conversionFactor || 1);
+            } else {
+              // Default fallback if MOU doesn't match either unit
+              stockAdjustment =
+                (Number(ingredient.quantity) * quantityDiff) /
+                Number(rawMaterial.conversionFactor || 1);
+            }
+
+            // Check if the stock would go negative after adjustment
+            const newStockLevel =
+              Number(rawMaterial.currentStock) - Number(stockAdjustment);
+            if (newStockLevel < 0) {
+              throw new BadRequestsException(
+                `Insufficient stock for raw material: ${
+                  rawMaterial.name
+                }. Current stock: ${
+                  rawMaterial.currentStock
+                }, Required: ${Math.abs(stockAdjustment)}`,
+                ErrorCode.UNPROCESSABLE_ENTITY
+              );
+            }
+
+            // If quantity increased, decrement stock; if decreased, increment stock
+            await prisma.rawMaterial.update({
+              where: { id: rawMaterial.id },
+              data: {
+                currentStock: newStockLevel,
+              },
+            });
+          }
+        }
+      }
+    }
+
     await prisma.orderItem.update({
       where: {
         id: getOrderById.id,
@@ -835,20 +983,6 @@ export const orderItemModificationByStaff = async (
               },
             }
           : undefined,
-        // addOnSelected: {
-        //   set: [],
-        //   create: validateFields.addOnSelected.map((addOn) => ({
-        //     id: addOn.id,
-        //     name: addOn.name,
-        //     selectedAddOnVariantsId: {
-        //       create: addOn.selectedAddOnVariantsId.map((subVariant) => ({
-        //         id: subVariant.id,
-        //         name: subVariant.name,
-        //         price: subVariant.price,
-        //       })),
-        //     },
-        //   })),
-        // },
         netPrice: !getOrderById?.isVariants
           ? Number(getOrderById?.menuItem?.netPrice as string).toString()
           : Number(
@@ -942,6 +1076,23 @@ export const orderItemModificationByStaff = async (
         totalNetPrice,
         gstPrice,
         totalAmount: totalAmount,
+      },
+    });
+
+    // Delete any alerts linked to this order
+    await prisma.alert.deleteMany({
+      where: {
+        restaurantId: outlet.id,
+        OR: [
+          {
+            orderId: getOrder.order.id,
+            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+          },
+          {
+            type: "LOW_STOCK",
+            status: { in: ["PENDING", "ACKNOWLEDGED"] },
+          },
+        ],
       },
     });
   });

@@ -69,13 +69,14 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
         },
     });
     const formattedOrderData = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b;
+        var _a, _b, _c;
         return ({
             id: order.id,
+            billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
             generatedOrderId: order.generatedOrderId,
-            name: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.username,
+            name: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.username,
             mode: order.orderType,
-            table: (_b = order.orderSession.table) === null || _b === void 0 ? void 0 : _b.name,
+            table: (_c = order.orderSession.table) === null || _c === void 0 ? void 0 : _c.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -186,13 +187,14 @@ const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, 
         },
     });
     const formattedLiveOrders = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b;
+        var _a, _b, _c;
         return ({
             id: order.id,
+            billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
             generatedOrderId: order.generatedOrderId,
-            name: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.username,
+            name: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.username,
             mode: order.orderType,
-            table: (_b = order.orderSession.table) === null || _b === void 0 ? void 0 : _b.name,
+            table: (_c = order.orderSession.table) === null || _c === void 0 ? void 0 : _c.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -313,13 +315,14 @@ const getFetchLiveOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0,
         },
     });
     const formattedLiveOrders = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b;
+        var _a, _b, _c;
         return ({
             id: order.id,
+            billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
             generatedOrderId: order.generatedOrderId,
-            name: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.username,
+            name: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.username,
             mode: order.orderType,
-            table: (_b = order.orderSession.table) === null || _b === void 0 ? void 0 : _b.name,
+            table: (_c = order.orderSession.table) === null || _c === void 0 ? void 0 : _c.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {

@@ -2,11 +2,14 @@ import { Request, Response } from "express";
 import { prismaDB } from "../../..";
 import { getOutletById } from "../../../lib/outlet";
 import {
+  endOfDay,
   endOfToday,
+  startOfDay,
   startOfMonth,
   startOfToday,
   startOfWeek,
   startOfYesterday,
+  parseISO,
 } from "date-fns";
 import {
   CashTransactionType,
@@ -21,6 +24,7 @@ import { BadRequestsException } from "../../../exceptions/bad-request";
 
 export const getAllCashRegisters = async (req: Request, res: Response) => {
   const { outletId } = req.params;
+  const { date } = req.query;
 
   const getOutlet = await getOutletById(outletId);
 
@@ -28,10 +32,45 @@ export const getAllCashRegisters = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Outlet not found" });
   }
 
+  // Parse the date parameter if provided
+  let startDate: Date | undefined;
+  let endDate: Date | undefined;
+
+  if (date && typeof date === "string") {
+    try {
+      // Parse the date string to a Date object
+      const parsedDate = parseISO(date);
+
+      // Set the start and end of the day in IST (UTC+5:30)
+      // Note: JavaScript Date objects don't have timezone support, so we need to adjust manually
+      startDate = startOfDay(parsedDate);
+      endDate = endOfDay(parsedDate);
+
+      // Adjust for IST (UTC+5:30)
+      startDate = new Date(startDate.getTime() + 5.5 * 60 * 60 * 1000);
+      endDate = new Date(endDate.getTime() + 5.5 * 60 * 60 * 1000);
+    } catch (error) {
+      return res
+        .status(400)
+        .json({ message: "Invalid date format. Use YYYY-MM-DD" });
+    }
+  }
+
+  // Build the where clause for the query
+  const whereClause: any = {
+    restaurantId: outletId,
+  };
+
+  // Add date filtering if date parameter is provided
+  if (startDate && endDate) {
+    whereClause.createdAt = {
+      gte: startDate,
+      lte: endDate,
+    };
+  }
+
   const cashRegisters = await prismaDB.cashRegister.findMany({
-    where: {
-      restaurantId: outletId,
-    },
+    where: whereClause,
     include: {
       staff: {
         select: {
@@ -105,11 +144,24 @@ export const getAllCashRegisters = async (req: Request, res: Response) => {
       openedAt: register.openedAt,
       closedAt: register.closedAt,
       transactions: register.transactions.length,
+      cashTransactions: register?.transactions?.filter(
+        (t) => t.paymentMethod === "CASH"
+      ).length,
+      upiTransactions: register?.transactions?.filter(
+        (t) => t.paymentMethod === "UPI"
+      ).length,
+      cardTransactions: register?.transactions?.filter(
+        (t) => t.paymentMethod === "DEBIT"
+      ).length,
+      creditTransactions: register?.transactions?.filter(
+        (t) => t.paymentMethod === "CREDIT"
+      ).length,
+
       todayTransactions: todayTransactions.length,
       paymentTotals,
       denominations: register.denominations,
       discrepancy:
-        register.status === "CLOSED"
+        register.status === "CLOSED" || register.status === "FORCE_CLOSED"
           ? register.actualBalance! - currentBalance
           : null,
     };
@@ -146,6 +198,8 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
     type,
     source,
     search,
+    startDate,
+    endDate,
   } = req.query;
 
   const pageNumber = parseInt(page as string);
@@ -153,26 +207,53 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
   const skip = (pageNumber - 1) * pageSize;
   const outletStartDateTime = new Date(getOutlet?.createdAt);
 
-  // Calculate date range based on period
-  let startDate = new Date();
-  let endDate = endOfToday();
+  // Calculate date range based on period or provided dates
+  let startDateObj = new Date();
+  let endDateObj = endOfToday();
 
-  switch (period) {
-    case "today":
-      startDate = startOfToday();
-      break;
-    case "yesterday":
-      startDate = startOfYesterday();
-      endDate = startOfToday();
-      break;
-    case "week":
-      startDate = startOfWeek(new Date());
-      break;
-    case "month":
-      startDate = startOfMonth(new Date());
-      break;
-    default:
-      startDate = outletStartDateTime;
+  // If startDate and endDate are provided, use them
+  if (
+    startDate &&
+    endDate &&
+    typeof startDate === "string" &&
+    typeof endDate === "string"
+  ) {
+    try {
+      // Parse the date strings to Date objects
+      const parsedStartDate = parseISO(startDate);
+      const parsedEndDate = parseISO(endDate);
+
+      // Set the start and end of the day in IST (UTC+5:30)
+      startDateObj = startOfDay(parsedStartDate);
+      endDateObj = endOfDay(parsedEndDate);
+
+      // Adjust for IST (UTC+5:30)
+      startDateObj = new Date(startDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+      endDateObj = new Date(endDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+    } catch (error) {
+      return res
+        .status(400)
+        .json({ message: "Invalid date format. Use YYYY-MM-DD" });
+    }
+  } else {
+    // Use period-based date calculation if no specific dates provided
+    switch (period) {
+      case "today":
+        startDateObj = startOfToday();
+        break;
+      case "yesterday":
+        startDateObj = startOfYesterday();
+        endDateObj = startOfToday();
+        break;
+      case "week":
+        startDateObj = startOfWeek(new Date());
+        break;
+      case "month":
+        startDateObj = startOfMonth(new Date());
+        break;
+      default:
+        startDateObj = outletStartDateTime;
+    }
   }
 
   // Build filter conditions
@@ -182,8 +263,8 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
     },
 
     createdAt: {
-      gte: startDate,
-      lte: endDate,
+      gte: startDateObj,
+      lte: endDateObj,
     },
 
     ...(type ? { type: type as CashTransactionType } : {}),
@@ -256,11 +337,11 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
     by: ["type", "paymentMethod"],
     where: {
       register: { restaurantId: outletId },
-      ...(startDate && endDate
+      ...(startDateObj && endDateObj
         ? {
             createdAt: {
-              gte: startDate,
-              lte: endDate,
+              gte: startDateObj,
+              lte: endDateObj,
             },
           }
         : {}),
@@ -274,15 +355,15 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
   const summaryData = summary.reduce(
     (acc, curr) => {
       if (curr.type === "CASH_IN") {
-        acc.totalIncome += curr._sum.amount || 0;
+        acc.totalIncome += curr._sum?.amount || 0;
         acc.paymentMethodIncome[curr.paymentMethod] =
           (acc.paymentMethodIncome[curr.paymentMethod] || 0) +
-          (curr._sum.amount || 0);
+          (curr._sum?.amount || 0);
       } else {
-        acc.totalExpense += curr._sum.amount || 0;
+        acc.totalExpense += curr._sum?.amount || 0;
         acc.paymentMethodExpense[curr.paymentMethod] =
           (acc.paymentMethodExpense[curr.paymentMethod] || 0) +
-          (curr._sum.amount || 0);
+          (curr._sum?.amount || 0);
       }
       return acc;
     },
@@ -539,14 +620,45 @@ export const getTransactionHistoryForRegister = async (
     source,
     search,
     registerId,
+    startDate,
+    endDate,
   } = req.query;
 
   const pageNumber = parseInt(page as string);
   const pageSize = parseInt(limit as string);
   const skip = (pageNumber - 1) * pageSize;
 
+  // Parse the date parameters if provided
+  let startDateObj: Date | undefined;
+  let endDateObj: Date | undefined;
+
+  if (
+    startDate &&
+    endDate &&
+    typeof startDate === "string" &&
+    typeof endDate === "string"
+  ) {
+    try {
+      // Parse the date strings to Date objects
+      const parsedStartDate = parseISO(startDate);
+      const parsedEndDate = parseISO(endDate);
+
+      // Set the start and end of the day in IST (UTC+5:30)
+      startDateObj = startOfDay(parsedStartDate);
+      endDateObj = endOfDay(parsedEndDate);
+
+      // Adjust for IST (UTC+5:30)
+      startDateObj = new Date(startDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+      endDateObj = new Date(endDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+    } catch (error) {
+      return res
+        .status(400)
+        .json({ message: "Invalid date format. Use YYYY-MM-DD" });
+    }
+  }
+
   // Build filter conditions
-  const where = {
+  const where: any = {
     register: {
       id: registerId as string,
       restaurantId: outletId,
@@ -565,6 +677,14 @@ export const getTransactionHistoryForRegister = async (
               referenceId: { contains: search as string },
             },
           ],
+        }
+      : {}),
+    ...(startDateObj && endDateObj
+      ? {
+          createdAt: {
+            gte: startDateObj,
+            lte: endDateObj,
+          },
         }
       : {}),
   };
@@ -622,6 +742,14 @@ export const getTransactionHistoryForRegister = async (
     by: ["type", "paymentMethod"],
     where: {
       register: { id: registerId as string, restaurantId: outletId },
+      ...(startDateObj && endDateObj
+        ? {
+            createdAt: {
+              gte: startDateObj,
+              lte: endDateObj,
+            },
+          }
+        : {}),
     },
     _sum: {
       amount: true,
@@ -632,15 +760,15 @@ export const getTransactionHistoryForRegister = async (
   const summaryData = summary.reduce(
     (acc, curr) => {
       if (curr.type === "CASH_IN") {
-        acc.totalIncome += curr._sum.amount || 0;
+        acc.totalIncome += curr._sum?.amount || 0;
         acc.paymentMethodIncome[curr.paymentMethod] =
           (acc.paymentMethodIncome[curr.paymentMethod] || 0) +
-          (curr._sum.amount || 0);
+          (curr._sum?.amount || 0);
       } else {
-        acc.totalExpense += curr._sum.amount || 0;
+        acc.totalExpense += curr._sum?.amount || 0;
         acc.paymentMethodExpense[curr.paymentMethod] =
           (acc.paymentMethodExpense[curr.paymentMethod] || 0) +
-          (curr._sum.amount || 0);
+          (curr._sum?.amount || 0);
       }
       return acc;
     },

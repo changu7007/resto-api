@@ -16,6 +16,25 @@ import {
   PaginationState,
 } from "../../../schema/staff";
 
+// Add timezone utility functions
+function convertToIST(date: Date): Date {
+  return new Date(date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+}
+
+function setISTTime(
+  date: Date,
+  hours: number,
+  minutes: number,
+  seconds: number,
+  milliseconds: number
+): Date {
+  const istDate = new Date(
+    date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  istDate.setHours(hours, minutes, seconds, milliseconds);
+  return istDate;
+}
+
 const s3Client = new S3Client({
   region: process.env.AWS_REGION!,
   credentials: {
@@ -125,22 +144,23 @@ async function fetchReportData(
 ) {
   // Adjust date ranges to start at 00:00:00 for the start date and 23:59:59 for the end date (IST)
   const startDateWithTime = new Date(startDate);
-  startDateWithTime.setHours(0, 0, 0, 0);
-
   const endDateWithTime = new Date(endDate);
-  endDateWithTime.setHours(23, 59, 59, 999);
+
+  // Convert to IST and set appropriate times
+  const istStartDate = setISTTime(startDateWithTime, 0, 0, 0, 0);
+  const istEndDate = setISTTime(endDateWithTime, 23, 59, 59, 999);
 
   const where = {
     restaurantId,
     createdAt: {
-      gte: startDateWithTime,
-      lte: endDateWithTime,
+      gte: istStartDate,
+      lte: istEndDate,
     },
   };
 
   const dateRange = {
-    from: startDateWithTime.toISOString(),
-    to: endDateWithTime.toISOString(),
+    from: istStartDate.toISOString(),
+    to: istEndDate.toISOString(),
   };
 
   switch (reportType) {
@@ -187,6 +207,7 @@ async function formatSalesData(
             paymentMethod: true,
             isPaid: true,
             splitPayments: true,
+            sessionStatus: true,
           },
         },
       },
@@ -204,30 +225,23 @@ async function formatSalesData(
   ]);
 
   // Format the orders for table display
-  const formattedOrders = orders.map((order) => ({
-    billId: order.orderSession.billId || order.id,
-    orderType: order.orderType,
-    paidStatus: order.orderSession.isPaid ? "Paid" : "Unpaid",
-    totalAmount: Number(order.totalAmount),
-    paymentMethod: order.orderSession.paymentMethod,
-    time: order.createdAt.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    }),
-    date: order.createdAt.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }),
-  }));
+  const formattedOrders = orders.map((order) => {
+    return {
+      billId: order.orderSession.billId || order.id,
+      orderType: order.orderType,
+      paidStatus: order.orderSession.isPaid ? "Paid" : "Unpaid",
+      totalAmount: Number(order.totalAmount),
+      paymentMethod: order.orderSession.paymentMethod,
+      createdAt: order?.createdAt,
+      createdBy: order.createdBy,
+    };
+  });
 
   const standardizedPayments: Record<StandardizedPaymentMethod, number> = {
     CASH: 0,
     UPI: 0,
     CARD: 0,
-    OTHER: 0,
+    NOTPAID: 0,
   };
 
   // Process all orders to calculate payment method distribution
@@ -255,7 +269,7 @@ async function formatSalesData(
     }
     // If it's marked as SPLIT but no split details available, put it in OTHER
     else {
-      standardizedPayments["OTHER"] += orderAmount;
+      standardizedPayments["NOTPAID"] += orderAmount;
     }
   });
 
@@ -265,10 +279,13 @@ async function formatSalesData(
   );
 
   // Calculate total revenue
-  const totalRevenue = orders.reduce(
-    (acc, order) => acc + Number(order.totalAmount),
-    0
-  );
+  const totalRevenue = orders
+    .filter((o) => o.orderSession.sessionStatus === "COMPLETED")
+    .reduce((acc, order) => acc + Number(order.totalAmount), 0);
+
+  const unpaidRevenue = orders
+    .filter((o) => o.orderSession.sessionStatus === "ONPROGRESS")
+    .reduce((acc, order) => acc + Number(order.totalAmount), 0);
 
   return {
     restaurant: {
@@ -303,7 +320,7 @@ async function formatSalesData(
 }
 
 // Define a type for the standardized payment methods
-type StandardizedPaymentMethod = "CASH" | "UPI" | "CARD" | "OTHER";
+type StandardizedPaymentMethod = "CASH" | "UPI" | "CARD" | "NOTPAID";
 
 // Function to standardize payment methods
 function mapPaymentMethod(method: PaymentMethod): StandardizedPaymentMethod {
@@ -317,7 +334,7 @@ function mapPaymentMethod(method: PaymentMethod): StandardizedPaymentMethod {
     case "DEBIT":
       return "CARD"; // Map both CREDIT and DEBIT to CARD
     default:
-      return "OTHER";
+      return "NOTPAID";
   }
 }
 
@@ -516,7 +533,11 @@ async function formatInventoryData(
 // Helper functions
 function calculatePeakHours(orders: any[]): Record<string, number> {
   return orders.reduce((acc, order) => {
-    const hour = new Date(order.createdAt).getHours();
+    // Convert to IST timezone
+    const istDate = new Date(
+      order.createdAt.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const hour = istDate.getHours();
     const timeSlot = `${hour}-${hour + 2}`;
     acc[timeSlot] = (acc[timeSlot] || 0) + 1;
     return acc;
@@ -534,7 +555,11 @@ function calculateWeekdayDistribution(orders: any[]): Record<string, number> {
     "Saturday",
   ];
   return orders.reduce((acc, order) => {
-    const day = days[new Date(order.createdAt).getDay()];
+    // Convert to IST timezone
+    const istDate = new Date(
+      order.createdAt.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const day = days[istDate.getDay()];
     acc[day] = (acc[day] || 0) + 1;
     return acc;
   }, {});
@@ -544,9 +569,15 @@ function calculateAverageServingTime(orders: any[]): number {
   const servingTimes = orders
     .filter((order) => order.completedAt && order.createdAt)
     .map((order) => {
-      const diff =
-        new Date(order.completedAt).getTime() -
-        new Date(order.createdAt).getTime();
+      // Convert to IST timezone
+      const istCompletedAt = new Date(
+        order.completedAt.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+      );
+      const istCreatedAt = new Date(
+        order.createdAt.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+      );
+
+      const diff = istCompletedAt.getTime() - istCreatedAt.getTime();
       return diff / (1000 * 60); // Convert to minutes
     });
 
@@ -654,15 +685,16 @@ export const getReportsForTable = async (req: Request, res: Response) => {
   // Apply the proper time range if dateRange is provided
   if (dateRange) {
     const startDateWithTime = new Date(dateRange.from);
-    startDateWithTime.setHours(0, 0, 0, 0);
-
     const endDateWithTime = new Date(dateRange.to);
-    endDateWithTime.setHours(23, 59, 59, 999);
+
+    // Convert to IST and set appropriate times
+    const istStartDate = setISTTime(startDateWithTime, 0, 0, 0, 0);
+    const istEndDate = setISTTime(endDateWithTime, 23, 59, 59, 999);
 
     dateFilter = {
       createdAt: {
-        gte: startDateWithTime,
-        lte: endDateWithTime,
+        gte: istStartDate,
+        lte: istEndDate,
       },
     };
   }

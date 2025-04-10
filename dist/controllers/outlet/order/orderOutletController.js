@@ -852,6 +852,14 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 });
             }
         }
+        // Delete any LOW_STOCK alerts for this restaurant
+        yield prisma.alert.deleteMany({
+            where: {
+                restaurantId: getOutlet.id,
+                type: "LOW_STOCK",
+                status: { in: ["PENDING", "ACKNOWLEDGED"] },
+            },
+        });
         return orderSession;
     }));
     // Post-transaction tasks
@@ -1155,6 +1163,50 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 orderType,
             },
         });
+        // Update raw material stock if `chooseProfit` is "itemRecipe"
+        yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            const menuItem = yield tx.menuItem.findUnique({
+                where: { id: item.menuId },
+                include: { itemRecipe: { include: { ingredients: true } } },
+            });
+            if ((menuItem === null || menuItem === void 0 ? void 0 : menuItem.chooseProfit) === "itemRecipe" && menuItem.itemRecipe) {
+                yield Promise.all(menuItem.itemRecipe.ingredients.map((ingredient) => __awaiter(void 0, void 0, void 0, function* () {
+                    const rawMaterial = yield tx.rawMaterial.findUnique({
+                        where: { id: ingredient.rawMaterialId },
+                    });
+                    if (rawMaterial) {
+                        let decrementStock = 0;
+                        // Check if the ingredient's unit matches the purchase unit or consumption unit
+                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                            // If MOU is linked to purchaseUnit, multiply directly with quantity
+                            decrementStock =
+                                Number(ingredient.quantity) * Number(item.quantity || 1);
+                        }
+                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                            // If MOU is linked to consumptionUnit, apply conversion factor
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        else {
+                            // Default fallback if MOU doesn't match either unit
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        if (Number(rawMaterial.currentStock) < decrementStock) {
+                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                        }
+                        yield tx.rawMaterial.update({
+                            where: { id: rawMaterial.id },
+                            data: {
+                                currentStock: Number(rawMaterial.currentStock) - Number(decrementStock),
+                            },
+                        });
+                    }
+                })));
+            }
+        })));
         // Send notification
         // await NotificationService.sendNotification(
         //   getOutlet.fcmToken!,
@@ -1175,6 +1227,14 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 lastVisit: new Date(),
                 totalOrders: { increment: 1 },
                 totalSpent: { increment: Number(totalAmount) },
+            },
+        });
+        // Delete any LOW_STOCK alerts for this restaurant
+        yield tx.alert.deleteMany({
+            where: {
+                restaurantId: getOutlet.id,
+                type: "LOW_STOCK",
+                status: { in: ["PENDING", "ACKNOWLEDGED"] },
             },
         });
         const orderData = {
@@ -1246,86 +1306,139 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
         : orderMode === "EXPRESS"
             ? "FOODREADY"
             : "SERVED";
-    const orderSession = yield __1.prismaDB.orderSession.update({
-        where: {
-            restaurantId: getOutlet.id,
-            id: getOrder.id,
-        },
-        data: {
-            orderType: getOrder.orderType,
-            adminId: findBiller.id,
-            isPaid: isPaid,
-            restaurantId: getOutlet.id,
-            createdBy: findBiller === null || findBiller === void 0 ? void 0 : findBiller.name,
-            orders: {
-                create: {
-                    active: true,
-                    restaurantId: getOutlet.id,
-                    isPaid: isPaid,
-                    orderStatus: orderStatus,
-                    totalNetPrice: totalNetPrice,
-                    gstPrice: gstPrice,
-                    totalAmount: totalAmount,
-                    totalGrossProfit: totalGrossProfit,
-                    generatedOrderId: generatedId,
-                    orderType: getOrder.orderType,
-                    createdBy: findBiller === null || findBiller === void 0 ? void 0 : findBiller.name,
-                    orderItems: {
-                        create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
-                            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
-                            return ({
-                                menuId: item === null || item === void 0 ? void 0 : item.menuId,
-                                name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
-                                strike: false,
-                                isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
-                                originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
-                                quantity: item === null || item === void 0 ? void 0 : item.quantity,
-                                netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
-                                gst: item === null || item === void 0 ? void 0 : item.gst,
-                                grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
-                                totalPrice: item === null || item === void 0 ? void 0 : item.price,
-                                selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
-                                    ? {
-                                        create: {
-                                            sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
-                                            name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
-                                            type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
-                                            price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price),
-                                            gst: Number((_k = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _k === void 0 ? void 0 : _k.gst),
-                                            netPrice: Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice).toString(),
-                                            grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit),
-                                        },
-                                    }
-                                    : undefined,
-                                addOnSelected: {
-                                    create: (_o = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _o === void 0 ? void 0 : _o.map((addon) => {
-                                        var _a, _b, _c;
-                                        const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
-                                        return {
-                                            addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
-                                            name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
-                                            selectedAddOnVariantsId: {
-                                                create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
-                                                    var _a;
-                                                    const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
-                                                    return {
-                                                        selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
-                                                        name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
-                                                        type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
-                                                        price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
-                                                    };
-                                                }),
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        yield tx.orderSession.update({
+            where: {
+                restaurantId: getOutlet.id,
+                id: getOrder.id,
+            },
+            data: {
+                orderType: getOrder.orderType,
+                adminId: findBiller.id,
+                isPaid: isPaid,
+                restaurantId: getOutlet.id,
+                createdBy: findBiller === null || findBiller === void 0 ? void 0 : findBiller.name,
+                orders: {
+                    create: {
+                        active: true,
+                        restaurantId: getOutlet.id,
+                        isPaid: isPaid,
+                        orderStatus: orderStatus,
+                        totalNetPrice: totalNetPrice,
+                        gstPrice: gstPrice,
+                        totalAmount: totalAmount,
+                        totalGrossProfit: totalGrossProfit,
+                        generatedOrderId: generatedId,
+                        orderType: getOrder.orderType,
+                        createdBy: findBiller === null || findBiller === void 0 ? void 0 : findBiller.name,
+                        orderItems: {
+                            create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
+                                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+                                return ({
+                                    menuId: item === null || item === void 0 ? void 0 : item.menuId,
+                                    name: (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.name,
+                                    strike: false,
+                                    isVariants: (_b = item === null || item === void 0 ? void 0 : item.menuItem) === null || _b === void 0 ? void 0 : _b.isVariants,
+                                    originalRate: item === null || item === void 0 ? void 0 : item.originalPrice,
+                                    quantity: item === null || item === void 0 ? void 0 : item.quantity,
+                                    netPrice: item === null || item === void 0 ? void 0 : item.netPrice.toString(),
+                                    gst: item === null || item === void 0 ? void 0 : item.gst,
+                                    grossProfit: item === null || item === void 0 ? void 0 : item.grossProfit,
+                                    totalPrice: item === null || item === void 0 ? void 0 : item.price,
+                                    selectedVariant: (item === null || item === void 0 ? void 0 : item.sizeVariantsId)
+                                        ? {
+                                            create: {
+                                                sizeVariantId: item === null || item === void 0 ? void 0 : item.sizeVariantsId,
+                                                name: (_e = (_d = (_c = item === null || item === void 0 ? void 0 : item.menuItem) === null || _c === void 0 ? void 0 : _c.menuItemVariants) === null || _d === void 0 ? void 0 : _d.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _e === void 0 ? void 0 : _e.variantName,
+                                                type: (_h = (_g = (_f = item === null || item === void 0 ? void 0 : item.menuItem) === null || _f === void 0 ? void 0 : _f.menuItemVariants) === null || _g === void 0 ? void 0 : _g.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _h === void 0 ? void 0 : _h.type,
+                                                price: Number((_j = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _j === void 0 ? void 0 : _j.price),
+                                                gst: Number((_k = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _k === void 0 ? void 0 : _k.gst),
+                                                netPrice: Number((_l = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _l === void 0 ? void 0 : _l.netPrice).toString(),
+                                                grossProfit: Number((_m = item === null || item === void 0 ? void 0 : item.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (item === null || item === void 0 ? void 0 : item.sizeVariantsId))) === null || _m === void 0 ? void 0 : _m.grossProfit),
                                             },
-                                        };
-                                    }),
-                                },
-                            });
-                        }),
+                                        }
+                                        : undefined,
+                                    addOnSelected: {
+                                        create: (_o = item === null || item === void 0 ? void 0 : item.addOnSelected) === null || _o === void 0 ? void 0 : _o.map((addon) => {
+                                            var _a, _b, _c;
+                                            const groupAddOn = (_b = (_a = item === null || item === void 0 ? void 0 : item.menuItem) === null || _a === void 0 ? void 0 : _a.menuGroupAddOns) === null || _b === void 0 ? void 0 : _b.find((gAddon) => (gAddon === null || gAddon === void 0 ? void 0 : gAddon.id) === (addon === null || addon === void 0 ? void 0 : addon.id));
+                                            return {
+                                                addOnId: addon === null || addon === void 0 ? void 0 : addon.id,
+                                                name: groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addOnGroupName,
+                                                selectedAddOnVariantsId: {
+                                                    create: (_c = addon === null || addon === void 0 ? void 0 : addon.selectedVariantsId) === null || _c === void 0 ? void 0 : _c.map((addOnVariant) => {
+                                                        var _a;
+                                                        const matchedVaraint = (_a = groupAddOn === null || groupAddOn === void 0 ? void 0 : groupAddOn.addonVariants) === null || _a === void 0 ? void 0 : _a.find((variant) => (variant === null || variant === void 0 ? void 0 : variant.id) === (addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id));
+                                                        return {
+                                                            selectedAddOnVariantId: addOnVariant === null || addOnVariant === void 0 ? void 0 : addOnVariant.id,
+                                                            name: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.name,
+                                                            type: matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.type,
+                                                            price: Number(matchedVaraint === null || matchedVaraint === void 0 ? void 0 : matchedVaraint.price),
+                                                        };
+                                                    }),
+                                                },
+                                            };
+                                        }),
+                                    },
+                                });
+                            }),
+                        },
                     },
                 },
             },
-        },
-    });
+        });
+        yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            const menuItem = yield tx.menuItem.findUnique({
+                where: { id: item.menuId },
+                include: { itemRecipe: { include: { ingredients: true } } },
+            });
+            if ((menuItem === null || menuItem === void 0 ? void 0 : menuItem.chooseProfit) === "itemRecipe" && menuItem.itemRecipe) {
+                yield Promise.all(menuItem.itemRecipe.ingredients.map((ingredient) => __awaiter(void 0, void 0, void 0, function* () {
+                    const rawMaterial = yield tx.rawMaterial.findUnique({
+                        where: { id: ingredient.rawMaterialId },
+                    });
+                    if (rawMaterial) {
+                        let decrementStock = 0;
+                        // Check if the ingredient's unit matches the purchase unit or consumption unit
+                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                            // If MOU is linked to purchaseUnit, multiply directly with quantity
+                            decrementStock =
+                                Number(ingredient.quantity) * Number(item.quantity || 1);
+                        }
+                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                            // If MOU is linked to consumptionUnit, apply conversion factor
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        else {
+                            // Default fallback if MOU doesn't match either unit
+                            decrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        if (Number(rawMaterial.currentStock) < decrementStock) {
+                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                        }
+                        yield tx.rawMaterial.update({
+                            where: { id: rawMaterial.id },
+                            data: {
+                                currentStock: Number(rawMaterial.currentStock) - Number(decrementStock),
+                            },
+                        });
+                    }
+                })));
+            }
+        })));
+        // Delete any LOW_STOCK alerts for this restaurant
+        yield tx.alert.deleteMany({
+            where: {
+                restaurantId: getOutlet.id,
+                type: "LOW_STOCK",
+                status: { in: ["PENDING", "ACKNOWLEDGED"] },
+            },
+        });
+    }));
     yield __1.prismaDB.notification.create({
         data: {
             restaurantId: getOutlet.id,
@@ -1348,7 +1461,7 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
     ws_1.websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
     return res.json({
         success: true,
-        orderSessionId: orderSession.id,
+        orderSessionId: orderId,
         kotNumber: generatedId,
         message: "Order Added from Admin App ✅",
     });
@@ -1373,6 +1486,22 @@ const orderessionPaymentModePatch = (req, res) => __awaiter(void 0, void 0, void
         where: {
             id: getOrderById.id,
             restaurantId: outlet.id,
+        },
+        data: {
+            paymentMethod: paymentMethod,
+        },
+    });
+    const transaction = yield __1.prismaDB.cashTransaction.findFirst({
+        where: {
+            orderId: getOrderById.id,
+            register: {
+                restaurantId: outletId,
+            },
+        },
+    });
+    yield __1.prismaDB.cashTransaction.update({
+        where: {
+            id: transaction === null || transaction === void 0 ? void 0 : transaction.id,
         },
         data: {
             paymentMethod: paymentMethod,
@@ -1440,6 +1569,7 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
     // Perform updates within a transaction
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        var _w, _x;
         // Refresh Redis cache
         yield Promise.all([
             redis_1.redis.del(`active-os-${outletId}`),
@@ -1469,6 +1599,75 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
                 data: { occupied: false, currentOrderSessionId: null },
             });
         }
+        // Get all orders in this order session with their order items
+        const orders = yield tx.order.findMany({
+            where: {
+                orderSessionId: getOrderById.id,
+                restaurantId: outletId,
+            },
+            include: {
+                orderItems: {
+                    include: {
+                        menuItem: {
+                            include: {
+                                itemRecipe: {
+                                    include: {
+                                        ingredients: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        // Restore raw material stock for each order item if menuItem's chooseProfit is "itemRecipe"
+        for (const order of orders) {
+            for (const item of order.orderItems) {
+                if (((_w = item.menuItem) === null || _w === void 0 ? void 0 : _w.chooseProfit) === "itemRecipe" &&
+                    item.menuItem.itemRecipe) {
+                    for (const ingredient of item.menuItem.itemRecipe.ingredients) {
+                        const rawMaterial = yield tx.rawMaterial.findUnique({
+                            where: { id: ingredient.rawMaterialId },
+                        });
+                        if (rawMaterial) {
+                            let incrementStock = 0;
+                            // Check if the ingredient's unit matches the purchase unit or consumption unit
+                            if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                                // If MOU is linked to purchaseUnit, multiply directly with quantity
+                                incrementStock =
+                                    Number(ingredient.quantity) * Number(item.quantity || 1);
+                            }
+                            else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                                // If MOU is linked to consumptionUnit, apply conversion factor
+                                incrementStock =
+                                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                        Number(rawMaterial.conversionFactor || 1);
+                            }
+                            else {
+                                // Default fallback if MOU doesn't match either unit
+                                incrementStock =
+                                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                        Number(rawMaterial.conversionFactor || 1);
+                            }
+                            // Calculate the new stock level after incrementing
+                            const newStockLevel = Number(rawMaterial.currentStock) + Number(incrementStock);
+                            // Check if the new stock level would be negative
+                            if (newStockLevel < 0) {
+                                throw new bad_request_1.BadRequestsException(`Cannot delete order item: Stock for ${rawMaterial.name} would go negative. Current stock: ${(_x = rawMaterial.currentStock) === null || _x === void 0 ? void 0 : _x.toFixed(2)}, Required stock: ${incrementStock}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                            }
+                            // Update the raw material stock
+                            yield tx.rawMaterial.update({
+                                where: { id: rawMaterial.id },
+                                data: {
+                                    currentStock: newStockLevel,
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+        }
         // Update the `orderSession` status to "CANCELLED"
         yield tx.orderSession.update({
             where: {
@@ -1489,6 +1688,37 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
                 orderStatus: "CANCELLED",
             },
         });
+        // Delete all alerts linked to any order in this order session
+        if (orders.length > 0) {
+            const orderIds = orders.map((order) => order.id);
+            yield tx.alert.deleteMany({
+                where: {
+                    restaurantId: outlet.id,
+                    OR: [
+                        {
+                            orderId: {
+                                in: orderIds,
+                            },
+                            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                        },
+                        {
+                            type: "LOW_STOCK",
+                            status: { in: ["PENDING", "ACKNOWLEDGED"] },
+                        },
+                    ],
+                },
+            });
+        }
+        else {
+            // If no orders, just delete LOW_STOCK alerts
+            yield tx.alert.deleteMany({
+                where: {
+                    restaurantId: outletId,
+                    type: "LOW_STOCK",
+                    status: { in: ["PENDING", "ACKNOWLEDGED"] },
+                },
+            });
+        }
     }));
     ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "ORDER_UPDATED");
     return res.json({
@@ -1498,10 +1728,10 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
 });
 exports.orderessionCancelPatch = orderessionCancelPatch;
 const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _w;
+    var _y, _z;
     const { id, outletId } = req.params;
     // @ts-ignore
-    const userId = (_w = req === null || req === void 0 ? void 0 : req.user) === null || _w === void 0 ? void 0 : _w.id;
+    const userId = (_y = req === null || req === void 0 ? void 0 : req.user) === null || _y === void 0 ? void 0 : _y.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -1513,6 +1743,76 @@ const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, fu
     if (!(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.id)) {
         throw new not_found_1.NotFoundException("No Order Session Found to Delete", root_1.ErrorCode.NOT_FOUND);
     }
+    // Get all orders in this order session with their order items before deletion
+    const orders = yield __1.prismaDB.order.findMany({
+        where: {
+            orderSessionId: getOrderById.id,
+            restaurantId: outlet.id,
+        },
+        include: {
+            orderItems: {
+                include: {
+                    menuItem: {
+                        include: {
+                            itemRecipe: {
+                                include: {
+                                    ingredients: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+    // Restore raw material stock for each order item if menuItem's chooseProfit is "itemRecipe"
+    for (const order of orders) {
+        for (const item of order.orderItems) {
+            if (((_z = item.menuItem) === null || _z === void 0 ? void 0 : _z.chooseProfit) === "itemRecipe" &&
+                item.menuItem.itemRecipe) {
+                for (const ingredient of item.menuItem.itemRecipe.ingredients) {
+                    const rawMaterial = yield __1.prismaDB.rawMaterial.findUnique({
+                        where: { id: ingredient.rawMaterialId },
+                    });
+                    if (rawMaterial) {
+                        let incrementStock = 0;
+                        // Check if the ingredient's unit matches the purchase unit or consumption unit
+                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                            // If MOU is linked to purchaseUnit, multiply directly with quantity
+                            incrementStock =
+                                Number(ingredient.quantity) * Number(item.quantity || 1);
+                        }
+                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                            // If MOU is linked to consumptionUnit, apply conversion factor
+                            incrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        else {
+                            // Default fallback if MOU doesn't match either unit
+                            incrementStock =
+                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        yield __1.prismaDB.rawMaterial.update({
+                            where: { id: rawMaterial.id },
+                            data: {
+                                currentStock: Number(rawMaterial.currentStock) + Number(incrementStock),
+                            },
+                        });
+                    }
+                }
+            }
+        }
+    }
+    // Delete any LOW_STOCK alerts for this restaurant
+    yield __1.prismaDB.alert.deleteMany({
+        where: {
+            restaurantId: outletId,
+            type: "LOW_STOCK",
+            status: { in: ["PENDING", "ACKNOWLEDGED"] },
+        },
+    });
     yield __1.prismaDB.orderSession.delete({
         where: {
             id: getOrderById.id,
@@ -1534,11 +1834,11 @@ const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, fu
 });
 exports.orderessionDeleteById = orderessionDeleteById;
 const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _x;
+    var _0;
     const { outletId } = req.params;
     const { selectedId } = req.body;
     // @ts-ignore
-    const userId = (_x = req === null || req === void 0 ? void 0 : req.user) === null || _x === void 0 ? void 0 : _x.id;
+    const userId = (_0 = req === null || req === void 0 ? void 0 : req.user) === null || _0 === void 0 ? void 0 : _0.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -1555,6 +1855,7 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
     // Perform status update within a transaction
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        var _1;
         yield Promise.all([
             redis_1.redis.del(`active-os-${outletId}`),
             redis_1.redis.del(`liv-o-${outletId}`),
@@ -1563,6 +1864,70 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
         ]);
+        // Get all orders in these order sessions with their order items
+        const orders = yield tx.order.findMany({
+            where: {
+                orderSessionId: {
+                    in: selectedId,
+                },
+                restaurantId: outlet.id,
+            },
+            include: {
+                orderItems: {
+                    include: {
+                        menuItem: {
+                            include: {
+                                itemRecipe: {
+                                    include: {
+                                        ingredients: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        // Restore raw material stock for each order item if menuItem's chooseProfit is "itemRecipe"
+        for (const order of orders) {
+            for (const item of order.orderItems) {
+                if (((_1 = item.menuItem) === null || _1 === void 0 ? void 0 : _1.chooseProfit) === "itemRecipe" &&
+                    item.menuItem.itemRecipe) {
+                    for (const ingredient of item.menuItem.itemRecipe.ingredients) {
+                        const rawMaterial = yield tx.rawMaterial.findUnique({
+                            where: { id: ingredient.rawMaterialId },
+                        });
+                        if (rawMaterial) {
+                            let incrementStock = 0;
+                            // Check if the ingredient's unit matches the purchase unit or consumption unit
+                            if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                                // If MOU is linked to purchaseUnit, multiply directly with quantity
+                                incrementStock =
+                                    Number(ingredient.quantity) * Number(item.quantity || 1);
+                            }
+                            else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                                // If MOU is linked to consumptionUnit, apply conversion factor
+                                incrementStock =
+                                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                        Number(rawMaterial.conversionFactor || 1);
+                            }
+                            else {
+                                // Default fallback if MOU doesn't match either unit
+                                incrementStock =
+                                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                                        Number(rawMaterial.conversionFactor || 1);
+                            }
+                            yield tx.rawMaterial.update({
+                                where: { id: rawMaterial.id },
+                                data: {
+                                    currentStock: Number(rawMaterial.currentStock) + Number(incrementStock),
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+        }
         // Update related orders' statuses to "CANCELLED"
         yield tx.order.updateMany({
             where: {
@@ -1588,6 +1953,37 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
                 active: false,
             },
         });
+        // Delete all alerts linked to any order in these order sessions
+        if (orders.length > 0) {
+            const orderIds = orders.map((order) => order.id);
+            yield tx.alert.deleteMany({
+                where: {
+                    restaurantId: outlet.id,
+                    OR: [
+                        {
+                            orderId: {
+                                in: orderIds,
+                            },
+                            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                        },
+                        {
+                            type: "LOW_STOCK",
+                            status: { in: ["PENDING", "ACKNOWLEDGED"] },
+                        },
+                    ],
+                },
+            });
+        }
+        else {
+            // If no orders, just delete LOW_STOCK alerts
+            yield tx.alert.deleteMany({
+                where: {
+                    restaurantId: outletId,
+                    type: "LOW_STOCK",
+                    status: { in: ["PENDING", "ACKNOWLEDGED"] },
+                },
+            });
+        }
     }));
     return res.json({
         success: true,
@@ -1645,14 +2041,14 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.orderStatusPatch = orderStatusPatch;
 const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _y;
+    var _2;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     // @ts-ignore
-    const staff = yield (0, get_users_1.getStaffById)(outletId, (_y = req.user) === null || _y === void 0 ? void 0 : _y.id);
+    const staff = yield (0, get_users_1.getStaffById)(outletId, (_2 = req.user) === null || _2 === void 0 ? void 0 : _2.id);
     if (!(staff === null || staff === void 0 ? void 0 : staff.id)) {
         throw new not_found_1.NotFoundException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }
@@ -1714,6 +2110,11 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                             addOnGroups: true,
                         },
                     },
+                    itemRecipe: {
+                        include: {
+                            ingredients: true,
+                        },
+                    },
                 },
             },
             selectedVariant: true,
@@ -1724,7 +2125,55 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
         throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
     }
     const txs = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14;
+        var _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20;
+        // If menuItem's chooseProfit is "itemRecipe", update raw material stock
+        if (((_3 = getOrderById.menuItem) === null || _3 === void 0 ? void 0 : _3.chooseProfit) === "itemRecipe" &&
+            getOrderById.menuItem.itemRecipe) {
+            // Calculate the difference in quantity
+            const oldQuantity = getOrderById.quantity;
+            const newQuantity = validateFields === null || validateFields === void 0 ? void 0 : validateFields.quantity;
+            const quantityDiff = newQuantity - oldQuantity;
+            // If quantity has changed, update raw material stock
+            if (quantityDiff !== 0) {
+                for (const ingredient of getOrderById.menuItem.itemRecipe.ingredients) {
+                    const rawMaterial = yield prisma.rawMaterial.findUnique({
+                        where: { id: ingredient.rawMaterialId },
+                    });
+                    if (rawMaterial) {
+                        let stockAdjustment = 0;
+                        // Check if the ingredient's unit matches the purchase unit or consumption unit
+                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                            // If MOU is linked to purchaseUnit, multiply directly with quantity difference
+                            stockAdjustment = Number(ingredient.quantity) * quantityDiff;
+                        }
+                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                            // If MOU is linked to consumptionUnit, apply conversion factor
+                            stockAdjustment =
+                                (Number(ingredient.quantity) * quantityDiff) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        else {
+                            // Default fallback if MOU doesn't match either unit
+                            stockAdjustment =
+                                (Number(ingredient.quantity) * quantityDiff) /
+                                    Number(rawMaterial.conversionFactor || 1);
+                        }
+                        // Check if the stock would go negative after adjustment
+                        const newStockLevel = Number(rawMaterial.currentStock) - Number(stockAdjustment);
+                        if (newStockLevel < 0) {
+                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}. Current stock: ${(_4 = rawMaterial.currentStock) === null || _4 === void 0 ? void 0 : _4.toFixed(2)} ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedUnit}, Required: ${Math.abs(stockAdjustment)} ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedUnit}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                        }
+                        // If quantity increased, decrement stock; if decreased, increment stock
+                        yield prisma.rawMaterial.update({
+                            where: { id: rawMaterial.id },
+                            data: {
+                                currentStock: newStockLevel,
+                            },
+                        });
+                    }
+                }
+            }
+        }
         yield prisma.orderItem.update({
             where: {
                 id: getOrderById.id,
@@ -1736,15 +2185,15 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     ? {
                         update: {
                             where: {
-                                id: (_z = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.selectedVariant) === null || _z === void 0 ? void 0 : _z.id,
+                                id: (_5 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.selectedVariant) === null || _5 === void 0 ? void 0 : _5.id,
                             },
                             data: {
                                 sizeVariantId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId,
-                                name: (_1 = (_0 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _0 === void 0 ? void 0 : _0.variant) === null || _1 === void 0 ? void 0 : _1.name,
-                                price: parseFloat((_2 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _2 === void 0 ? void 0 : _2.price),
-                                gst: Number((_3 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _3 === void 0 ? void 0 : _3.gst),
-                                netPrice: parseFloat((_4 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _4 === void 0 ? void 0 : _4.netPrice).toString(),
-                                grossProfit: Number((_5 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _5 === void 0 ? void 0 : _5.grossProfit),
+                                name: (_7 = (_6 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _6 === void 0 ? void 0 : _6.variant) === null || _7 === void 0 ? void 0 : _7.name,
+                                price: parseFloat((_8 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _8 === void 0 ? void 0 : _8.price),
+                                gst: Number((_9 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _9 === void 0 ? void 0 : _9.gst),
+                                netPrice: parseFloat((_10 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _10 === void 0 ? void 0 : _10.netPrice).toString(),
+                                grossProfit: Number((_11 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _11 === void 0 ? void 0 : _11.grossProfit),
                             },
                         },
                     }
@@ -1764,17 +2213,17 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 //   })),
                 // },
                 netPrice: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_6 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _6 === void 0 ? void 0 : _6.netPrice).toString()
-                    : Number((_7 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _7 === void 0 ? void 0 : _7.netPrice).toString(),
+                    ? Number((_12 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _12 === void 0 ? void 0 : _12.netPrice).toString()
+                    : Number((_13 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _13 === void 0 ? void 0 : _13.netPrice).toString(),
                 originalRate: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_8 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _8 === void 0 ? void 0 : _8.price)
-                    : Number((_9 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _9 === void 0 ? void 0 : _9.price),
+                    ? Number((_14 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _14 === void 0 ? void 0 : _14.price)
+                    : Number((_15 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _15 === void 0 ? void 0 : _15.price),
                 grossProfit: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_10 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _10 === void 0 ? void 0 : _10.grossProfit)
-                    : Number((_11 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _11 === void 0 ? void 0 : _11.grossProfit),
+                    ? Number((_16 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _16 === void 0 ? void 0 : _16.grossProfit)
+                    : Number((_17 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _17 === void 0 ? void 0 : _17.grossProfit),
                 gst: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? (_12 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _12 === void 0 ? void 0 : _12.gst
-                    : (_13 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _13 === void 0 ? void 0 : _13.gst,
+                    ? (_18 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _18 === void 0 ? void 0 : _18.gst
+                    : (_19 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _19 === void 0 ? void 0 : _19.gst,
                 totalPrice: validateFields === null || validateFields === void 0 ? void 0 : validateFields.totalPrice,
             },
         });
@@ -1822,11 +2271,19 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
             },
         });
         // Update related alerts to resolved
-        yield __1.prismaDB.alert.deleteMany({
+        yield prisma.alert.deleteMany({
             where: {
                 restaurantId: outlet.id,
-                orderId: (_14 = getOrder === null || getOrder === void 0 ? void 0 : getOrder.order) === null || _14 === void 0 ? void 0 : _14.id,
+                orderId: (_20 = getOrder === null || getOrder === void 0 ? void 0 : getOrder.order) === null || _20 === void 0 ? void 0 : _20.id,
                 status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+            },
+        });
+        // Delete any LOW_STOCK alerts for this restaurant
+        yield prisma.alert.deleteMany({
+            where: {
+                restaurantId: outletId,
+                type: "LOW_STOCK",
+                status: { in: ["PENDING", "ACKNOWLEDGED"] },
             },
         });
         yield Promise.all([
@@ -1846,7 +2303,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
 });
 exports.orderItemModification = orderItemModification;
 const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _15;
+    var _21;
     const { orderItemId, outletId } = req.params;
     // Validate outlet
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -1868,6 +2325,15 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
                     orderSession: {
                         include: {
                             orders: true,
+                        },
+                    },
+                },
+            },
+            menuItem: {
+                include: {
+                    itemRecipe: {
+                        include: {
+                            ingredients: true,
                         },
                     },
                 },
@@ -1897,6 +2363,7 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
     const orderSession = parentOrder.orderSession;
     // Use Prisma transaction for atomic operation
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        var _22;
         // Refresh caches after successful transaction
         yield Promise.all([
             redis_1.redis.del(`active-os-${outletId}`),
@@ -1906,6 +2373,49 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
         ]);
+        // If menuItem's chooseProfit is "itemRecipe", restore raw material stock
+        if (((_22 = orderItem.menuItem) === null || _22 === void 0 ? void 0 : _22.chooseProfit) === "itemRecipe" &&
+            orderItem.menuItem.itemRecipe) {
+            for (const ingredient of orderItem.menuItem.itemRecipe.ingredients) {
+                const rawMaterial = yield tx.rawMaterial.findUnique({
+                    where: { id: ingredient.rawMaterialId },
+                });
+                if (rawMaterial) {
+                    let incrementStock = 0;
+                    // Check if the ingredient's unit matches the purchase unit or consumption unit
+                    if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                        // If MOU is linked to purchaseUnit, multiply directly with quantity
+                        incrementStock =
+                            Number(ingredient.quantity) * Number(orderItem.quantity || 1);
+                    }
+                    else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
+                        // If MOU is linked to consumptionUnit, apply conversion factor
+                        incrementStock =
+                            (Number(ingredient.quantity) * Number(orderItem.quantity || 1)) /
+                                Number(rawMaterial.conversionFactor || 1);
+                    }
+                    else {
+                        // Default fallback if MOU doesn't match either unit
+                        incrementStock =
+                            (Number(ingredient.quantity) * Number(orderItem.quantity || 1)) /
+                                Number(rawMaterial.conversionFactor || 1);
+                    }
+                    // Calculate the new stock level after incrementing
+                    const newStockLevel = Number(rawMaterial.currentStock) + Number(incrementStock);
+                    // Check if the new stock level would be negative
+                    if (newStockLevel < 0) {
+                        throw new bad_request_1.BadRequestsException(`Cannot delete order item: Stock for ${rawMaterial.name} would go negative. Current stock: ${rawMaterial.currentStock}, Required amount: ${incrementStock}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                    }
+                    // Update the raw material stock
+                    yield tx.rawMaterial.update({
+                        where: { id: rawMaterial.id },
+                        data: {
+                            currentStock: newStockLevel,
+                        },
+                    });
+                }
+            }
+        }
         // Delete the OrderItem
         yield tx.orderItem.delete({
             where: {
@@ -1954,11 +2464,19 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
             });
         }
         // Update related alerts to resolved
-        yield __1.prismaDB.alert.deleteMany({
+        yield tx.alert.deleteMany({
             where: {
                 restaurantId: outlet.id,
                 orderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.id,
                 status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+            },
+        });
+        // Delete any LOW_STOCK alerts for this restaurant
+        yield tx.alert.deleteMany({
+            where: {
+                restaurantId: outletId,
+                type: "LOW_STOCK",
+                status: { in: ["PENDING", "ACKNOWLEDGED"] },
             },
         });
     }));
@@ -1980,7 +2498,7 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
             generatedOrderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.generatedOrderId,
             name: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.username,
             mode: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.orderType,
-            table: (_15 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _15 === void 0 ? void 0 : _15.name,
+            table: (_21 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _21 === void 0 ? void 0 : _21.name,
         },
     });
 });
@@ -1996,7 +2514,7 @@ const inviteCode = () => {
 };
 exports.inviteCode = inviteCode;
 const getParentOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _16;
+    var _23;
     const { orderItemId, outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
@@ -2025,7 +2543,7 @@ const getParentOrder = (req, res) => __awaiter(void 0, void 0, void 0, function*
             generatedOrderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.generatedOrderId,
             name: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.username,
             mode: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.orderType,
-            table: (_16 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _16 === void 0 ? void 0 : _16.name,
+            table: (_23 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _23 === void 0 ? void 0 : _23.name,
         },
     });
 });
