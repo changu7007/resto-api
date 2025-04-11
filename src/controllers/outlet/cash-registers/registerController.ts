@@ -21,6 +21,7 @@ import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { z } from "zod";
 import { BadRequestsException } from "../../../exceptions/bad-request";
+import { DateTime } from "luxon";
 
 export const getAllCashRegisters = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -31,6 +32,7 @@ export const getAllCashRegisters = async (req: Request, res: Response) => {
   if (!getOutlet) {
     return res.status(404).json({ message: "Outlet not found" });
   }
+  const timeZone = "Asia/Kolkata"; // Default to a specific time zone
 
   // Parse the date parameter if provided
   let startDate: Date | undefined;
@@ -41,14 +43,15 @@ export const getAllCashRegisters = async (req: Request, res: Response) => {
       // Parse the date string to a Date object
       const parsedDate = parseISO(date);
 
-      // Set the start and end of the day in IST (UTC+5:30)
-      // Note: JavaScript Date objects don't have timezone support, so we need to adjust manually
-      startDate = startOfDay(parsedDate);
-      endDate = endOfDay(parsedDate);
+      // Use DateTime from luxon to handle timezone properly
+      const dateInIST = DateTime.fromJSDate(parsedDate).setZone(timeZone);
 
-      // Adjust for IST (UTC+5:30)
-      startDate = new Date(startDate.getTime() + 5.5 * 60 * 60 * 1000);
-      endDate = new Date(endDate.getTime() + 5.5 * 60 * 60 * 1000);
+      // Set the start and end of the day in IST
+      const startDateTime = dateInIST.startOf("day").toUTC().toJSDate();
+      const endDateTime = dateInIST.endOf("day").toUTC().toJSDate();
+
+      startDate = startDateTime;
+      endDate = endDateTime;
     } catch (error) {
       return res
         .status(400)
@@ -206,6 +209,7 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
   const pageSize = parseInt(limit as string);
   const skip = (pageNumber - 1) * pageSize;
   const outletStartDateTime = new Date(getOutlet?.createdAt);
+  const timeZone = "Asia/Kolkata"; // Default to a specific time zone
 
   // Calculate date range based on period or provided dates
   let startDateObj = new Date();
@@ -223,13 +227,14 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
       const parsedStartDate = parseISO(startDate);
       const parsedEndDate = parseISO(endDate);
 
-      // Set the start and end of the day in IST (UTC+5:30)
-      startDateObj = startOfDay(parsedStartDate);
-      endDateObj = endOfDay(parsedEndDate);
+      // Use DateTime from luxon to handle timezone properly
+      const startDateInIST =
+        DateTime.fromJSDate(parsedStartDate).setZone(timeZone);
+      const endDateInIST = DateTime.fromJSDate(parsedEndDate).setZone(timeZone);
 
-      // Adjust for IST (UTC+5:30)
-      startDateObj = new Date(startDateObj.getTime() + 5.5 * 60 * 60 * 1000);
-      endDateObj = new Date(endDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+      // Set the start and end of the day in IST
+      startDateObj = startDateInIST.startOf("day").toUTC().toJSDate();
+      endDateObj = endDateInIST.endOf("day").toUTC().toJSDate();
     } catch (error) {
       return res
         .status(400)
@@ -650,6 +655,7 @@ export const getTransactionHistoryForRegister = async (
   const pageNumber = parseInt(page as string);
   const pageSize = parseInt(limit as string);
   const skip = (pageNumber - 1) * pageSize;
+  const timeZone = "Asia/Kolkata"; // Default to a specific time zone
 
   // Parse the date parameters if provided
   let startDateObj: Date | undefined;
@@ -666,13 +672,14 @@ export const getTransactionHistoryForRegister = async (
       const parsedStartDate = parseISO(startDate);
       const parsedEndDate = parseISO(endDate);
 
-      // Set the start and end of the day in IST (UTC+5:30)
-      startDateObj = startOfDay(parsedStartDate);
-      endDateObj = endOfDay(parsedEndDate);
+      // Use DateTime from luxon to handle timezone properly
+      const startDateInIST =
+        DateTime.fromJSDate(parsedStartDate).setZone(timeZone);
+      const endDateInIST = DateTime.fromJSDate(parsedEndDate).setZone(timeZone);
 
-      // Adjust for IST (UTC+5:30)
-      startDateObj = new Date(startDateObj.getTime() + 5.5 * 60 * 60 * 1000);
-      endDateObj = new Date(endDateObj.getTime() + 5.5 * 60 * 60 * 1000);
+      // Set the start and end of the day in IST
+      startDateObj = startDateInIST.startOf("day").toUTC().toJSDate();
+      endDateObj = endDateInIST.endOf("day").toUTC().toJSDate();
     } catch (error) {
       return res
         .status(400)
