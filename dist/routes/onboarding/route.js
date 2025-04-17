@@ -12,6 +12,8 @@ onboardingRoute.post("/create-outlet", auth_1.isAuthMiddelware, (0, error_handle
 onboardingRoute.patch("/save", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(onboardingController_1.saveOnBoarding));
 onboardingRoute.patch("/update-onboarding-user", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(onboardingController_1.updateOnboardingStatus));
 onboardingRoute.post("/create-razorpay-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.CreateRazorPayOrder));
+onboardingRoute.post("/create-phonepe-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.createPhonePeOrder));
+onboardingRoute.get("/check-status", (0, error_handler_1.errorHandler)(planController_1.statusPhonePeCheck));
 onboardingRoute.post("/verify-razorpay-payment", (0, error_handler_1.errorHandler)(planController_1.paymentRazorpayVerification));
 onboardingRoute.post("/razorpay-verification", (0, error_handler_1.errorHandler)(planController_1.paymentWebhookVerification));
 onboardingRoute.post("/send-notification", (0, error_handler_1.errorHandler)(utilsController_1.sendFireBaseNotification));

@@ -706,7 +706,7 @@ exports.getAddONById = getAddONById;
 const menuSchema = zod_1.z.object({
     name: zod_1.z.string().min(1),
     shortCode: zod_1.z.string().optional(),
-    description: zod_1.z.string().min(1),
+    description: zod_1.z.string().optional(),
     images: zod_1.z.object({ url: zod_1.z.string() }).array(),
     price: zod_1.z.string().optional(),
     netPrice: zod_1.z.string().optional(),
@@ -726,7 +726,17 @@ const menuSchema = zod_1.z.object({
     })
         .optional(),
     grossProfitPer: zod_1.z.string().optional(),
-    type: zod_1.z.enum(["VEG", "NONVEG", "EGG", "SOFTDRINKS", "ALCOHOL", "NONALCOHOLIC", "MILK"], {
+    type: zod_1.z.enum([
+        "VEG",
+        "NONVEG",
+        "EGG",
+        "SOFTDRINKS",
+        "ALCOHOL",
+        "NONALCOHOLIC",
+        "MILK",
+        "FISH",
+        "NOTAPPLICABLE",
+    ], {
         required_error: "You need to select a food type.",
     }),
     menuItemVariants: zod_1.z.array(zod_1.z.object({
@@ -790,9 +800,6 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
     if (validateFields.isAddons && !validateFields.menuGroupAddOns.length) {
         throw new bad_request_1.BadRequestsException("If Add-Ons Selected, Assign required Group AddOn to it", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-    if (!validateFields.description) {
-        throw new bad_request_1.BadRequestsException("Description is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     if (!validateFields.categoryId) {
         throw new bad_request_1.BadRequestsException("CategoryId is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
@@ -1016,9 +1023,6 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
     if (validateFields.isAddons && !validateFields.menuGroupAddOns.length) {
         throw new bad_request_1.BadRequestsException("If Add-Ons Selected, Assign required Group AddOn to it", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-    }
-    if (!validateFields.description) {
-        throw new bad_request_1.BadRequestsException("Description is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     if (!validateFields.categoryId) {
         throw new bad_request_1.BadRequestsException("CategoryId is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);

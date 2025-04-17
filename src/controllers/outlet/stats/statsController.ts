@@ -1379,9 +1379,13 @@ export const totalInventory = async (req: Request, res: Response) => {
         rawMaterialId: material.id,
         name: material.name,
         purchasedStock: material.purchasedStock,
-        consumedStock: `${consumedStock.toFixed(2)} - ${
-          material?.consumptionUnit?.name
-        }`,
+        consumedStock: `${
+          material?.conversionFactor
+            ? `${(consumedStock / material.conversionFactor).toFixed(2)}-${
+                material?.purchasedUnit
+              }`
+            : `${consumedStock.toFixed(2)}-${material?.consumptionUnit?.name}`
+        } `,
         cogs: cogs.toFixed(2),
       };
     })

@@ -8,9 +8,11 @@ import {
   updateOnboardingStatus,
 } from "../../controllers/outlet/onboarding/onboardingController";
 import {
+  createPhonePeOrder,
   CreateRazorPayOrder,
   paymentRazorpayVerification,
   paymentWebhookVerification,
+  statusPhonePeCheck,
 } from "../../controllers/outlet/plans/planController";
 import { sendFireBaseNotification } from "../../controllers/utilsController";
 
@@ -33,6 +35,12 @@ onboardingRoute.post(
   isAuthMiddelware,
   errorHandler(CreateRazorPayOrder)
 );
+onboardingRoute.post(
+  "/create-phonepe-order",
+  isAuthMiddelware,
+  errorHandler(createPhonePeOrder)
+);
+onboardingRoute.get("/check-status", errorHandler(statusPhonePeCheck));
 onboardingRoute.post(
   "/verify-razorpay-payment",
   errorHandler(paymentRazorpayVerification)

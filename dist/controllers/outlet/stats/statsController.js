@@ -1131,7 +1131,9 @@ const totalInventory = (req, res) => __awaiter(void 0, void 0, void 0, function*
             rawMaterialId: material.id,
             name: material.name,
             purchasedStock: material.purchasedStock,
-            consumedStock: `${consumedStock.toFixed(2)} - ${(_e = material === null || material === void 0 ? void 0 : material.consumptionUnit) === null || _e === void 0 ? void 0 : _e.name}`,
+            consumedStock: `${(material === null || material === void 0 ? void 0 : material.conversionFactor)
+                ? `${(consumedStock / material.conversionFactor).toFixed(2)}-${material === null || material === void 0 ? void 0 : material.purchasedUnit}`
+                : `${consumedStock.toFixed(2)}-${(_e = material === null || material === void 0 ? void 0 : material.consumptionUnit) === null || _e === void 0 ? void 0 : _e.name}`} `,
             cogs: cogs.toFixed(2),
         };
     })));

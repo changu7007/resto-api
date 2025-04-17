@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.transferTableOrder = exports.markTableAsUnoccupied = exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = exports.getAllAreasForTable = exports.getAllTablesForTable = void 0;
+exports.createBulkTables = exports.transferTableOrder = exports.markTableAsUnoccupied = exports.getTableCurrentOrders = exports.getTableByUniqueId = exports.verifyTable = exports.connectTable = exports.deleteArea = exports.updateArea = exports.createArea = exports.deleteTable = exports.updateTable = exports.createTable = exports.getAllAreas = exports.getAllTables = exports.getAllAreasForTable = exports.getAllTablesForTable = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -222,10 +222,21 @@ const createTable = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     if (!areaId) {
         throw new bad_request_1.BadRequestsException("Area type is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
+    const slug = (0, utils_1.generateSlug)(name);
+    // Check if table with same slug already exists
+    const existingTable = yield __1.prismaDB.table.findFirst({
+        where: {
+            restaurantId: getOutlet.id,
+            slug: slug,
+        },
+    });
+    if (existingTable) {
+        throw new bad_request_1.BadRequestsException("A table with this name already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     yield __1.prismaDB.table.create({
         data: {
             name,
-            slug: (0, utils_1.generateSlug)(name),
+            slug: slug,
             capacity,
             uniqueId,
             shortCode,
@@ -241,6 +252,13 @@ const createTable = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     });
 });
 exports.createTable = createTable;
+const generateFileName = (bytes = 32) => {
+    const array = new Uint8Array(bytes);
+    crypto.getRandomValues(array);
+    return Array.from(array)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+};
 const updateTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId, tableId } = req.params;
     const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -269,12 +287,27 @@ const updateTable = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     if (!areaId) {
         throw new bad_request_1.BadRequestsException("Area type is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
+    const slug = (0, utils_1.generateSlug)(name);
+    // Check if another table has the same slug (excluding current table)
+    const existingTable = yield __1.prismaDB.table.findFirst({
+        where: {
+            restaurantId: getOutlet.id,
+            slug: slug,
+            id: {
+                not: tableId,
+            },
+        },
+    });
+    if (existingTable) {
+        throw new bad_request_1.BadRequestsException("A table with this name already exists", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
     yield __1.prismaDB.table.updateMany({
         where: {
             id: table.id,
         },
         data: {
             name,
+            slug: slug,
             capacity,
             shortCode,
             areaId,
@@ -671,3 +704,75 @@ const transferTableOrder = (req, res) => __awaiter(void 0, void 0, void 0, funct
     return res.json({ success: true, message: "Table Order Transferred" });
 });
 exports.transferTableOrder = transferTableOrder;
+const createBulkTables = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const { tables } = req.body;
+    if (!tables || !Array.isArray(tables) || tables.length === 0) {
+        throw new bad_request_1.BadRequestsException("Tables array is required and must not be empty", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    // Validate each table in the array
+    for (const table of tables) {
+        if (!table.name) {
+            throw new bad_request_1.BadRequestsException("Table Name is Required for all tables", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        if (!table.capacity) {
+            throw new bad_request_1.BadRequestsException("Capacity is Required for all tables", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        if (!table.shortCode) {
+            throw new bad_request_1.BadRequestsException("ShortCode for Table Name is Required for all tables", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        if (!table.areaId) {
+            throw new bad_request_1.BadRequestsException("Area type is Required for all tables", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+    }
+    // Generate slugs and check for duplicates
+    const slugs = new Set();
+    const tablesWithSlugs = tables.map((table) => {
+        const slug = (0, utils_1.generateSlug)(table.name);
+        if (slugs.has(slug)) {
+            throw new bad_request_1.BadRequestsException("Duplicate table names are not allowed", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        slugs.add(slug);
+        return Object.assign(Object.assign({}, table), { slug });
+    });
+    // Check if any of the slugs already exist in the database
+    const existingTables = yield __1.prismaDB.table.findMany({
+        where: {
+            restaurantId: getOutlet.id,
+            slug: {
+                in: Array.from(slugs),
+            },
+        },
+    });
+    if (existingTables.length > 0) {
+        throw new bad_request_1.BadRequestsException("Some table names already exist", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    // Create all tables in a transaction
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        for (const table of tablesWithSlugs) {
+            yield tx.table.create({
+                data: {
+                    name: table.name,
+                    slug: table.slug,
+                    capacity: table.capacity,
+                    uniqueId: generateFileName(),
+                    shortCode: table.shortCode,
+                    areaId: table.areaId,
+                    qrcode: table.qrcode || null,
+                    restaurantId: getOutlet.id,
+                },
+            });
+        }
+    }));
+    // Update Redis cache
+    yield redis_1.redis.del(`tables-${outletId}`);
+    return res.json({
+        success: true,
+        message: `${tables.length} Tables Created Successfully ✅`,
+    });
+});
+exports.createBulkTables = createBulkTables;

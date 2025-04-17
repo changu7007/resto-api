@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -12,9 +35,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchBankAccountStatus = exports.createVendorAccount = exports.getAllPlans = exports.buyPlan = exports.paymentWebhookVerification = exports.paymentRazorpayVerification = exports.CreateRazorPayOrderForOutlet = exports.CreateRazorPayOrder = void 0;
+exports.fetchBankAccountStatus = exports.createVendorAccount = exports.getAllPlans = exports.buyPlan = exports.paymentWebhookVerification = exports.paymentRazorpayVerification = exports.CreateRazorPayOrderForOutlet = exports.statusPhonePeCheck = exports.createPhonePeOrder = exports.CreateRazorPayOrder = void 0;
 const razorpay_1 = __importDefault(require("razorpay"));
-const crypto_1 = __importDefault(require("crypto"));
+const crypto_1 = __importStar(require("crypto"));
 const bad_request_1 = require("../../../exceptions/bad-request");
 const root_1 = require("../../../exceptions/root");
 const __1 = require("../../..");
@@ -23,10 +46,20 @@ const secrets_1 = require("../../../secrets");
 const outlet_1 = require("../../../lib/outlet");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
 const get_users_1 = require("../../../lib/get-users");
+const pg_sdk_node_1 = require("pg-sdk-node");
 const razorpay = new razorpay_1.default({
     key_id: secrets_1.RAZORPAY_KEY_ID,
     key_secret: secrets_1.RAZORPAY_KEY_SECRET,
 });
+const API = secrets_1.ENV === "production"
+    ? "https://api.restobytes.in/api"
+    : "http://localhost:8080/api";
+const FRONTEND = secrets_1.ENV === "production" ? "https://app.restobytes.in" : "http://localhost:4000";
+const clientId = secrets_1.PHONE_PE_CLIENT_ID;
+const clientSecret = secrets_1.PHONE_PE_CLIENT_SECRET;
+const clientVersion = 1;
+const env = pg_sdk_node_1.Env.SANDBOX;
+const phonePeClient = pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env);
 function CreateRazorPayOrder(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
         const { amount } = req.body;
@@ -42,6 +75,91 @@ function CreateRazorPayOrder(req, res) {
     });
 }
 exports.CreateRazorPayOrder = CreateRazorPayOrder;
+function createPhonePeOrder(req, res) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const { amount, subscriptionId } = req.body;
+        // @ts-ignore
+        const userId = req.user.id;
+        if (!amount) {
+            throw new not_found_1.NotFoundException("Amount is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        const merchantOrderId = (0, crypto_1.randomUUID)();
+        const redirectUrl = `${API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
+        const request = pg_sdk_node_1.StandardCheckoutPayRequest.builder()
+            .merchantOrderId(merchantOrderId)
+            .amount(amount)
+            .redirectUrl(redirectUrl)
+            .build();
+        const response = yield phonePeClient.pay(request);
+        return res.json({
+            success: true,
+            redirectUrl: response.redirectUrl,
+        });
+    });
+}
+exports.createPhonePeOrder = createPhonePeOrder;
+function statusPhonePeCheck(req, res) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const { merchantOrderId, subId, userId } = req.query;
+        if (!merchantOrderId) {
+            throw new not_found_1.NotFoundException("MerchantORderId is Missing", root_1.ErrorCode.UNAUTHORIZED);
+        }
+        const response = yield phonePeClient.getOrderStatus(merchantOrderId);
+        const status = response.state;
+        if (status === "COMPLETED") {
+            // Create subscription similar to buyPlan function
+            if (!subId || !userId) {
+                throw new bad_request_1.BadRequestsException("Subscription ID or User ID is missing", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+            }
+            const findOwner = yield __1.prismaDB.user.findFirst({
+                where: {
+                    id: userId,
+                },
+            });
+            if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
+                throw new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND);
+            }
+            const findSubscription = yield __1.prismaDB.subsciption.findFirst({
+                where: {
+                    id: subId,
+                },
+            });
+            if (!findSubscription) {
+                throw new bad_request_1.BadRequestsException("No Subscription Found", root_1.ErrorCode.NOT_FOUND);
+            }
+            let validDate = new Date();
+            const paidAmount = response.amount / 100 || 0;
+            if (paidAmount === 0) {
+                // Set validDate to 15 days from today for free trial
+                validDate.setDate(validDate.getDate() + 15);
+            }
+            else if (findSubscription.planType === "MONTHLY") {
+                validDate.setMonth(validDate.getMonth() + 1);
+            }
+            else if (findSubscription.planType === "ANNUALLY") {
+                validDate.setFullYear(validDate.getFullYear() + 1);
+            }
+            yield __1.prismaDB.subscriptionBilling.create({
+                data: {
+                    userId: findOwner.id,
+                    isSubscription: true,
+                    paymentId: (response === null || response === void 0 ? void 0 : response.orderId) || merchantOrderId,
+                    paidAmount: paidAmount,
+                    subscribedDate: new Date(),
+                    planType: findSubscription.planType,
+                    subscriptionPlan: findSubscription.subscriptionPlan,
+                    validDate: validDate,
+                },
+            });
+            yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id);
+            return res.redirect(`${FRONTEND}/thankyou?status=success`);
+        }
+        else {
+            return res.redirect(`${FRONTEND}/thankyou?status=failure`);
+        }
+    });
+}
+exports.statusPhonePeCheck = statusPhonePeCheck;
 function CreateRazorPayOrderForOutlet(req, res) {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {

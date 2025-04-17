@@ -874,7 +874,7 @@ export const getAddONById = async (req: Request, res: Response) => {
 const menuSchema = z.object({
   name: z.string().min(1),
   shortCode: z.string().optional(),
-  description: z.string().min(1),
+  description: z.string().optional(),
   images: z.object({ url: z.string() }).array(),
   price: z.string().optional(),
   netPrice: z.string().optional(),
@@ -895,7 +895,17 @@ const menuSchema = z.object({
     .optional(),
   grossProfitPer: z.string().optional(),
   type: z.enum(
-    ["VEG", "NONVEG", "EGG", "SOFTDRINKS", "ALCOHOL", "NONALCOHOLIC", "MILK"],
+    [
+      "VEG",
+      "NONVEG",
+      "EGG",
+      "SOFTDRINKS",
+      "ALCOHOL",
+      "NONALCOHOLIC",
+      "MILK",
+      "FISH",
+      "NOTAPPLICABLE",
+    ],
     {
       required_error: "You need to select a food type.",
     }
@@ -987,12 +997,6 @@ export const updateItembyId = async (req: Request, res: Response) => {
     );
   }
 
-  if (!validateFields.description) {
-    throw new BadRequestsException(
-      "Description is Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
   if (!validateFields.categoryId) {
     throw new BadRequestsException(
       "CategoryId is Required",
@@ -1279,12 +1283,6 @@ export const postItem = async (req: Request, res: Response) => {
     );
   }
 
-  if (!validateFields.description) {
-    throw new BadRequestsException(
-      "Description is Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
   if (!validateFields.categoryId) {
     throw new BadRequestsException(
       "CategoryId is Required",

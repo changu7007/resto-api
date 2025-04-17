@@ -80,6 +80,7 @@ import {
   connectTable,
   createArea,
   createTable,
+  createBulkTables,
   deleteArea,
   deleteTable,
   getAllAreas,
@@ -273,6 +274,7 @@ import {
   updatePrintLocation,
 } from "../../controllers/outlet/printers/printer-controller";
 import { assignTablesForWaiters } from "../../controllers/outlet/staffs/staffController";
+import { generateMenuFromImage } from "../../controllers/outlet/items/aiMenuController";
 const outletRoute: Router = Router();
 
 outletRoute.get("/get-all-outlets", errorHandler(getAllOutlets));
@@ -612,6 +614,11 @@ outletRoute.post(
   errorHandler(postItem)
 );
 outletRoute.post(
+  "/:outletId/ai-generate-menu",
+  isAuthMiddelware,
+  errorHandler(generateMenuFromImage)
+);
+outletRoute.post(
   "/:outletId/duplicate-item/:itemId",
   isAuthMiddelware,
   errorHandler(duplicateItem)
@@ -770,6 +777,11 @@ outletRoute.post(
   "/:outletId/create-table",
   isAuthMiddelware,
   errorHandler(createTable)
+);
+outletRoute.post(
+  "/:outletId/create-bulk-tables",
+  isAuthMiddelware,
+  errorHandler(createBulkTables)
 );
 outletRoute.patch(
   "/:outletId/update-table/:tableId",

@@ -29,6 +29,7 @@ const registerController_1 = require("../../controllers/outlet/cash-registers/re
 const adminRegisterController_1 = require("../../controllers/outlet/cash-registers/adminRegisterController");
 const printer_controller_1 = require("../../controllers/outlet/printers/printer-controller");
 const staffController_2 = require("../../controllers/outlet/staffs/staffController");
+const aiMenuController_1 = require("../../controllers/outlet/items/aiMenuController");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/get-all-outlets", (0, error_handler_1.errorHandler)(outletController_1.getAllOutlets));
 outletRoute.get("/:outletId/get-admin-register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
@@ -108,6 +109,7 @@ outletRoute.patch("/:outletId/bulk-pos-access-enable", auth_1.isAuthMiddelware, 
 outletRoute.patch("/:outletId/bulk-pos-access-disable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessDisable));
 //Items Route
 outletRoute.post("/:outletId/create-item", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.postItem));
+outletRoute.post("/:outletId/ai-generate-menu", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(aiMenuController_1.generateMenuFromImage));
 outletRoute.post("/:outletId/duplicate-item/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.duplicateItem));
 outletRoute.get("/:outletId/get-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getAllItem));
 outletRoute.get("/:outletId/menu-items", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategory));
@@ -149,6 +151,7 @@ outletRoute.get("/:outletId/areas", (0, error_handler_1.errorHandler)(outletTabl
 outletRoute.post("/:outletId/get-table-tables", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.getAllTablesForTable));
 outletRoute.post("/:outletId/get-table-areas", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.getAllAreasForTable));
 outletRoute.post("/:outletId/create-table", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.createTable));
+outletRoute.post("/:outletId/create-bulk-tables", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.createBulkTables));
 outletRoute.patch("/:outletId/update-table/:tableId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.updateTable));
 outletRoute.delete("/:outletId/delete-table/:tableId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.deleteTable));
 outletRoute.post("/:outletId/create-area", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.createArea));

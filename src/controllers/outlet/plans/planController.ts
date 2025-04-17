@@ -1,19 +1,49 @@
 import { Request, Response } from "express";
 import Razorpay from "razorpay";
-import crypto from "crypto";
+import crypto, { randomUUID } from "crypto";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { NotFoundException } from "../../../exceptions/not-found";
-import { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } from "../../../secrets";
+import {
+  ENV,
+  PHONE_PE_CLIENT_ID,
+  PHONE_PE_CLIENT_SECRET,
+  RAZORPAY_KEY_ID,
+  RAZORPAY_KEY_SECRET,
+} from "../../../secrets";
 import { getOutletById } from "../../../lib/outlet";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
+import {
+  Env,
+  StandardCheckoutClient,
+  StandardCheckoutPayRequest,
+} from "pg-sdk-node";
 
 const razorpay = new Razorpay({
   key_id: RAZORPAY_KEY_ID,
   key_secret: RAZORPAY_KEY_SECRET,
 });
+
+const API =
+  ENV === "production"
+    ? "https://api.restobytes.in/api"
+    : "http://localhost:8080/api";
+const FRONTEND =
+  ENV === "production" ? "https://app.restobytes.in" : "http://localhost:4000";
+
+const clientId = PHONE_PE_CLIENT_ID;
+const clientSecret = PHONE_PE_CLIENT_SECRET;
+const clientVersion = 1;
+const env = Env.SANDBOX;
+
+const phonePeClient = StandardCheckoutClient.getInstance(
+  clientId,
+  clientSecret,
+  clientVersion,
+  env
+);
 
 export async function CreateRazorPayOrder(req: Request, res: Response) {
   const { amount } = req.body;
@@ -27,6 +57,112 @@ export async function CreateRazorPayOrder(req: Request, res: Response) {
     success: true,
     orderId: order.id,
   });
+}
+
+export async function createPhonePeOrder(req: Request, res: Response) {
+  const { amount, subscriptionId } = req.body;
+  // @ts-ignore
+  const userId = req.user.id;
+
+  if (!amount) {
+    throw new NotFoundException(
+      "Amount is Required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+  const merchantOrderId = randomUUID();
+  const redirectUrl = `${API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
+  const request = StandardCheckoutPayRequest.builder()
+    .merchantOrderId(merchantOrderId)
+    .amount(amount)
+    .redirectUrl(redirectUrl)
+    .build();
+
+  const response = await phonePeClient.pay(request);
+  return res.json({
+    success: true,
+    redirectUrl: response.redirectUrl,
+  });
+}
+
+export async function statusPhonePeCheck(req: Request, res: Response) {
+  const { merchantOrderId, subId, userId } = req.query;
+
+  if (!merchantOrderId) {
+    throw new NotFoundException(
+      "MerchantORderId is Missing",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+  const response = await phonePeClient.getOrderStatus(
+    merchantOrderId as string
+  );
+
+  const status = response.state;
+
+  if (status === "COMPLETED") {
+    // Create subscription similar to buyPlan function
+    if (!subId || !userId) {
+      throw new BadRequestsException(
+        "Subscription ID or User ID is missing",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    const findOwner = await prismaDB.user.findFirst({
+      where: {
+        id: userId as string,
+      },
+    });
+
+    if (!findOwner?.id) {
+      throw new NotFoundException("User Not Found", ErrorCode.NOT_FOUND);
+    }
+
+    const findSubscription = await prismaDB.subsciption.findFirst({
+      where: {
+        id: subId as string,
+      },
+    });
+
+    if (!findSubscription) {
+      throw new BadRequestsException(
+        "No Subscription Found",
+        ErrorCode.NOT_FOUND
+      );
+    }
+
+    let validDate = new Date();
+    const paidAmount = response.amount / 100 || 0;
+
+    if (paidAmount === 0) {
+      // Set validDate to 15 days from today for free trial
+      validDate.setDate(validDate.getDate() + 15);
+    } else if (findSubscription.planType === "MONTHLY") {
+      validDate.setMonth(validDate.getMonth() + 1);
+    } else if (findSubscription.planType === "ANNUALLY") {
+      validDate.setFullYear(validDate.getFullYear() + 1);
+    }
+
+    await prismaDB.subscriptionBilling.create({
+      data: {
+        userId: findOwner.id,
+        isSubscription: true,
+        paymentId: response?.orderId || (merchantOrderId as string),
+        paidAmount: paidAmount,
+        subscribedDate: new Date(),
+        planType: findSubscription.planType,
+        subscriptionPlan: findSubscription.subscriptionPlan,
+        validDate: validDate,
+      },
+    });
+
+    await getFormatUserAndSendToRedis(findOwner?.id);
+
+    return res.redirect(`${FRONTEND}/thankyou?status=success`);
+  } else {
+    return res.redirect(`${FRONTEND}/thankyou?status=failure`);
+  }
 }
 
 export async function CreateRazorPayOrderForOutlet(

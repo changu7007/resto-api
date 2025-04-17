@@ -603,6 +603,8 @@ enum FoodRole {
   ALCOHOL
   NONALCOHOLIC
   MILK
+  FISH
+  NOTAPPLICABLE
 }
 
 model MenuItem {
@@ -615,8 +617,9 @@ model MenuItem {
   isArchived       Boolean?          @default(false)
   name             String
   slug             String
+  onlineName       String?
   shortCode        String?
-  description      String
+  description      String?
   isVariants       Boolean           @default(false)
   menuItemVariants MenuItemVariant[]
   isAddons         Boolean           @default(false)
