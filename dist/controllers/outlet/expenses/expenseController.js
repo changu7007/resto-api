@@ -32,16 +32,16 @@ const expenseSchema = zod_1.z.object({
     ], { required_error: "Please select a category." }),
     restock: zod_1.z.boolean().optional(),
     purchaseId: zod_1.z.string().optional(),
-    vendorId: zod_1.z.string().min(1, { message: "Vendor Is Required" }).optional(),
+    vendorId: zod_1.z.string().optional(),
     rawMaterials: zod_1.z.array(zod_1.z.object({
         id: zod_1.z.string().optional(),
         rawMaterialId: zod_1.z.string().min(1, { message: "Raw Material Is Required" }),
         rawMaterialName: zod_1.z.string().min(1, { message: "Raw Material Name" }),
         unitName: zod_1.z.string().min(1, { message: "Unit Name is required" }),
-        requestUnitId: zod_1.z.string().min(1, { message: "Request Unit is Required" }),
+        requestUnitId: zod_1.z.string().min(0, { message: "Request Unit is Required" }),
         requestQuantity: zod_1.z.coerce
             .number()
-            .min(1, { message: "Request Quantity is Required" }),
+            .min(0, { message: "Request Quantity is Required" }),
         netRate: zod_1.z.number().optional(),
         gstType: zod_1.z.nativeEnum(client_1.GstType),
         taxAmount: zod_1.z.number().optional(),
@@ -304,6 +304,8 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
     if (result === null || result === void 0 ? void 0 : result.id) {
         yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
         yield redis_1.redis.del(`alerts-${outletId}`);
+        yield redis_1.redis.del(`${outletId}-all-items`);
+        yield redis_1.redis.del(`${outletId}-all-items-online-and-delivery`);
         ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
         return res.json({
             success: true,

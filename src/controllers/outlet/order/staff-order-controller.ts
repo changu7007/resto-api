@@ -608,6 +608,20 @@ export const postOrderForStafUsingQueue = async (
     }
   }
 
+  if (!validTypes.includes(orderType)) {
+    throw new BadRequestsException(
+      "Invalid Order Type",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (orderType === "DINEIN" && !tableId) {
+    throw new BadRequestsException(
+      "Table ID is required for DINEIN order type",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
   let cashRegister: CashRegister | null = null;
 
   if (isPaid === true) {
@@ -630,20 +644,6 @@ export const postOrderForStafUsingQueue = async (
 
   if (!findStaff?.id || !getOutlet?.id) {
     throw new NotFoundException("Unauthorized Access", ErrorCode.NOT_FOUND);
-  }
-
-  if (!validTypes.includes(orderType)) {
-    throw new BadRequestsException(
-      "Invalid Order Type",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
-
-  if (orderType === "DINEIN" && !tableId) {
-    throw new BadRequestsException(
-      "Table ID is required for DINEIN order type",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
   }
 
   // Generate IDs

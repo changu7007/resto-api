@@ -313,7 +313,7 @@ const CustomerLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 exports.CustomerLogin = CustomerLogin;
 const customerUpdateSession = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId, customerId } = req.params;
-    const { userType, tableId } = req.body;
+    const { userType, tableId, address, location } = req.body;
     if (!outletId) {
         throw new bad_request_1.BadRequestsException("Restuarant ID Required", root_1.ErrorCode.NOT_FOUND);
     }
@@ -340,6 +340,10 @@ const customerUpdateSession = (req, res) => __awaiter(void 0, void 0, void 0, fu
         },
         data: {
             userType: userType,
+            address: `${address === null || address === void 0 ? void 0 : address.area},${address === null || address === void 0 ? void 0 : address.address}`,
+            landmark: address === null || address === void 0 ? void 0 : address.landmark,
+            latitude: (location === null || location === void 0 ? void 0 : location.lat) ? location === null || location === void 0 ? void 0 : location.lat.toString() : null,
+            longitude: (location === null || location === void 0 ? void 0 : location.lng) ? location === null || location === void 0 ? void 0 : location.lng.toString() : null,
         },
     });
     if (tableId) {
@@ -413,9 +417,10 @@ const getCurrentOrderForCustomer = (req, res) => __awaiter(void 0, void 0, void 
         throw new not_found_1.NotFoundException("Customer Not Found", root_1.ErrorCode.NOT_FOUND);
     }
     const formattedOrder = customer === null || customer === void 0 ? void 0 : customer.orderSession.filter((s) => s.active === true).map((session) => {
-        var _a;
+        var _a, _b;
         return ({
             id: session === null || session === void 0 ? void 0 : session.id,
+            orderStatus: (_a = session === null || session === void 0 ? void 0 : session.orders) === null || _a === void 0 ? void 0 : _a.some((o) => (o === null || o === void 0 ? void 0 : o.orderStatus) !== "SERVED" && (o === null || o === void 0 ? void 0 : o.orderStatus) !== "CANCELLED"),
             billId: session === null || session === void 0 ? void 0 : session.billId,
             active: session === null || session === void 0 ? void 0 : session.active,
             invoiceUrl: session === null || session === void 0 ? void 0 : session.invoiceUrl,
@@ -424,7 +429,7 @@ const getCurrentOrderForCustomer = (req, res) => __awaiter(void 0, void 0, void 
             isPaid: session === null || session === void 0 ? void 0 : session.isPaid,
             subTotal: session === null || session === void 0 ? void 0 : session.subTotal,
             paymentMethod: session === null || session === void 0 ? void 0 : session.paymentMethod,
-            orders: (_a = session === null || session === void 0 ? void 0 : session.orders) === null || _a === void 0 ? void 0 : _a.map((order) => ({
+            orders: (_b = session === null || session === void 0 ? void 0 : session.orders) === null || _b === void 0 ? void 0 : _b.map((order) => ({
                 id: order === null || order === void 0 ? void 0 : order.generatedOrderId,
                 orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus,
                 totalAmount: order === null || order === void 0 ? void 0 : order.totalAmount,

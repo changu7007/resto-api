@@ -24,6 +24,7 @@ const orderSessionController_1 = require("./orderSession/orderSessionController"
 const date_fns_1 = require("date-fns");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
 const zod_1 = require("zod");
+const expo_notifications_1 = require("../../../services/expo-notifications");
 const getLiveOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisLiveOrder = yield redis_1.redis.get(`liv-o-${outletId}`);
@@ -204,9 +205,21 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
             orderType: true,
             createdAt: true,
             updatedAt: true,
+            loyaltRedeemPoints: true,
             discount: true,
             discountAmount: true,
+            gstAmount: true,
             amountReceived: true,
+            customer: {
+                select: {
+                    customer: {
+                        select: {
+                            name: true,
+                            phoneNo: true,
+                        },
+                    },
+                },
+            },
             table: {
                 select: {
                     name: true,
@@ -250,24 +263,31 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
             count: item._count.orderType,
         })),
         activeOrders: activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => {
-            var _a, _b;
+            var _a, _b, _c, _d, _e, _f;
             return ({
                 id: order === null || order === void 0 ? void 0 : order.id,
                 billId: order === null || order === void 0 ? void 0 : order.billId,
-                userName: order === null || order === void 0 ? void 0 : order.username,
+                userName: (order === null || order === void 0 ? void 0 : order.username)
+                    ? order === null || order === void 0 ? void 0 : order.username
+                    : (_b = (_a = order === null || order === void 0 ? void 0 : order.customer) === null || _a === void 0 ? void 0 : _a.customer) === null || _b === void 0 ? void 0 : _b.name,
+                phoneNo: (order === null || order === void 0 ? void 0 : order.phoneNo)
+                    ? order === null || order === void 0 ? void 0 : order.phoneNo
+                    : (_d = (_c = order === null || order === void 0 ? void 0 : order.customer) === null || _c === void 0 ? void 0 : _c.customer) === null || _d === void 0 ? void 0 : _d.phoneNo,
                 isPaid: order === null || order === void 0 ? void 0 : order.isPaid,
                 active: order === null || order === void 0 ? void 0 : order.active,
                 invoiceUrl: order === null || order === void 0 ? void 0 : order.invoiceUrl,
                 paymentMethod: order === null || order === void 0 ? void 0 : order.paymentMethod,
                 subTotal: order === null || order === void 0 ? void 0 : order.subTotal,
                 status: order === null || order === void 0 ? void 0 : order.sessionStatus,
-                orderType: (order === null || order === void 0 ? void 0 : order.orderType) === "DINEIN" ? (_a = order === null || order === void 0 ? void 0 : order.table) === null || _a === void 0 ? void 0 : _a.name : order === null || order === void 0 ? void 0 : order.orderType,
+                orderType: (order === null || order === void 0 ? void 0 : order.orderType) === "DINEIN" ? (_e = order === null || order === void 0 ? void 0 : order.table) === null || _e === void 0 ? void 0 : _e.name : order === null || order === void 0 ? void 0 : order.orderType,
                 date: order === null || order === void 0 ? void 0 : order.createdAt,
                 modified: order === null || order === void 0 ? void 0 : order.updatedAt,
                 discount: order === null || order === void 0 ? void 0 : order.discount,
                 discountAmount: order === null || order === void 0 ? void 0 : order.discountAmount,
+                gstAmount: order === null || order === void 0 ? void 0 : order.gstAmount,
+                loyaltyDiscount: order === null || order === void 0 ? void 0 : order.loyaltRedeemPoints,
                 amountReceived: order === null || order === void 0 ? void 0 : order.amountReceived,
-                viewOrders: (_b = order === null || order === void 0 ? void 0 : order.orders) === null || _b === void 0 ? void 0 : _b.map((o) => {
+                viewOrders: (_f = order === null || order === void 0 ? void 0 : order.orders) === null || _f === void 0 ? void 0 : _f.map((o) => {
                     var _a;
                     return ({
                         id: o === null || o === void 0 ? void 0 : o.id,
@@ -519,7 +539,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     var _d;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { adminId, cashRegisterId, username, isPaid, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, paymentMethod, note, orderMode, isSplitPayment, splitPayments, receivedAmount, changeAmount, } = req.body;
+    const { adminId, cashRegisterId, username, isPaid, isValid, phoneNo, orderType, totalNetPrice, gstPrice, totalAmount, customerId, totalGrossProfit, orderItems, tableId, paymentMethod, note, orderMode, isSplitPayment, splitPayments, receivedAmount, changeAmount, } = req.body;
     if (isValid === true && !phoneNo) {
         throw new bad_request_1.BadRequestsException("please provide Phone No", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
@@ -591,42 +611,17 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
             redis_1.redis.del(`a-${outletId}`),
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
+            redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+            redis_1.redis.del(`${outletId}-all-items`),
         ]);
         let customer;
         if (isValid) {
-            customer = yield prisma.customer.findFirst({
+            customer = yield prisma.customerRestaurantAccess.findFirst({
                 where: {
-                    phoneNo: phoneNo,
-                    restaurantAccess: {
-                        some: {
-                            restaurantId: getOutlet.id,
-                        },
-                    },
+                    restaurantId: outletId,
+                    customerId: customerId,
                 },
             });
-            if (customer) {
-                customer = yield prisma.customer.update({
-                    where: {
-                        id: customer.id,
-                    },
-                    data: {
-                        name: username,
-                    },
-                });
-            }
-            else {
-                customer = yield prisma.customer.create({
-                    data: {
-                        name: username,
-                        phoneNo: phoneNo,
-                        restaurantAccess: {
-                            create: {
-                                restaurantId: getOutlet.id,
-                            },
-                        },
-                    },
-                });
-            }
         }
         const orderSession = yield prisma.orderSession.create({
             data: {
@@ -805,6 +800,16 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 orderType: tableId ? "DINEIN" : orderType,
             },
         });
+        // Send push notifications for new dine-in orders
+        if (orderType === "DINEIN") {
+            yield (0, expo_notifications_1.sendNewOrderNotification)({
+                restaurantId: getOutlet.id,
+                orderId: orderId,
+                orderNumber: billNo,
+                customerName: username !== null && username !== void 0 ? username : findUser.name,
+                tableId: tableId, // This will be updated when staff is assigned
+            });
+        }
         if ((_h = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _h === void 0 ? void 0 : _h.id) {
             yield prisma.invoice.update({
                 where: {
@@ -877,7 +882,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
     var _j;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { customerId, isPaid, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, note, paymentId, } = req.body;
+    const { customerId, isPaid, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, note, paymentId, paymentMode, } = req.body;
     // @ts-ignore
     if (customerId !== ((_j = req.user) === null || _j === void 0 ? void 0 : _j.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
@@ -892,7 +897,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         throw new bad_request_1.BadRequestsException("Outlet Id is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     return yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        var _k, _l, _m, _o, _p, _q, _r, _s, _t;
+        var _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
         yield Promise.all([
             redis_1.redis.del(`active-os-${outletId}`),
             redis_1.redis.del(`liv-o-${outletId}`),
@@ -900,6 +905,8 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             redis_1.redis.del(`a-${outletId}`),
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
+            redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+            redis_1.redis.del(`${outletId}-all-items`),
         ]);
         // Validate customer and access
         const validCustomer = yield tx.customerRestaurantAccess.findFirst({
@@ -907,7 +914,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             include: { customer: true },
         });
         if (!(validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.id)) {
-            throw new bad_request_1.BadRequestsException("You Need to login & place the order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+            throw new bad_request_1.BadRequestsException("You Need to logout & login again to place the order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
         }
         // Get outlet
         const getOutlet = yield tx.restaurant.findUnique({
@@ -929,7 +936,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             active: true,
             restaurantId: getOutlet.id,
             createdBy: `${validCustomer.customer.name} (${validCustomer.customer.role})`,
-            isPaid,
+            isPaid: paymentId ? true : false,
             generatedOrderId: orderId,
             orderType,
             totalNetPrice,
@@ -1005,6 +1012,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     },
                 },
             });
+            console.log(`Staff Assigned-${staffTables === null || staffTables === void 0 ? void 0 : staffTables.name}`);
             if (!checkTable) {
                 throw new bad_request_1.BadRequestsException("You Need to scan the Qr Code again to place Order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
             }
@@ -1014,7 +1022,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     where: { id: checkTable.currentOrderSessionId },
                     data: {
                         orders: {
-                            create: Object.assign(Object.assign({}, baseOrderData), { orderStatus: "INCOMMING" }),
+                            create: Object.assign(Object.assign({}, baseOrderData), { staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id, orderStatus: "INCOMMING" }),
                         },
                     },
                     include: {
@@ -1031,15 +1039,16 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                         billId: ((_k = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _k === void 0 ? void 0 : _k.isGSTEnabled)
                             ? `${(_l = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _l === void 0 ? void 0 : _l.prefix}${(_m = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _m === void 0 ? void 0 : _m.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
                             : billNo,
-                        username: validCustomer.customer.name,
-                        phoneNo: validCustomer.customer.phoneNo,
-                        customerId: validCustomer.id,
+                        username: (_o = validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.customer) === null || _o === void 0 ? void 0 : _o.name,
+                        phoneNo: (_p = validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.customer) === null || _p === void 0 ? void 0 : _p.phoneNo,
+                        customerId: validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.id,
                         staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id,
                         tableId,
+                        platform: "ONLINE",
                         restaurantId: getOutlet.id,
                         orderType,
                         orders: {
-                            create: Object.assign(Object.assign({}, baseOrderData), { orderStatus: "INCOMMING" }),
+                            create: Object.assign(Object.assign({}, baseOrderData), { staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id, orderStatus: "INCOMMING" }),
                         },
                     },
                     include: {
@@ -1057,7 +1066,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     where: { id: tableId },
                     data: { currentOrderSessionId: orderSession.id },
                 });
-                if ((_o = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _o === void 0 ? void 0 : _o.id) {
+                if ((_q = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _q === void 0 ? void 0 : _q.id) {
                     yield tx.invoice.update({
                         where: {
                             restaurantId: getOutlet.id,
@@ -1073,14 +1082,17 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             // Handle TAKEAWAY or DELIVERY order
             orderSession = yield tx.orderSession.create({
                 data: {
-                    billId: ((_p = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _p === void 0 ? void 0 : _p.isGSTEnabled)
-                        ? `${(_q = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _q === void 0 ? void 0 : _q.prefix}${(_r = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _r === void 0 ? void 0 : _r.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
+                    billId: ((_r = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _r === void 0 ? void 0 : _r.isGSTEnabled)
+                        ? `${(_s = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _s === void 0 ? void 0 : _s.prefix}${(_t = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _t === void 0 ? void 0 : _t.invoiceNo}/${(0, date_fns_1.getYear)(new Date())}`
                         : billNo,
                     orderType,
-                    username: validCustomer.customer.name,
-                    phoneNo: validCustomer.customer.phoneNo,
-                    customerId: validCustomer.id,
-                    restaurantId: getOutlet.id,
+                    username: (_u = validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.customer) === null || _u === void 0 ? void 0 : _u.name,
+                    phoneNo: (_v = validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.customer) === null || _v === void 0 ? void 0 : _v.phoneNo,
+                    customerId: validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.id,
+                    restaurantId: getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id,
+                    platform: "ONLINE",
+                    transactionId: paymentId,
+                    paymentMode: paymentMode,
                     isPaid: true,
                     paymentMethod: paymentId ? "UPI" : "CASH",
                     subTotal: calculate.roundedTotal,
@@ -1143,7 +1155,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     })));
                 }
             })));
-            if ((_s = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _s === void 0 ? void 0 : _s.id) {
+            if ((_w = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _w === void 0 ? void 0 : _w.id) {
                 yield tx.invoice.update({
                     where: {
                         restaurantId: getOutlet.id,
@@ -1216,19 +1228,17 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         //   `Order: ${orderItems?.length}`
         // );
         // Update customer access stats
-        yield tx.customerRestaurantAccess.update({
-            where: {
-                customerId_restaurantId: {
-                    customerId: validCustomer.customer.id,
-                    restaurantId: getOutlet.id,
-                },
-            },
-            data: {
-                lastVisit: new Date(),
-                totalOrders: { increment: 1 },
-                totalSpent: { increment: Number(totalAmount) },
-            },
-        });
+        // await tx.customerRestaurantAccess.update({
+        //   where: {
+        //     id: validCustomer?.id,
+        //     restaurantId: outletId,
+        //   },
+        //   data: {
+        //     lastVisit: new Date(),
+        //     totalOrders: { increment: 1 },
+        //     totalSpent: { increment: Number(totalAmount) },
+        //   },
+        // });
         // Delete any LOW_STOCK alerts for this restaurant
         yield tx.alert.deleteMany({
             where: {
@@ -1264,11 +1274,20 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
             },
             tableInfo: orderSession.tableId
                 ? {
-                    name: `${(_t = orderSession.table) === null || _t === void 0 ? void 0 : _t.name}`,
+                    name: `${(_x = orderSession.table) === null || _x === void 0 ? void 0 : _x.name}`,
                     area: "Main Area",
                 }
                 : undefined,
         };
+        if (orderType === "DINEIN" && (orderSession === null || orderSession === void 0 ? void 0 : orderSession.tableId)) {
+            yield (0, expo_notifications_1.sendNewOrderNotification)({
+                restaurantId: getOutlet.id,
+                orderId: orderId,
+                orderNumber: orderId,
+                customerName: (_y = orderData === null || orderData === void 0 ? void 0 : orderData.customerInfo) === null || _y === void 0 ? void 0 : _y.name,
+                tableId: orderSession === null || orderSession === void 0 ? void 0 : orderSession.tableId,
+            });
+        }
         yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
         // Notify clients and update Redis
         ws_1.websocketManager.notifyClients(getOutlet.id, "NEW_ORDER_FROM_PRIME", orderData);
@@ -1282,11 +1301,11 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.postOrderForUser = postOrderForUser;
 const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _u, _v;
+    var _z, _0;
     const { outletId, orderId } = req.params;
     const { billerId, isPaid, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, orderMode, } = req.body;
     // @ts-ignore
-    if (billerId !== ((_u = req.user) === null || _u === void 0 ? void 0 : _u.id)) {
+    if (billerId !== ((_z = req.user) === null || _z === void 0 ? void 0 : _z.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
     }
     const [findBiller, getOutlet] = yield Promise.all([
@@ -1445,10 +1464,19 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
             orderId: generatedId,
             message: "You have a new Order",
             orderType: getOrder.orderType === "DINEIN"
-                ? (_v = getOrder.table) === null || _v === void 0 ? void 0 : _v.name
+                ? (_0 = getOrder.table) === null || _0 === void 0 ? void 0 : _0.name
                 : getOrder.orderType,
         },
     });
+    if ((getOrder === null || getOrder === void 0 ? void 0 : getOrder.orderType) === "DINEIN" && (getOrder === null || getOrder === void 0 ? void 0 : getOrder.tableId)) {
+        yield (0, expo_notifications_1.sendNewOrderNotification)({
+            restaurantId: getOutlet.id,
+            orderId: orderId,
+            orderNumber: orderId,
+            customerName: getOrder === null || getOrder === void 0 ? void 0 : getOrder.username,
+            tableId: getOrder === null || getOrder === void 0 ? void 0 : getOrder.tableId,
+        });
+    }
     yield Promise.all([
         redis_1.redis.del(`active-os-${outletId}`),
         redis_1.redis.del(`liv-o-${outletId}`),
@@ -1456,6 +1484,8 @@ const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, fu
         redis_1.redis.del(`a-${outletId}`),
         redis_1.redis.del(`o-n-${outletId}`),
         redis_1.redis.del(`${outletId}-stocks`),
+        redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+        redis_1.redis.del(`${outletId}-all-items`),
     ]);
     yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
     ws_1.websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
@@ -1569,7 +1599,7 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
     // Perform updates within a transaction
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        var _w, _x;
+        var _1, _2;
         // Refresh Redis cache
         yield Promise.all([
             redis_1.redis.del(`active-os-${outletId}`),
@@ -1578,6 +1608,8 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
             redis_1.redis.del(`a-${outletId}`),
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
+            redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+            redis_1.redis.del(`${outletId}-all-items`),
         ]);
         //if order is dineIn then update the table status to unoccupied
         if (getOrderById.orderType === "DINEIN") {
@@ -1624,7 +1656,7 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
         // Restore raw material stock for each order item if menuItem's chooseProfit is "itemRecipe"
         for (const order of orders) {
             for (const item of order.orderItems) {
-                if (((_w = item.menuItem) === null || _w === void 0 ? void 0 : _w.chooseProfit) === "itemRecipe" &&
+                if (((_1 = item.menuItem) === null || _1 === void 0 ? void 0 : _1.chooseProfit) === "itemRecipe" &&
                     item.menuItem.itemRecipe) {
                     for (const ingredient of item.menuItem.itemRecipe.ingredients) {
                         const rawMaterial = yield tx.rawMaterial.findUnique({
@@ -1654,7 +1686,7 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
                             const newStockLevel = Number(rawMaterial.currentStock) + Number(incrementStock);
                             // Check if the new stock level would be negative
                             if (newStockLevel < 0) {
-                                throw new bad_request_1.BadRequestsException(`Cannot delete order item: Stock for ${rawMaterial.name} would go negative. Current stock: ${(_x = rawMaterial.currentStock) === null || _x === void 0 ? void 0 : _x.toFixed(2)}, Required stock: ${incrementStock}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                                throw new bad_request_1.BadRequestsException(`Cannot delete order item: Stock for ${rawMaterial.name} would go negative. Current stock: ${(_2 = rawMaterial.currentStock) === null || _2 === void 0 ? void 0 : _2.toFixed(2)}, Required stock: ${incrementStock}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
                             }
                             // Update the raw material stock
                             yield tx.rawMaterial.update({
@@ -1728,10 +1760,10 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
 });
 exports.orderessionCancelPatch = orderessionCancelPatch;
 const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _y, _z;
+    var _3, _4;
     const { id, outletId } = req.params;
     // @ts-ignore
-    const userId = (_y = req === null || req === void 0 ? void 0 : req.user) === null || _y === void 0 ? void 0 : _y.id;
+    const userId = (_3 = req === null || req === void 0 ? void 0 : req.user) === null || _3 === void 0 ? void 0 : _3.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -1768,7 +1800,7 @@ const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, fu
     // Restore raw material stock for each order item if menuItem's chooseProfit is "itemRecipe"
     for (const order of orders) {
         for (const item of order.orderItems) {
-            if (((_z = item.menuItem) === null || _z === void 0 ? void 0 : _z.chooseProfit) === "itemRecipe" &&
+            if (((_4 = item.menuItem) === null || _4 === void 0 ? void 0 : _4.chooseProfit) === "itemRecipe" &&
                 item.menuItem.itemRecipe) {
                 for (const ingredient of item.menuItem.itemRecipe.ingredients) {
                     const rawMaterial = yield __1.prismaDB.rawMaterial.findUnique({
@@ -1826,6 +1858,8 @@ const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, fu
         redis_1.redis.del(`a-${outletId}`),
         redis_1.redis.del(`o-n-${outletId}`),
         redis_1.redis.del(`${outletId}-stocks`),
+        redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+        redis_1.redis.del(`${outletId}-all-items`),
     ]);
     return res.json({
         success: true,
@@ -1834,11 +1868,11 @@ const orderessionDeleteById = (req, res) => __awaiter(void 0, void 0, void 0, fu
 });
 exports.orderessionDeleteById = orderessionDeleteById;
 const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _0;
+    var _5;
     const { outletId } = req.params;
     const { selectedId } = req.body;
     // @ts-ignore
-    const userId = (_0 = req === null || req === void 0 ? void 0 : req.user) === null || _0 === void 0 ? void 0 : _0.id;
+    const userId = (_5 = req === null || req === void 0 ? void 0 : req.user) === null || _5 === void 0 ? void 0 : _5.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -1855,7 +1889,7 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
     }
     // Perform status update within a transaction
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        var _1;
+        var _6;
         yield Promise.all([
             redis_1.redis.del(`active-os-${outletId}`),
             redis_1.redis.del(`liv-o-${outletId}`),
@@ -1863,6 +1897,8 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
             redis_1.redis.del(`a-${outletId}`),
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
+            redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+            redis_1.redis.del(`${outletId}-all-items`),
         ]);
         // Get all orders in these order sessions with their order items
         const orders = yield tx.order.findMany({
@@ -1891,7 +1927,7 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
         // Restore raw material stock for each order item if menuItem's chooseProfit is "itemRecipe"
         for (const order of orders) {
             for (const item of order.orderItems) {
-                if (((_1 = item.menuItem) === null || _1 === void 0 ? void 0 : _1.chooseProfit) === "itemRecipe" &&
+                if (((_6 = item.menuItem) === null || _6 === void 0 ? void 0 : _6.chooseProfit) === "itemRecipe" &&
                     item.menuItem.itemRecipe) {
                     for (const ingredient of item.menuItem.itemRecipe.ingredients) {
                         const rawMaterial = yield tx.rawMaterial.findUnique({
@@ -2041,14 +2077,14 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.orderStatusPatch = orderStatusPatch;
 const getAllOrderByStaff = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _2;
+    var _7;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     // @ts-ignore
-    const staff = yield (0, get_users_1.getStaffById)(outletId, (_2 = req.user) === null || _2 === void 0 ? void 0 : _2.id);
+    const staff = yield (0, get_users_1.getStaffById)(outletId, (_7 = req.user) === null || _7 === void 0 ? void 0 : _7.id);
     if (!(staff === null || staff === void 0 ? void 0 : staff.id)) {
         throw new not_found_1.NotFoundException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }
@@ -2125,9 +2161,9 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
         throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
     }
     const txs = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
-        var _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20;
+        var _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25;
         // If menuItem's chooseProfit is "itemRecipe", update raw material stock
-        if (((_3 = getOrderById.menuItem) === null || _3 === void 0 ? void 0 : _3.chooseProfit) === "itemRecipe" &&
+        if (((_8 = getOrderById.menuItem) === null || _8 === void 0 ? void 0 : _8.chooseProfit) === "itemRecipe" &&
             getOrderById.menuItem.itemRecipe) {
             // Calculate the difference in quantity
             const oldQuantity = getOrderById.quantity;
@@ -2161,7 +2197,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                         // Check if the stock would go negative after adjustment
                         const newStockLevel = Number(rawMaterial.currentStock) - Number(stockAdjustment);
                         if (newStockLevel < 0) {
-                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}. Current stock: ${(_4 = rawMaterial.currentStock) === null || _4 === void 0 ? void 0 : _4.toFixed(2)} ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedUnit}, Required: ${Math.abs(stockAdjustment)} ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedUnit}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}. Current stock: ${(_9 = rawMaterial.currentStock) === null || _9 === void 0 ? void 0 : _9.toFixed(2)} ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedUnit}, Required: ${Math.abs(stockAdjustment)} ${rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedUnit}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
                         }
                         // If quantity increased, decrement stock; if decreased, increment stock
                         yield prisma.rawMaterial.update({
@@ -2185,15 +2221,15 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     ? {
                         update: {
                             where: {
-                                id: (_5 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.selectedVariant) === null || _5 === void 0 ? void 0 : _5.id,
+                                id: (_10 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.selectedVariant) === null || _10 === void 0 ? void 0 : _10.id,
                             },
                             data: {
                                 sizeVariantId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId,
-                                name: (_7 = (_6 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _6 === void 0 ? void 0 : _6.variant) === null || _7 === void 0 ? void 0 : _7.name,
-                                price: parseFloat((_8 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _8 === void 0 ? void 0 : _8.price),
-                                gst: Number((_9 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _9 === void 0 ? void 0 : _9.gst),
-                                netPrice: parseFloat((_10 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _10 === void 0 ? void 0 : _10.netPrice).toString(),
-                                grossProfit: Number((_11 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _11 === void 0 ? void 0 : _11.grossProfit),
+                                name: (_12 = (_11 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _11 === void 0 ? void 0 : _11.variant) === null || _12 === void 0 ? void 0 : _12.name,
+                                price: parseFloat((_13 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _13 === void 0 ? void 0 : _13.price),
+                                gst: Number((_14 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _14 === void 0 ? void 0 : _14.gst),
+                                netPrice: parseFloat((_15 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _15 === void 0 ? void 0 : _15.netPrice).toString(),
+                                grossProfit: Number((_16 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _16 === void 0 ? void 0 : _16.grossProfit),
                             },
                         },
                     }
@@ -2213,17 +2249,17 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 //   })),
                 // },
                 netPrice: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_12 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _12 === void 0 ? void 0 : _12.netPrice).toString()
-                    : Number((_13 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _13 === void 0 ? void 0 : _13.netPrice).toString(),
+                    ? Number((_17 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _17 === void 0 ? void 0 : _17.netPrice).toString()
+                    : Number((_18 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _18 === void 0 ? void 0 : _18.netPrice).toString(),
                 originalRate: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_14 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _14 === void 0 ? void 0 : _14.price)
-                    : Number((_15 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _15 === void 0 ? void 0 : _15.price),
+                    ? Number((_19 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _19 === void 0 ? void 0 : _19.price)
+                    : Number((_20 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _20 === void 0 ? void 0 : _20.price),
                 grossProfit: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? Number((_16 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _16 === void 0 ? void 0 : _16.grossProfit)
-                    : Number((_17 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _17 === void 0 ? void 0 : _17.grossProfit),
+                    ? Number((_21 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _21 === void 0 ? void 0 : _21.grossProfit)
+                    : Number((_22 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _22 === void 0 ? void 0 : _22.grossProfit),
                 gst: !(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isVariants)
-                    ? (_18 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _18 === void 0 ? void 0 : _18.gst
-                    : (_19 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _19 === void 0 ? void 0 : _19.gst,
+                    ? (_23 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem) === null || _23 === void 0 ? void 0 : _23.gst
+                    : (_24 = getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.menuItem.menuItemVariants.find((v) => (v === null || v === void 0 ? void 0 : v.id) === (validateFields === null || validateFields === void 0 ? void 0 : validateFields.selectedVariantId))) === null || _24 === void 0 ? void 0 : _24.gst,
                 totalPrice: validateFields === null || validateFields === void 0 ? void 0 : validateFields.totalPrice,
             },
         });
@@ -2274,7 +2310,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
         yield prisma.alert.deleteMany({
             where: {
                 restaurantId: outlet.id,
-                orderId: (_20 = getOrder === null || getOrder === void 0 ? void 0 : getOrder.order) === null || _20 === void 0 ? void 0 : _20.id,
+                orderId: (_25 = getOrder === null || getOrder === void 0 ? void 0 : getOrder.order) === null || _25 === void 0 ? void 0 : _25.id,
                 status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
             },
         });
@@ -2294,6 +2330,8 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
             redis_1.redis.del(`alerts-${outletId}`),
+            redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+            redis_1.redis.del(`${outletId}-all-items`),
         ]);
     }));
     return res.json({
@@ -2303,7 +2341,7 @@ const orderItemModification = (req, res) => __awaiter(void 0, void 0, void 0, fu
 });
 exports.orderItemModification = orderItemModification;
 const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _21;
+    var _26;
     const { orderItemId, outletId } = req.params;
     // Validate outlet
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -2363,7 +2401,7 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
     const orderSession = parentOrder.orderSession;
     // Use Prisma transaction for atomic operation
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        var _22;
+        var _27;
         // Refresh caches after successful transaction
         yield Promise.all([
             redis_1.redis.del(`active-os-${outletId}`),
@@ -2372,9 +2410,11 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
             redis_1.redis.del(`a-${outletId}`),
             redis_1.redis.del(`o-n-${outletId}`),
             redis_1.redis.del(`${outletId}-stocks`),
+            redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+            redis_1.redis.del(`${outletId}-all-items`),
         ]);
         // If menuItem's chooseProfit is "itemRecipe", restore raw material stock
-        if (((_22 = orderItem.menuItem) === null || _22 === void 0 ? void 0 : _22.chooseProfit) === "itemRecipe" &&
+        if (((_27 = orderItem.menuItem) === null || _27 === void 0 ? void 0 : _27.chooseProfit) === "itemRecipe" &&
             orderItem.menuItem.itemRecipe) {
             for (const ingredient of orderItem.menuItem.itemRecipe.ingredients) {
                 const rawMaterial = yield tx.rawMaterial.findUnique({
@@ -2498,7 +2538,7 @@ const deleteOrderItem = (req, res) => __awaiter(void 0, void 0, void 0, function
             generatedOrderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.generatedOrderId,
             name: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.username,
             mode: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.orderType,
-            table: (_21 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _21 === void 0 ? void 0 : _21.name,
+            table: (_26 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _26 === void 0 ? void 0 : _26.name,
         },
     });
 });
@@ -2514,7 +2554,7 @@ const inviteCode = () => {
 };
 exports.inviteCode = inviteCode;
 const getParentOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _23;
+    var _28;
     const { orderItemId, outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
@@ -2543,7 +2583,7 @@ const getParentOrder = (req, res) => __awaiter(void 0, void 0, void 0, function*
             generatedOrderId: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.generatedOrderId,
             name: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.username,
             mode: parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.orderType,
-            table: (_23 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _23 === void 0 ? void 0 : _23.name,
+            table: (_28 = parentOrder === null || parentOrder === void 0 ? void 0 : parentOrder.orderSession.table) === null || _28 === void 0 ? void 0 : _28.name,
         },
     });
 });

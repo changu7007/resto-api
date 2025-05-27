@@ -39,6 +39,7 @@ const getAlerts = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             id: true,
             type: true,
             status: true,
+            orderId: true,
             priority: true,
             message: true,
             createdAt: true,
@@ -92,8 +93,12 @@ const acknowledgeAlert = (req, res) => __awaiter(void 0, void 0, void 0, functio
             type: true,
             status: true,
             priority: true,
+            orderId: true,
             message: true,
             createdAt: true,
+        },
+        orderBy: {
+            createdAt: "desc",
         },
     });
     yield redis_1.redis.set(`alerts-${outletId}`, JSON.stringify(alerts));

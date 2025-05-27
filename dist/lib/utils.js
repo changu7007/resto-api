@@ -8,10 +8,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDaysRemaining = exports.getVerificationTokenByToken = exports.getVerificationTokenByEmail = exports.generateVerificationToken = exports.getPeriodDates = exports.generateSlug = void 0;
+exports.decryptData = exports.encryptData = exports.calculateInOut = exports.getDaysRemaining = exports.getVerificationTokenByToken = exports.getVerificationTokenByEmail = exports.generateVerificationToken = exports.getPeriodDates = exports.generateSlug = void 0;
 const __1 = require("..");
 const uuid_1 = require("uuid");
+const secrets_1 = require("../secrets");
+const crypto_js_1 = __importDefault(require("crypto-js"));
 function generateSlug(name) {
     return name.toLowerCase().replace(/\s+/g, "-");
 }
@@ -114,3 +119,18 @@ function getDaysRemaining(subscribedDate) {
     return daysRemaining;
 }
 exports.getDaysRemaining = getDaysRemaining;
+const calculateInOut = (transactions) => {
+    return transactions.reduce((balance, tx) => {
+        return balance + tx.amount;
+    }, 0);
+};
+exports.calculateInOut = calculateInOut;
+const encryptData = (data) => {
+    return crypto_js_1.default.AES.encrypt(data, secrets_1.ENCRYPT_KEY).toString();
+};
+exports.encryptData = encryptData;
+const decryptData = (ciphertext) => {
+    const bytes = crypto_js_1.default.AES.decrypt(ciphertext, secrets_1.ENCRYPT_KEY);
+    return bytes.toString(crypto_js_1.default.enc.Utf8);
+};
+exports.decryptData = decryptData;

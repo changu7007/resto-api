@@ -325,7 +325,6 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 },
             ],
         }));
-        console.log("Weekly Raw MongoDB Result:", JSON.stringify(result, null, 2));
         // MongoDB dayOfWeek: 1 (Sunday) to 7 (Saturday)
         // Convert to: 0 (Sunday) to 6 (Saturday)
         const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -434,17 +433,33 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 });
 exports.getPosStats = getPosStats;
 const getPopularItems = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _l;
     const { outletId } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = 5;
     const skip = (page - 1) * limit;
+    // Get today's date range in Asia/Kolkata timezone
+    const timeZone = "Asia/Kolkata"; // Default timezone
+    const todayStart = luxon_1.DateTime.now()
+        .setZone(timeZone)
+        .startOf("day")
+        .toUTC()
+        .toISO();
+    const todayEnd = (_l = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO()) !== null && _l !== void 0 ? _l : new Date().toISOString();
+    if (!todayStart || !todayEnd) {
+        throw new Error("Failed to calculate today's date range.");
+    }
     const [popularItems, total] = yield Promise.all([
         __1.prismaDB.orderItem.groupBy({
-            by: ["menuId", "name"],
+            by: ["menuId", "name", "quantity"],
             where: {
                 order: {
                     restaurantId: outletId,
                     orderStatus: "COMPLETED",
+                    createdAt: {
+                        gte: new Date(todayStart),
+                        lte: new Date(todayEnd),
+                    },
                 },
             },
             _count: {
@@ -465,6 +480,10 @@ const getPopularItems = (req, res) => __awaiter(void 0, void 0, void 0, function
                 order: {
                     restaurantId: outletId,
                     orderStatus: "COMPLETED",
+                    createdAt: {
+                        gte: new Date(todayStart),
+                        lte: new Date(todayEnd),
+                    },
                 },
             },
         })
@@ -483,7 +502,7 @@ const getPopularItems = (req, res) => __awaiter(void 0, void 0, void 0, function
         return {
             name: item.name,
             category: (menuItem === null || menuItem === void 0 ? void 0 : menuItem.category.name) || "Uncategorized",
-            orderCount: item._count.menuId,
+            orderCount: item.quantity,
         };
     })));
     res.json({
@@ -501,10 +520,22 @@ const getPopularItems = (req, res) => __awaiter(void 0, void 0, void 0, function
 exports.getPopularItems = getPopularItems;
 // Get Staff Performance based on OrderSession and Orders
 const getStaffPerformance = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _m;
     const { outletId } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = 5;
     const skip = (page - 1) * limit;
+    // Get today's date range in Asia/Kolkata timezone
+    const timeZone = "Asia/Kolkata"; // Default timezone
+    const todayStart = luxon_1.DateTime.now()
+        .setZone(timeZone)
+        .startOf("day")
+        .toUTC()
+        .toISO();
+    const todayEnd = (_m = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO()) !== null && _m !== void 0 ? _m : new Date().toISOString();
+    if (!todayStart || !todayEnd) {
+        throw new Error("Failed to calculate today's date range.");
+    }
     const [staffPerformance, total] = yield Promise.all([
         __1.prismaDB.orderSession.groupBy({
             by: ["staffId"],
@@ -512,6 +543,10 @@ const getStaffPerformance = (req, res) => __awaiter(void 0, void 0, void 0, func
                 restaurantId: outletId,
                 sessionStatus: "COMPLETED",
                 staffId: { not: null },
+                createdAt: {
+                    gte: new Date(todayStart),
+                    lte: new Date(todayEnd),
+                },
             },
             _count: {
                 id: true,
@@ -531,6 +566,10 @@ const getStaffPerformance = (req, res) => __awaiter(void 0, void 0, void 0, func
                 restaurantId: outletId,
                 sessionStatus: "COMPLETED",
                 staffId: { not: null },
+                createdAt: {
+                    gte: new Date(todayStart),
+                    lte: new Date(todayEnd),
+                },
             },
         })
             .then((staff) => staff.length),
@@ -816,7 +855,7 @@ const getStockLevels = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 id: item.id,
                 name: item.name,
                 category: item.rawMaterialCategory.name,
-                currentStock: ((_a = item.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)) || 0,
+                currentStock: `${(_a = item.currentStock) === null || _a === void 0 ? void 0 : _a.toFixed(2)} - ${item === null || item === void 0 ? void 0 : item.purchasedUnit}`,
                 unit: item.consumptionUnit.name,
                 minStockLevel: item.minimumStockLevel || 0,
                 minStockUnit: item.minimumStockUnit.name,
@@ -1146,7 +1185,7 @@ const getVendorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
     });
     // Calculate vendor metrics
     const vendorsWithMetrics = yield Promise.all(vendors.map((vendor) => __awaiter(void 0, void 0, void 0, function* () {
-        var _l;
+        var _o;
         // Get total orders
         const totalOrders = yield __1.prismaDB.purchase.count({
             where: {
@@ -1164,7 +1203,7 @@ const getVendorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
             phone: "Missing", // Add to schema if needed
             email: "Missing", // Add to schema if needed
             totalOrders,
-            lastOrder: ((_l = vendor.purchases[0]) === null || _l === void 0 ? void 0 : _l.createdAt.toISOString().split("T")[0]) || null,
+            lastOrder: ((_o = vendor.purchases[0]) === null || _o === void 0 ? void 0 : _o.createdAt.toISOString().split("T")[0]) || null,
             rating,
             status: "ACTIVE", // Add status field to schema if needed
             createdAt: vendor.createdAt,
@@ -1187,7 +1226,7 @@ const getVendorStats = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.getVendorStats = getVendorStats;
 const getPOSDashboardStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _m;
+    var _p;
     const { outletId } = req.params;
     const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!getOutlet) {
@@ -1259,7 +1298,7 @@ const getPOSDashboardStats = (req, res) => __awaiter(void 0, void 0, void 0, fun
             },
             stock: {
                 recentStockPurchases: recentStockPurchases.length,
-                lastUpdateTime: (_m = recentStockPurchases[0]) === null || _m === void 0 ? void 0 : _m.updatedAt.toISOString(),
+                lastUpdateTime: (_p = recentStockPurchases[0]) === null || _p === void 0 ? void 0 : _p.updatedAt.toISOString(),
             },
         },
     });

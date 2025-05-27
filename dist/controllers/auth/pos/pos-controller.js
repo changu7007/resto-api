@@ -57,12 +57,6 @@ const StaffPOSLogin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     if (!(checkStaff === null || checkStaff === void 0 ? void 0 : checkStaff.id)) {
         throw new not_found_1.NotFoundException("Staff Not Found", root_1.ErrorCode.NOT_FOUND);
     }
-    // if (checkStaff.password !== password) {
-    //   throw new BadRequestsException(
-    //     "Incorrect Password",
-    //     ErrorCode.INCORRECT_PASSWORD
-    //   );
-    // }
     const formattedStaff = yield (0, get_users_1.getFormatStaffPOSAndSendToRedis)(checkStaff.id);
     (0, jwt_1.sendToken)(formattedStaff, 200, res);
 });
@@ -90,6 +84,76 @@ const GetPOSUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     return res.json({ success: true, user: GetPOSUser });
 });
 exports.GetPOSUser = GetPOSUser;
+// Cookie options
+// const refreshTokenOptions = {
+//   httpOnly: true,
+//   sameSite: "lax" as const,
+//   secure: process.env.NODE_ENV === "production",
+//   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+// };
+// export const POSUpdateAccessToken = async (req: Request, res: Response) => {
+//   const refresh_token = req.cookies.refreshToken;
+//   if (!refresh_token) {
+//     throw new UnauthorizedException(
+//       "No refresh token provided",
+//       ErrorCode.UNAUTHORIZED
+//     );
+//   }
+//   const payload = jwt.verify(refresh_token, REFRESH_TOKEN) as jwt.JwtPayload;
+//   if (!payload) {
+//     throw new NotFoundException(
+//       "Could Not refresh token",
+//       ErrorCode.TOKENS_NOT_VALID
+//     );
+//   }
+//   const session = await redis.get(`pos-${payload.id}`);
+//   if (!session) {
+//     const user = await prismaDB.staff.findUnique({
+//       where: {
+//         id: payload.id,
+//       },
+//     });
+//     if (!user) {
+//       throw new UnauthorizedException(
+//         "Session expired, please login again",
+//         ErrorCode.UNAUTHORIZED
+//       );
+//     }
+//     await getFormatStaffPOSAndSendToRedis(user?.id);
+//     const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+//       expiresIn: "5m",
+//     });
+//     const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+//       expiresIn: "7d",
+//     });
+//     res
+//       .cookie("refreshToken", refreshToken, refreshTokenOptions)
+//       .status(200)
+//       .json({
+//         success: true,
+//         tokens: {
+//           accessToken,
+//         },
+//       });
+//   } else {
+//     const user = JSON.parse(session);
+//     const accessToken = jwt.sign({ id: user.id }, ACCESS_TOKEN, {
+//       expiresIn: "5m",
+//     });
+//     const refreshToken = jwt.sign({ id: user?.id }, REFRESH_TOKEN, {
+//       expiresIn: "7d",
+//     });
+//     res
+//       .cookie("refreshToken", refreshToken, refreshTokenOptions)
+//       .status(200)
+//       .json({
+//         success: true,
+//         tokens: {
+//           accessToken,
+//         },
+//       });
+//   }
+// };
 const POSUpdateAccessToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const authHeader = req.headers.authorization;
     const refresh_token = authHeader && authHeader.split(" ")[1];

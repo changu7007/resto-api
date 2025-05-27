@@ -679,7 +679,11 @@ const outletTopSellingItems = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     gte: startDate,
                     lte: endDate,
                 },
-                orderStatus: "COMPLETED",
+                orderSession: {
+                    sessionStatus: {
+                        in: ["ONPROGRESS", "COMPLETED"],
+                    },
+                },
             },
             menuItem: categoryFilter.categoryId ? { categoryId: categoryId } : {},
         },

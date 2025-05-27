@@ -70,7 +70,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "npx nodemon",
     "dev": "node dist/index",
-    "prod": "pm2 start dist/index.js"
+    "prod": "pm2 start dist/src/index.js"
   },
   "author": "",
   "license": "ISC",

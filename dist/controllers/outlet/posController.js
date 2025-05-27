@@ -19,6 +19,7 @@ const outlet_1 = require("../../lib/outlet");
 const redis_1 = require("../../services/redis");
 const zod_1 = require("zod");
 const staffCheckInServices_1 = require("../../services/staffCheckInServices");
+const luxon_1 = require("luxon");
 const staffCheckInService = new staffCheckInServices_1.StaffCheckInServices();
 const openRegisterSchema = zod_1.z.object({
     staffId: zod_1.z.string(),
@@ -51,7 +52,7 @@ const posStaffCheckInAndRegister = (req, res) => __awaiter(void 0, void 0, void 
     if (!outlet) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
     }
-    const { checkIn, register } = yield staffCheckInService.handleStaffChecIn(validatedBody.data.staffId, outletId, validatedBody.data.openingBalance, validatedBody.data.openingNotes, validatedBody.data.denominations);
+    const { checkIn, register } = yield staffCheckInService.handleStaffChecIn(id, outletId, validatedBody.data.openingBalance, validatedBody.data.openingNotes, validatedBody.data.denominations);
     yield redis_1.redis.del(`pos-${validatedBody.data.staffId}`);
     return res.json({
         success: true,
@@ -117,19 +118,33 @@ const posStaffCheckOut = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.posStaffCheckOut = posStaffCheckOut;
 const posGetRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _d;
+    var _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     const { outletId } = req.params;
     // @ts-ignore
     const id = (_d = req.user) === null || _d === void 0 ? void 0 : _d.id;
+    const timeZone = "Asia/Kolkata"; // Default to a specific time zone
+    const todayStart = luxon_1.DateTime.now()
+        .setZone(timeZone)
+        .startOf("day")
+        .toUTC()
+        .toISO();
+    const todayEnd = (_e = luxon_1.DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO()) !== null && _e !== void 0 ? _e : new Date().toISOString();
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!outlet) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
     }
+    if (!todayStart || !todayEnd) {
+        throw new Error("Failed to calculate today's date range.");
+    }
     const register = yield __1.prismaDB.cashRegister.findFirst({
         where: {
             restaurantId: outletId,
-            status: "OPEN",
             openedBy: id,
+            status: "OPEN",
+            // createdAt: {
+            //   gte: new Date(todayStart),
+            //   lte: new Date(todayEnd),
+            // },
         },
         include: {
             transactions: {
@@ -155,9 +170,32 @@ const posGetRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, fun
             },
         },
     });
-    return res.status(200).json({
-        success: true,
-        data: register,
-    });
+    const calculateTotal = (transaction) => {
+        return transaction === null || transaction === void 0 ? void 0 : transaction.reduce((sum, tx) => sum + (tx === null || tx === void 0 ? void 0 : tx.amount), 0);
+    };
+    if (register) {
+        const cashIn = calculateTotal((_f = register === null || register === void 0 ? void 0 : register.transactions) === null || _f === void 0 ? void 0 : _f.filter((tx) => tx.type === "CASH_IN"));
+        const cashOut = calculateTotal((_g = register === null || register === void 0 ? void 0 : register.transactions) === null || _g === void 0 ? void 0 : _g.filter((tx) => tx.type === "CASH_OUT"));
+        const registerData = Object.assign(Object.assign({}, register), { floatingBalance: cashIn - cashOut, cashIn: cashIn, cashOut: cashOut, netposition: cashIn - cashOut, discrepancy: cashIn - cashOut - Number((register === null || register === void 0 ? void 0 : register.closingBalance) || 0), paymentDistribution: {
+                cash: calculateTotal((_h = register === null || register === void 0 ? void 0 : register.transactions) === null || _h === void 0 ? void 0 : _h.filter((tx) => tx.type === "CASH_IN" && tx.paymentMethod === "CASH")) -
+                    calculateTotal((_j = register === null || register === void 0 ? void 0 : register.transactions) === null || _j === void 0 ? void 0 : _j.filter((tx) => tx.type === "CASH_OUT" && tx.paymentMethod === "CASH")),
+                upi: calculateTotal((_k = register === null || register === void 0 ? void 0 : register.transactions) === null || _k === void 0 ? void 0 : _k.filter((tx) => tx.type === "CASH_IN" && tx.paymentMethod === "UPI")) -
+                    calculateTotal((_l = register === null || register === void 0 ? void 0 : register.transactions) === null || _l === void 0 ? void 0 : _l.filter((tx) => tx.type === "CASH_OUT" && tx.paymentMethod === "UPI")),
+                card: calculateTotal((_m = register === null || register === void 0 ? void 0 : register.transactions) === null || _m === void 0 ? void 0 : _m.filter((tx) => tx.type === "CASH_IN" &&
+                    (tx.paymentMethod === "DEBIT" || tx.paymentMethod === "CREDIT"))) -
+                    calculateTotal((_o = register === null || register === void 0 ? void 0 : register.transactions) === null || _o === void 0 ? void 0 : _o.filter((tx) => tx.type === "CASH_OUT" &&
+                        (tx.paymentMethod === "DEBIT" || tx.paymentMethod === "CREDIT"))),
+            } });
+        return res.json({
+            success: true,
+            data: registerData,
+        });
+    }
+    else {
+        return res.json({
+            success: true,
+            data: null,
+        });
+    }
 });
 exports.posGetRegisterStatus = posGetRegisterStatus;

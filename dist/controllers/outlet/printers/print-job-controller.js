@@ -29,7 +29,7 @@ const getPendingPrintJobs = (req, res) => __awaiter(void 0, void 0, void 0, func
         orderBy: {
             createdAt: "asc",
         },
-        take: 10, // Limit to 10 jobs at a time
+        // take: 10, // Limit to 10 jobs at a time
     });
     // Mark these jobs as "processing" to prevent duplicate processing
     if (printJobs.length > 0) {

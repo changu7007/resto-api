@@ -69,14 +69,15 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
         },
     });
     const formattedOrderData = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
             generatedOrderId: order.generatedOrderId,
-            name: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.username,
+            platform: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.platform,
+            name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
             mode: order.orderType,
-            table: (_c = order.orderSession.table) === null || _c === void 0 ? void 0 : _c.name,
+            table: (_d = order.orderSession.table) === null || _d === void 0 ? void 0 : _d.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -135,7 +136,7 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             date: (0, date_fns_1.format)(order.createdAt, "PP"),
         });
     });
-    yield redis_1.redis.set(`liv-o-${outletId}`, JSON.stringify(formattedOrderData));
+    yield redis_1.redis.set(`liv-o-${outletId}`, JSON.stringify(formattedOrderData), "EX", 300);
     return formattedOrderData;
 });
 exports.getFetchLiveOrderToRedis = getFetchLiveOrderToRedis;
@@ -144,6 +145,12 @@ const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, 
         where: {
             restaurantId: outletId,
             staffId: staffId,
+            orderSession: {
+                staffId: staffId,
+                table: {
+                    staffId: staffId,
+                },
+            },
         },
         include: {
             orderSession: {
@@ -187,14 +194,15 @@ const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, 
         },
     });
     const formattedLiveOrders = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
             generatedOrderId: order.generatedOrderId,
-            name: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.username,
+            platform: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.platform,
+            name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
             mode: order.orderType,
-            table: (_c = order.orderSession.table) === null || _c === void 0 ? void 0 : _c.name,
+            table: (_d = order.orderSession.table) === null || _d === void 0 ? void 0 : _d.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -254,7 +262,7 @@ const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, 
             date: (0, date_fns_1.format)(order.createdAt, "PP"),
         });
     });
-    yield redis_1.redis.set(`all-staff-orders-${outletId}-${staffId}`, JSON.stringify(formattedLiveOrders));
+    yield redis_1.redis.set(`all-staff-orders-${outletId}-${staffId}`, JSON.stringify(formattedLiveOrders), "EX", 300);
     return formattedLiveOrders;
 });
 exports.getFetchAllOrderByStaffToRedis = getFetchAllOrderByStaffToRedis;
@@ -267,6 +275,9 @@ const getFetchLiveOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0,
             },
             staffId: staffId,
             active: true,
+            orderSession: {
+                staffId: staffId,
+            },
             orderItems: {
                 some: {
                     strike: false,
@@ -315,14 +326,15 @@ const getFetchLiveOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0,
         },
     });
     const formattedLiveOrders = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
             generatedOrderId: order.generatedOrderId,
-            name: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.username,
+            platform: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.platform,
+            name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
             mode: order.orderType,
-            table: (_c = order.orderSession.table) === null || _c === void 0 ? void 0 : _c.name,
+            table: (_d = order.orderSession.table) === null || _d === void 0 ? void 0 : _d.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -382,7 +394,7 @@ const getFetchLiveOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0,
             date: (0, date_fns_1.format)(order.createdAt, "PP"),
         });
     });
-    yield redis_1.redis.set(`liv-o-${outletId}-${staffId}`, JSON.stringify(formattedLiveOrders));
+    yield redis_1.redis.set(`liv-o-${outletId}-${staffId}`, JSON.stringify(formattedLiveOrders), "EX", 300);
     return formattedLiveOrders;
 });
 exports.getFetchLiveOrderByStaffToRedis = getFetchLiveOrderByStaffToRedis;
@@ -435,10 +447,12 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
     });
     const formattedAllOrderData = activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => {
         var _a;
-        return ({
+        return {
             id: order.id,
             billNo: order.billId,
+            platform: order === null || order === void 0 ? void 0 : order.platform,
             phoneNo: order.phoneNo,
+            customerId: order.customerId,
             active: order.active,
             sessionStatus: order.sessionStatus,
             userName: order.username,
@@ -508,9 +522,9 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
                 })),
             })),
             date: order.createdAt,
-        });
+        };
     });
-    yield redis_1.redis.set(`active-os-${outletId}`, JSON.stringify(formattedAllOrderData));
+    yield redis_1.redis.set(`active-os-${outletId}`, JSON.stringify(formattedAllOrderData), "EX", 300);
     return formattedAllOrderData;
 });
 exports.getFetchActiveOrderSessionToRedis = getFetchActiveOrderSessionToRedis;
@@ -567,6 +581,7 @@ const getFetchStaffActiveOrderSessionToRedis = (outletId, staffId) => __awaiter(
         return ({
             id: order.id,
             billNo: order.billId,
+            platform: order === null || order === void 0 ? void 0 : order.platform,
             phoneNo: order.phoneNo,
             active: order.active,
             sessionStatus: order.sessionStatus,
@@ -639,7 +654,7 @@ const getFetchStaffActiveOrderSessionToRedis = (outletId, staffId) => __awaiter(
             date: order.createdAt,
         });
     });
-    yield redis_1.redis.set(`active-staff-os-${staffId}-${outletId}`, JSON.stringify(formattedAllOrderData));
+    yield redis_1.redis.set(`active-staff-os-${staffId}-${outletId}`, JSON.stringify(formattedAllOrderData), "EX", 300);
     return formattedAllOrderData;
 });
 exports.getFetchStaffActiveOrderSessionToRedis = getFetchStaffActiveOrderSessionToRedis;

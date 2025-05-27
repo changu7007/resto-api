@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteItemRecipe = exports.getAllTableRawMaterialUnit = exports.getAllSettledTablePurcahses = exports.getAllRequestedTablePurcahses = exports.getAllCompletedTablePurcahses = exports.getTableAllRawMaterialUnit = exports.getAllTableItemRecipe = exports.allTableStocks = exports.getAllTableRawMaterialCategory = exports.getAllVendorsForTable = exports.getAllTableRawMaterials = exports.updateStockRawMaterial = exports.settlePayForRaisedPurchase = exports.restockPurchase = exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.createVendorCategory = exports.getAllVendorCategories = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.cancelRequestPurchase = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRaiseRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
+exports.calculateItemServes = exports.deleteItemRecipe = exports.getAllTableRawMaterialUnit = exports.getAllSettledTablePurcahses = exports.getAllRequestedTablePurcahses = exports.getAllCompletedTablePurcahses = exports.getTableAllRawMaterialUnit = exports.getAllTableItemRecipe = exports.allTableStocks = exports.getAllTableRawMaterialCategory = exports.getAllVendorsForTable = exports.getAllTableRawMaterials = exports.updateStockRawMaterial = exports.settlePayForRaisedPurchase = exports.restockPurchase = exports.getRecipeById = exports.getAllItemRecipe = exports.updateItemRecipe = exports.createItemRecipe = exports.allStocks = exports.createVendorCategory = exports.getAllVendorCategories = exports.getAllVendors = exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getPurchaseId = exports.validatePurchasenRestock = exports.cancelRequestPurchase = exports.deleteRequestPurchase = exports.updateRequestPurchase = exports.createRaiseRequestPurchase = exports.createRequestPurchase = exports.getAllPurcahses = exports.getAllRawMaterialUnit = exports.deleteCategoryById = exports.updateCategoryById = exports.getCategoryById = exports.createRawMaterialCategory = exports.deleteUnitById = exports.updateUnitById = exports.getUnitById = exports.createUnit = exports.getAllRawMaterialCategory = exports.deleteRawMaterialById = exports.getRawMaterialById = exports.updateRawMaterialById = exports.createRawMaterial = exports.getAllRawMaterials = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -503,7 +503,7 @@ const purchaseRequestFormSchema = zod_1.z.object({
         requestUnitId: zod_1.z.string().min(1, { message: "Request Unit is Required" }),
         requestQuantity: zod_1.z.coerce
             .number()
-            .min(1, { message: "Request Quantity is Required" }),
+            .min(0, { message: "Request Quantity is Required" }),
         netRate: zod_1.z.number().optional(),
         gstType: zod_1.z.nativeEnum(client_1.GstType),
         taxAmount: zod_1.z.number().optional(),
@@ -849,7 +849,7 @@ const validatePurchaseSchema = zod_1.z.object({
             .min(1, { message: "Request Unit is Required" }),
         requestQuantity: zod_1.z.coerce
             .number()
-            .min(1, { message: "Request Quantity is Required" }),
+            .min(0, { message: "Request Quantity is Required" }),
         netRate: zod_1.z.coerce.number(),
         gstType: zod_1.z.nativeEnum(client_1.GstType),
         taxAmount: zod_1.z.coerce.number(),
@@ -1088,6 +1088,19 @@ const validatePurchasenRestock = (req, res) => __awaiter(void 0, void 0, void 0,
                 },
             },
         });
+        //register with cash register
+        if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.isPaid) && validateFields.paymentMethod !== undefined) {
+            yield prisma.expenses.create({
+                data: {
+                    restaurantId: outletId,
+                    category: "Ingredients",
+                    amount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amountToBePaid,
+                    date: new Date(),
+                    description: `${findVendor === null || findVendor === void 0 ? void 0 : findVendor.name} - Purchase (${findPurchase === null || findPurchase === void 0 ? void 0 : findPurchase.invoiceNo})`,
+                    paymentMethod: validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod,
+                },
+            });
+        }
         return updatePurchase;
     }));
     if (transaction === null || transaction === void 0 ? void 0 : transaction.id) {
@@ -3220,3 +3233,16 @@ const deleteItemRecipe = (req, res) => __awaiter(void 0, void 0, void 0, functio
     });
 });
 exports.deleteItemRecipe = deleteItemRecipe;
+const calculateItemServes = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, recipeId } = req.params;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const serves = yield (0, get_inventory_1.calculateFoodServerForItemRecipe)(recipeId, outletId);
+    return res.json({
+        success: true,
+        message: `This Item Serves ${serves}`,
+    });
+});
+exports.calculateItemServes = calculateItemServes;

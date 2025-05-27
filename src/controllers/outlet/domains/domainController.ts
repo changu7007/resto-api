@@ -76,7 +76,6 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
     where: {
       subdomain: subdomain,
     },
-    // include: { user: true, restaurants: true },
     select: {
       id: true,
       subdomain: true,

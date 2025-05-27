@@ -30,6 +30,8 @@ const adminRegisterController_1 = require("../../controllers/outlet/cash-registe
 const printer_controller_1 = require("../../controllers/outlet/printers/printer-controller");
 const staffController_2 = require("../../controllers/outlet/staffs/staffController");
 const aiMenuController_1 = require("../../controllers/outlet/items/aiMenuController");
+const loyaltyController_1 = require("../../controllers/outlet/loyalty/loyaltyController");
+const intergation_controller_1 = require("../../controllers/outlet/integration/intergation-controller");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/get-all-outlets", (0, error_handler_1.errorHandler)(outletController_1.getAllOutlets));
 outletRoute.get("/:outletId/get-admin-register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
@@ -71,6 +73,12 @@ outletRoute.post("/:outletId/get-staff-attendance", auth_1.isAuthMiddelware, (0,
 outletRoute.get("/:outletId/online-and-delivery-items", 
 // isAuthMiddelware,
 (0, error_handler_1.errorHandler)(itemsController_1.getItemsByCategoryForOnlineAndDelivery));
+outletRoute.get("/:outletId/online-and-delivery-categories", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(outletCategories_1.getAllDomainCategories));
+outletRoute.get("/:outletId/veg-online-and-delivery-items", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(itemsController_1.getVegItemsForOnlineAndDelivery));
 outletRoute.get("/:outletId/online-and-delivery-items-search", 
 // isAuthMiddelware,
 (0, error_handler_1.errorHandler)(itemsController_1.getItemsBySearchForOnlineAndDelivery));
@@ -94,6 +102,7 @@ outletRoute.patch("/:outletId/order-session-update-name/:id", auth_1.isAuthMidde
 outletRoute.patch("/:outletId/order-session-cancel/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderessionCancelPatch));
 outletRoute.patch("/:outletId/orders/:orderId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderStatusPatch));
 outletRoute.patch("/:outletId/orderSession/:orderSessionId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderSessionController_1.billingOrderSession));
+outletRoute.patch("/:outletId/complete-orderSession/:orderSessionId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderSessionController_1.completebillingOrderSession));
 outletRoute.patch("/:outletId/order-session-bulk-delete", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderessionBatchDelete));
 outletRoute.get("/:outletId/today-order-count", (0, error_handler_1.errorHandler)(orderOutletController_1.getTodayOrdersCount));
 outletRoute.get("/:outletId/live-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getLiveOrders));
@@ -125,6 +134,10 @@ outletRoute.get("/:outletId/get-addons-items", (0, error_handler_1.errorHandler)
 outletRoute.get("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemById));
 outletRoute.patch("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.updateItembyId));
 outletRoute.patch("/:outletId/items/:itemId/enable-pos", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enablePosStatus));
+outletRoute.patch("/:outletId/items/:itemId/enable-featured", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enableFeaturedStatus));
+outletRoute.patch("/:outletId/items/:itemId/enable-in-stock", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enableInStockStatus));
+outletRoute.patch("/:outletId/items/:itemId/disable-featured", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.disableFeaturedStatus));
+outletRoute.patch("/:outletId/items/:itemId/disable-in-stock", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.disableInStockStatus));
 outletRoute.patch("/:outletId/items/:itemId/disable-pos", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.disablePosStatus));
 outletRoute.delete("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.deleteItem));
 outletRoute.post("/:outletId/check-short-code", (0, error_handler_1.errorHandler)(itemsController_1.getShortCodeStatus));
@@ -279,8 +292,12 @@ outletRoute.post("/:outletId/admin-register/record-income", auth_1.isAuthMiddelw
 outletRoute.get("/:outletId/admin-register/transactions-for-register", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getTransactionHistoryForRegister));
 //Printers
 outletRoute.post("/:outletId/printers/create-printer", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.createPrinter));
-outletRoute.get("/:outletId/printers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrinters));
-outletRoute.get("/:outletId/printers/:printerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrinterById));
+outletRoute.get("/:outletId/printers", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(printer_controller_1.getPrinters));
+outletRoute.get("/:outletId/printers/:printerId", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(printer_controller_1.getPrinterById));
 outletRoute.patch("/:outletId/printers/update-printer/:printerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrinter));
 outletRoute.delete("/:outletId/printers/delete-printer/:printerId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.deletePrinter));
 //Printers Location
@@ -301,7 +318,36 @@ outletRoute.patch("/:outletId/tables/:tableId/unoccupied", auth_1.isAuthMiddelwa
 outletRoute.patch("/:outletId/tables/:tableId/transfer", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletTableController_1.transferTableOrder));
 outletRoute.post("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.createPrintDetails));
 outletRoute.patch("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.updatePrintDetails));
-outletRoute.get("/:outletId/print-details", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(printer_controller_1.getPrintDetails));
+outletRoute.get("/:outletId/print-details", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(printer_controller_1.getPrintDetails));
 outletRoute.patch("/:outletId/print-details/update-local-print-url", (0, error_handler_1.errorHandler)(printer_controller_1.updateLocalPrintUrl));
 outletRoute.get("/:outletId/get-todays-cash-transactions", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(statsController_1.getTodaysTransaction));
+// Overview routes
+outletRoute.get("/:restaurantId/loyalty/overview", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.getLoyaltyOverview));
+// Program routes
+outletRoute.get("/:restaurantId/loyalty/programs", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.getLoyaltyPrograms));
+outletRoute.post("/:restaurantId/loyalty/programs", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.createLoyaltyProgram));
+outletRoute.patch("/:restaurantId/loyalty/programs/:programId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.updateLoyaltyProgram));
+outletRoute.delete("/:restaurantId/loyalty/programs/:programId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.deleteLoyaltyProgram));
+// Customer routes
+outletRoute.get("/:restaurantId/loyalty/customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.getLoyaltyCustomers));
+outletRoute.post("/:restaurantId/loyalty/customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.addCustomerToLoyaltyProgram));
+outletRoute.post("/:restaurantId/loyalty/customers/award-points", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.awardPointsToCustomer));
+// Campaign routes
+outletRoute.get("/:restaurantId/loyalty/campaigns", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.getCampaigns));
+outletRoute.post("/:restaurantId/loyalty/campaigns", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(loyaltyController_1.createCampaign));
+outletRoute.get("/:outletId/search-customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(customerController_1.searchCustomers));
+outletRoute.post("/:outletId/create-customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(customerController_1.createCustomer));
+outletRoute.patch("/:outletId/app-integration-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(intergation_controller_1.phonePeDetails));
+outletRoute.post("/:outletId/outlet-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.createDomainPhonePeOrder));
+outletRoute.get("/:outletId/check-phonepe-status", (0, error_handler_1.errorHandler)(planController_1.orderAmountPhoneCheck));
+outletRoute.post("/:outletId/pos-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.posOutletPhonePeOrder));
+outletRoute.get("/:outletId/check-pos-phonepe-status", (0, error_handler_1.errorHandler)(planController_1.posAmountPhoneCheck));
+outletRoute.get("/:outletId/item-serves/:recipeId", (0, error_handler_1.errorHandler)(inventory_controller_1.calculateItemServes));
+outletRoute.patch("/:outletId/order-session/:orderSessionId/assign-customer", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderSessionController_1.assignCustomerToOrder));
+outletRoute.post("/:outletId/verify-franchise-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.verifyFranchiseCode));
+outletRoute.post("/:outletId/link-franchise-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.linkFranchiseDomain));
+outletRoute.patch("/:outletId/unlink-franchise-domain/:siteId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.unlinkDomainForRestaurant));
+outletRoute.post("/:outletId/pos-generate-report", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(reports_controller_1.posGenerateReport));
 exports.default = outletRoute;

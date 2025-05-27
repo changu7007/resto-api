@@ -58,7 +58,7 @@ const sendToken = (user, statusCode, res) => __awaiter(void 0, void 0, void 0, f
         expiresIn: "7d",
     });
     if (user) {
-        yield redis_1.redis.set(`pos-${user.id}`, JSON.stringify(user));
+        yield redis_1.redis.set(`pos-${user.id}`, JSON.stringify(user), "EX", 3 * 60 * 60);
     }
     else {
         yield redis_1.redis.set(user.id, JSON.stringify(user));
@@ -66,7 +66,10 @@ const sendToken = (user, statusCode, res) => __awaiter(void 0, void 0, void 0, f
     if (process.env.NODE_ENV === "production") {
         exports.accessTokenOptions.secure = true;
     }
-    res.status(200).json({
+    res
+        // .cookie("refreshToken", refreshToken, refreshTokenOptions)
+        .status(200)
+        .json({
         success: true,
         user,
         tokens: {

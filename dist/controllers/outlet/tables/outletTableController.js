@@ -521,7 +521,7 @@ const getTableByUniqueId = (req, res) => __awaiter(void 0, void 0, void 0, funct
 });
 exports.getTableByUniqueId = getTableByUniqueId;
 const getTableCurrentOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b;
+    var _b, _c, _d;
     const { outletId, tableId, customerId } = req.params;
     // @ts-ignore
     if (customerId !== ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id)) {
@@ -572,13 +572,49 @@ const getTableCurrentOrders = (req, res) => __awaiter(void 0, void 0, void 0, fu
             },
         },
     });
+    const getIntegration = yield __1.prismaDB.integration.findMany({
+        where: {
+            restaurantId: outletId,
+            name: {
+                in: ["PHONEPE", "RAZORAPY"],
+            },
+        },
+        select: {
+            name: true,
+            status: true,
+            connected: true,
+        },
+    });
+    // orders: {
+    //   id: string;
+    //   generatedOrderId: string;
+    //   mode: OrderType;
+    //   orderStatus: OrderStatus;
+    //   paid: boolean;
+    //   totalNetPrice: number;
+    //   gstPrice: number;
+    //   totalGrossProfit: number;
+    //   totalAmount: string;
+    //   createdAt?: Date | string;
+    //   date: string;
+    //   orderItems: OrderItems[];
+    //   updatedAt?: Date | string;
+    // }[];
     const formattedOrders = {
         id: getTableOrders === null || getTableOrders === void 0 ? void 0 : getTableOrders.orderSession[0].id,
         tableId: getTableOrders === null || getTableOrders === void 0 ? void 0 : getTableOrders.orderSession[0].tableId,
         orders: getTableOrders === null || getTableOrders === void 0 ? void 0 : getTableOrders.orderSession[0].orders.map((orderItem) => ({
-            id: orderItem.id,
-            dineType: orderItem.orderType,
-            orderStatus: orderItem.orderStatus,
+            id: orderItem === null || orderItem === void 0 ? void 0 : orderItem.id,
+            generatedOrderId: orderItem === null || orderItem === void 0 ? void 0 : orderItem.generatedOrderId,
+            mode: orderItem === null || orderItem === void 0 ? void 0 : orderItem.orderType,
+            orderStatus: orderItem === null || orderItem === void 0 ? void 0 : orderItem.orderStatus,
+            paid: orderItem === null || orderItem === void 0 ? void 0 : orderItem.isPaid,
+            totalNetPrice: orderItem === null || orderItem === void 0 ? void 0 : orderItem.totalNetPrice,
+            gstPrice: orderItem === null || orderItem === void 0 ? void 0 : orderItem.gstPrice,
+            totalGrossProfit: orderItem === null || orderItem === void 0 ? void 0 : orderItem.totalGrossProfit,
+            totalAmount: orderItem === null || orderItem === void 0 ? void 0 : orderItem.totalAmount,
+            createdAt: orderItem === null || orderItem === void 0 ? void 0 : orderItem.createdAt,
+            date: orderItem === null || orderItem === void 0 ? void 0 : orderItem.createdAt,
             orderItems: orderItem.orderItems.map((foodItem) => ({
                 id: foodItem.id,
                 name: foodItem.name,
@@ -587,8 +623,23 @@ const getTableCurrentOrders = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 basePrice: foodItem.originalRate,
                 price: foodItem.totalPrice,
             })),
-            totalAmount: orderItem.totalAmount,
+            updatedAt: orderItem === null || orderItem === void 0 ? void 0 : orderItem.updatedAt,
+            // id: orderItem.id,
+            // generatedOrdeI
+            // dineType: orderItem.orderType,
+            // orderStatus: orderItem.orderStatus,
+            // orderItems: orderItem.orderItems.map((foodItem) => ({
+            //   id: foodItem.id,
+            //   name: foodItem.name,
+            //   type: foodItem.menuItem.type,
+            //   quantity: foodItem.quantity,
+            //   basePrice: foodItem.originalRate,
+            //   price: foodItem.totalPrice,
+            // })),
+            // totalAmount: orderItem.totalAmount,
         })),
+        phonePeConneted: (_c = getIntegration.find((int) => int.name === "PHONEPE")) === null || _c === void 0 ? void 0 : _c.connected,
+        razorpayConneted: (_d = getIntegration.find((int) => int.name === "RAZORAPY")) === null || _d === void 0 ? void 0 : _d.connected,
     };
     return res.json({
         success: true,

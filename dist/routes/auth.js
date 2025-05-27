@@ -28,6 +28,7 @@ authRoute.post("/staff-logout", auth_1.isAuthMiddelware, (0, error_handler_1.err
 authRoute.get("/staff-user", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.GetStaff));
 authRoute.get("/staff-refresh-token", (0, error_handler_1.errorHandler)(staffAuthController_1.StaffUpdateAccessToken));
 authRoute.get("/pos-refresh-token", (0, error_handler_1.errorHandler)(pos_controller_1.POSUpdateAccessToken));
+authRoute.patch("/update-push-token", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffAuthController_1.updateStaffPushToken));
 authRoute.post("/social-auth", (0, error_handler_1.errorHandler)(appAuthController_1.socialAuthLogin));
 authRoute.get("/outlet/:userId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletController_1.getMainOutlet));
 authRoute.get("/get-user/:id", (0, error_handler_1.errorHandler)(appAuthController_1.getUserById));

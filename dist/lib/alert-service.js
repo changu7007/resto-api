@@ -231,9 +231,13 @@ class AlertService {
                         type: true,
                         status: true,
                         priority: true,
+                        orderId: true,
                         href: true,
                         message: true,
                         createdAt: true,
+                    },
+                    orderBy: {
+                        createdAt: "desc",
                     },
                 });
                 yield redis_1.redis.set(`alerts-${restaurantId}`, JSON.stringify(alerts));

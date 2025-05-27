@@ -18,12 +18,6 @@ const getAllStaff = (outletId) => __awaiter(void 0, void 0, void 0, function* ()
             restaurantId: outletId,
         },
     });
-    if ((staffs === null || staffs === void 0 ? void 0 : staffs.length) > 0) {
-        yield redis_1.redis.set(`staffs-${outletId}`, JSON.stringify(staffs));
-        return staffs;
-    }
-    else {
-        yield redis_1.redis.del(`staffs-${outletId}`);
-    }
+    yield redis_1.redis.set(`staffs-${outletId}`, JSON.stringify(staffs), "EX", 300);
 });
 exports.getAllStaff = getAllStaff;

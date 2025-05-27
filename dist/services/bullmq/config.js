@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defaultJobOptions = exports.connection = exports.QUEUE_NAME = void 0;
+exports.defaultJobOptions = exports.connection = exports.ORDER_QUEUE_NAME = exports.QUEUE_NAME = void 0;
 const ioredis_1 = require("ioredis");
 const secrets_1 = require("../../secrets");
 exports.QUEUE_NAME = "bill-processing";
+exports.ORDER_QUEUE_NAME = "order-processing";
 const redisClient = () => {
     if (secrets_1.REDIS_QUEUE_URL) {
         console.log("Redis Connected for Queue");

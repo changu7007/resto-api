@@ -19,6 +19,7 @@ const root_1 = require("../../../exceptions/root");
 const zod_1 = require("zod");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const luxon_1 = require("luxon");
+const utils_1 = require("../../../lib/utils");
 const getAllCashRegisters = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const { date } = req.query;
@@ -456,6 +457,21 @@ const getAdminRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, f
             },
         },
         denominations: (register === null || register === void 0 ? void 0 : register.denominations) || null,
+        cashIn: activeRegisters.reduce((sum, reg) => sum +
+            (0, utils_1.calculateInOut)(reg.transactions.filter((tx) => tx.type === "CASH_IN")), 0),
+        cashOut: activeRegisters.reduce((sum, reg) => sum +
+            (0, utils_1.calculateInOut)(reg.transactions.filter((tx) => tx.type === "CASH_OUT")), 0),
+        netPosition: activeRegisters.reduce((sum, reg) => sum +
+            (0, utils_1.calculateInOut)(reg.transactions.filter((tx) => tx.type === "CASH_IN")), 0) -
+            activeRegisters.reduce((sum, reg) => sum +
+                (0, utils_1.calculateInOut)(reg.transactions.filter((tx) => tx.type === "CASH_OUT")), 0),
+        cashFlow: {
+            cash: activeRegisters.reduce((sum, reg) => sum + calculateBalanceByMethod(reg.transactions, "CASH"), 0),
+            upi: activeRegisters.reduce((sum, reg) => sum + calculateBalanceByMethod(reg.transactions, "UPI"), 0),
+            card: activeRegisters.reduce((sum, reg) => sum +
+                calculateBalanceByMethod(reg.transactions, "DEBIT") +
+                calculateBalanceByMethod(reg.transactions, "CREDIT"), 0),
+        },
     };
     const formatToSend = {
         registerId: register === null || register === void 0 ? void 0 : register.id,

@@ -40,7 +40,7 @@ class StaffCheckInServices {
                 const unclosedCheckIn = yield tx.checkInRecord.findFirst({
                     where: {
                         staffId: staffId,
-                        status: client_1.CheckInStatus.ACTIVE,
+                        status: "ACTIVE",
                         checkOutTime: null,
                         date: {
                             lt: new Date(),
@@ -50,6 +50,7 @@ class StaffCheckInServices {
                         register: true,
                     },
                 });
+                console.log("unclosedCheckIn", unclosedCheckIn);
                 if (unclosedCheckIn) {
                     // Force close previous check-in
                     yield this.forceCloseCheckInAndRegister(tx, unclosedCheckIn);
@@ -222,6 +223,7 @@ class StaffCheckInServices {
                         actualBalance: expectedBalanceCash + expectedBalanceUPI + expectedCardBalance,
                         closedAt: new Date(),
                         closingNotes: notes,
+                        discrepancies: discrepancy,
                         denominations: denominations
                             ? {
                                 update: Object.assign(Object.assign({}, denominations), { total: closingBalance }),
@@ -230,21 +232,22 @@ class StaffCheckInServices {
                     },
                 });
                 // Record discrepancy if exists
-                if (discrepancy !== 0) {
-                    yield tx.cashTransaction.create({
-                        data: {
-                            registerId: activeCheckIn.register.id,
-                            type: discrepancy > 0
-                                ? client_1.CashTransactionType.CASH_IN
-                                : client_1.CashTransactionType.CASH_OUT,
-                            amount: Math.abs(discrepancy),
-                            description: `Register balance discrepancy at closing`,
-                            performedBy: staffId,
-                            source: "MANUAL",
-                            paymentMethod: "CASH",
-                        },
-                    });
-                }
+                // if (discrepancy !== 0) {
+                //   await tx.cashTransaction.create({
+                //     data: {
+                //       registerId: activeCheckIn.register.id,
+                //       type:
+                //         discrepancy > 0
+                //           ? CashTransactionType.CASH_IN
+                //           : CashTransactionType.CASH_OUT,
+                //       amount: Math.abs(discrepancy),
+                //       description: `Register balance discrepancy at closing`,
+                //       performedBy: staffId,
+                //       source: "MANUAL",
+                //       paymentMethod: "CASH",
+                //     },
+                //   });
+                // }
                 // Close check-in
                 const closedCheckIn = yield tx.checkInRecord.update({
                     where: { id: activeCheckIn.id },

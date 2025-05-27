@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getfetchOutletStocksToRedis = exports.fetchOutletRawMaterialUnitToRedis = exports.fetchOutletRawMaterialCAtegoryToRedis = exports.fetchOutletRawMaterialsToRedis = void 0;
+exports.calculateFoodServerForItemRecipe = exports.getRawMaterialById = exports.getfetchOutletStocksToRedis = exports.fetchOutletRawMaterialUnitToRedis = exports.fetchOutletRawMaterialCAtegoryToRedis = exports.fetchOutletRawMaterialsToRedis = void 0;
 const __1 = require("../..");
 const redis_1 = require("../../services/redis");
 const fetchOutletRawMaterialsToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -93,3 +93,60 @@ const getfetchOutletStocksToRedis = (outletId) => __awaiter(void 0, void 0, void
     return formattedStocks;
 });
 exports.getfetchOutletStocksToRedis = getfetchOutletStocksToRedis;
+const getRawMaterialById = (outletId, id) => __awaiter(void 0, void 0, void 0, function* () {
+    const rawMaterial = yield __1.prismaDB.rawMaterial.findFirst({
+        where: {
+            id,
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+            name: true,
+            currentStock: true,
+            consumptionUnitId: true,
+            conversionFactor: true,
+        },
+    });
+    return rawMaterial;
+});
+exports.getRawMaterialById = getRawMaterialById;
+const calculateFoodServerForItemRecipe = (recipeId, outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const findrecipe = yield __1.prismaDB.itemRecipe.findFirst({
+        where: {
+            id: recipeId,
+            restaurantId: outletId,
+        },
+        include: {
+            ingredients: true,
+        },
+    });
+    const servingsList = [];
+    if (!(findrecipe === null || findrecipe === void 0 ? void 0 : findrecipe.id))
+        return 0;
+    for (const recipe of findrecipe === null || findrecipe === void 0 ? void 0 : findrecipe.ingredients) {
+        const ingredient = yield (0, exports.getRawMaterialById)(outletId, recipe === null || recipe === void 0 ? void 0 : recipe.rawMaterialId);
+        //3.4L
+        const availableStock = ingredient === null || ingredient === void 0 ? void 0 : ingredient.currentStock;
+        console.log(`Ingredient ${ingredient === null || ingredient === void 0 ? void 0 : ingredient.name} = ${availableStock}`);
+        //gm UnitId
+        const unitId = ingredient === null || ingredient === void 0 ? void 0 : ingredient.consumptionUnitId;
+        console.log(`Consumption UnitId:${unitId} & Recipe MOU Unit ${recipe === null || recipe === void 0 ? void 0 : recipe.unitId}`);
+        //if gm consumptionyunitId is not equal to  recipe unit id i,e gm
+        if (unitId !== (recipe === null || recipe === void 0 ? void 0 : recipe.unitId)) {
+            //2.3 in Litre available stock and
+            const servings = Math.floor(Number(availableStock) / Number(recipe === null || recipe === void 0 ? void 0 : recipe.quantity));
+            console.log(`Not Equals Unit ${servings}`);
+            servingsList.push(servings);
+        }
+        else {
+            //2,3*1000
+            const conversion = Number(availableStock || 0) * Number(ingredient === null || ingredient === void 0 ? void 0 : ingredient.conversionFactor);
+            const servings = Math.floor(Number(conversion) / Number(recipe === null || recipe === void 0 ? void 0 : recipe.quantity));
+            console.log(` Equals Unit ${servings}`);
+            servingsList.push(servings);
+        }
+    }
+    console.log(servingsList);
+    return Math.min(...servingsList);
+});
+exports.calculateFoodServerForItemRecipe = calculateFoodServerForItemRecipe;

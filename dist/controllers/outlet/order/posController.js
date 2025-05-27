@@ -127,6 +127,21 @@ const getPOSTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void
             orderType: true,
             createdAt: true,
             updatedAt: true,
+            loyaltRedeemPoints: true,
+            discount: true,
+            discountAmount: true,
+            gstAmount: true,
+            amountReceived: true,
+            customer: {
+                select: {
+                    customer: {
+                        select: {
+                            name: true,
+                            phoneNo: true,
+                        },
+                    },
+                },
+            },
             table: {
                 select: {
                     name: true,
@@ -170,21 +185,31 @@ const getPOSTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void
             count: item._count.orderType,
         })),
         activeOrders: activeOrders === null || activeOrders === void 0 ? void 0 : activeOrders.map((order) => {
-            var _a, _b;
+            var _a, _b, _c, _d, _e, _f;
             return ({
                 id: order === null || order === void 0 ? void 0 : order.id,
                 billId: order === null || order === void 0 ? void 0 : order.billId,
-                userName: order === null || order === void 0 ? void 0 : order.username,
+                userName: (order === null || order === void 0 ? void 0 : order.username)
+                    ? order === null || order === void 0 ? void 0 : order.username
+                    : (_b = (_a = order === null || order === void 0 ? void 0 : order.customer) === null || _a === void 0 ? void 0 : _a.customer) === null || _b === void 0 ? void 0 : _b.name,
+                phoneNo: (order === null || order === void 0 ? void 0 : order.phoneNo)
+                    ? order === null || order === void 0 ? void 0 : order.phoneNo
+                    : (_d = (_c = order === null || order === void 0 ? void 0 : order.customer) === null || _c === void 0 ? void 0 : _c.customer) === null || _d === void 0 ? void 0 : _d.phoneNo,
                 isPaid: order === null || order === void 0 ? void 0 : order.isPaid,
                 active: order === null || order === void 0 ? void 0 : order.active,
                 invoiceUrl: order === null || order === void 0 ? void 0 : order.invoiceUrl,
                 paymentMethod: order === null || order === void 0 ? void 0 : order.paymentMethod,
                 subTotal: order === null || order === void 0 ? void 0 : order.subTotal,
                 status: order === null || order === void 0 ? void 0 : order.sessionStatus,
-                orderType: (order === null || order === void 0 ? void 0 : order.orderType) === "DINEIN" ? (_a = order === null || order === void 0 ? void 0 : order.table) === null || _a === void 0 ? void 0 : _a.name : order === null || order === void 0 ? void 0 : order.orderType,
+                orderType: (order === null || order === void 0 ? void 0 : order.orderType) === "DINEIN" ? (_e = order === null || order === void 0 ? void 0 : order.table) === null || _e === void 0 ? void 0 : _e.name : order === null || order === void 0 ? void 0 : order.orderType,
                 date: order === null || order === void 0 ? void 0 : order.createdAt,
                 modified: order === null || order === void 0 ? void 0 : order.updatedAt,
-                viewOrders: (_b = order === null || order === void 0 ? void 0 : order.orders) === null || _b === void 0 ? void 0 : _b.map((o) => {
+                discount: order === null || order === void 0 ? void 0 : order.discount,
+                discountAmount: order === null || order === void 0 ? void 0 : order.discountAmount,
+                gstAmount: order === null || order === void 0 ? void 0 : order.gstAmount,
+                loyaltyDiscount: order === null || order === void 0 ? void 0 : order.loyaltRedeemPoints,
+                amountReceived: order === null || order === void 0 ? void 0 : order.amountReceived,
+                viewOrders: (_f = order === null || order === void 0 ? void 0 : order.orders) === null || _f === void 0 ? void 0 : _f.map((o) => {
                     var _a;
                     return ({
                         id: o === null || o === void 0 ? void 0 : o.id,

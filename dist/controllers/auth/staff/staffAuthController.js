@@ -32,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getLatestRecordByStaffId = exports.staffCheckOut = exports.staffCheckIn = exports.StaffUpdateAccessToken = exports.StaffLogout = exports.GetStaff = exports.StaffLogin = void 0;
+exports.updateStaffPushToken = exports.getLatestRecordByStaffId = exports.staffCheckOut = exports.staffCheckIn = exports.StaffUpdateAccessToken = exports.StaffLogout = exports.GetStaff = exports.StaffLogin = void 0;
 const __1 = require("../../..");
 const jwt = __importStar(require("jsonwebtoken"));
 const secrets_1 = require("../../../secrets");
@@ -251,3 +251,40 @@ const getLatestRecordByStaffId = (req, res) => __awaiter(void 0, void 0, void 0,
     return res.json(Object.assign(Object.assign({ success: true, message: "Latest Check In" }, findCheckIns), { checkInTime: formattedCheckInTime }));
 });
 exports.getLatestRecordByStaffId = getLatestRecordByStaffId;
+/**
+ * Updates the push token for a staff member
+ * @param req Request object containing the push token
+ * @param res Response object
+ */
+const updateStaffPushToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _e;
+    // @ts-ignore
+    const staffId = (_e = req === null || req === void 0 ? void 0 : req.user) === null || _e === void 0 ? void 0 : _e.id;
+    const { pushToken } = req.body;
+    if (!staffId) {
+        throw new unauthorized_1.UnauthorizedException("Unauthorized", root_1.ErrorCode.UNAUTHORIZED);
+    }
+    if (!pushToken) {
+        throw new bad_request_1.BadRequestsException("Push token is required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    try {
+        // Update the staff member's push token
+        yield __1.prismaDB.staff.update({
+            where: {
+                id: staffId,
+            },
+            data: {
+                pushToken,
+            },
+        });
+        return res.status(200).json({
+            success: true,
+            message: "Push token updated successfully",
+        });
+    }
+    catch (error) {
+        console.error("Error updating push token:", error);
+        throw new bad_request_1.BadRequestsException("Failed to update push token", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+});
+exports.updateStaffPushToken = updateStaffPushToken;

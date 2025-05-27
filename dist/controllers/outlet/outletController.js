@@ -295,42 +295,26 @@ const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, v
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
     yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        var _x;
         yield tx.restaurant.update({
             where: {
                 id: outlet.id,
             },
             data: {
                 onlinePortal: true,
-                openTime: validateFields.data.openTime.time,
-                closeTime: validateFields.data.closeTime.time,
+                openTime: validateFields.data.openTime,
+                closeTime: validateFields.data.closeTime,
                 areaLat: validateFields.data.areaLat,
                 areaLong: validateFields.data.areaLong,
                 orderRadius: Number(validateFields.data.orderRadius),
                 isDelivery: validateFields.data.isDelivery,
                 isDineIn: validateFields.data.isDineIn,
                 isPickUp: validateFields.data.isPickUp,
+                deliveryFee: validateFields.data.deliveryFee,
+                googlePlaceId: validateFields.data.googlePlaceId,
+                description: validateFields.data.description,
+                packagingFee: validateFields.data.packagingFee,
             },
         });
-        if (!outlet.integrations.find((outlet) => (outlet === null || outlet === void 0 ? void 0 : outlet.name) === "ONLINEHUB")) {
-            yield __1.prismaDB.integration.create({
-                data: {
-                    restaurantId: outlet.id,
-                    name: "ONLINEHUB",
-                    connected: true,
-                    status: true,
-                    link: validateFields.data.subdomain,
-                },
-            });
-            yield __1.prismaDB.site.create({
-                data: {
-                    // @ts-ignore
-                    adminId: (_x = req === null || req === void 0 ? void 0 : req.user) === null || _x === void 0 ? void 0 : _x.id,
-                    restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
-                    subdomain: validateFields.data.subdomain,
-                },
-            });
-        }
     }));
     yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
     yield (0, get_users_1.getFormatUserAndSendToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.adminId);
@@ -341,12 +325,12 @@ const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, v
     }
     return res.json({
         success: true,
-        message: "Online Hub Integrated Success",
+        message: "Online Portal Updated Successfully",
     });
 });
 exports.patchOutletOnlinePOrtalDetails = patchOutletOnlinePOrtalDetails;
 const updateOrCreateOperatingHours = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _y, _z, _0;
+    var _x, _y, _z;
     const { outletId } = req.params;
     const validateFields = staff_1.operatingHoursSchema.safeParse(req.body);
     if (!validateFields.success) {
@@ -366,8 +350,8 @@ const updateOrCreateOperatingHours = (req, res) => __awaiter(void 0, void 0, voi
         },
     });
     yield redis_1.redis.del(`O-${outlet.id}`);
-    if (((_z = (_y = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _y === void 0 ? void 0 : _y.sites) === null || _z === void 0 ? void 0 : _z.length) > 0) {
-        for (const site of (_0 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _0 === void 0 ? void 0 : _0.sites) {
+    if (((_y = (_x = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _x === void 0 ? void 0 : _x.sites) === null || _y === void 0 ? void 0 : _y.length) > 0) {
+        for (const site of (_z = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _z === void 0 ? void 0 : _z.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }
@@ -461,11 +445,11 @@ const fetchInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.fetchInvoiceDetails = fetchInvoiceDetails;
 const deleteOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _1;
+    var _0;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_1 = req === null || req === void 0 ? void 0 : req.user) === null || _1 === void 0 ? void 0 : _1.id;
+    const userId = (_0 = req === null || req === void 0 ? void 0 : req.user) === null || _0 === void 0 ? void 0 : _0.id;
     if (outlet === undefined || !outlet.id) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -775,11 +759,11 @@ const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0
 });
 exports.createOutletFromOutletHub = createOutletFromOutletHub;
 const updateOutletType = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _2, _3, _4, _5;
+    var _1, _2, _3, _4;
     const { outletId } = req.params;
     const { outletType } = req.body;
     // @ts-ignore
-    const userId = (_2 = req === null || req === void 0 ? void 0 : req.user) === null || _2 === void 0 ? void 0 : _2.id;
+    const userId = (_1 = req === null || req === void 0 ? void 0 : req.user) === null || _1 === void 0 ? void 0 : _1.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -793,8 +777,8 @@ const updateOutletType = (req, res) => __awaiter(void 0, void 0, void 0, functio
     });
     yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
     yield (0, get_users_1.getFormatUserAndSendToRedis)(userId);
-    if (((_4 = (_3 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _3 === void 0 ? void 0 : _3.sites) === null || _4 === void 0 ? void 0 : _4.length) > 0) {
-        for (const site of (_5 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _5 === void 0 ? void 0 : _5.sites) {
+    if (((_3 = (_2 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _2 === void 0 ? void 0 : _2.sites) === null || _3 === void 0 ? void 0 : _3.length) > 0) {
+        for (const site of (_4 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _4 === void 0 ? void 0 : _4.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }
@@ -805,28 +789,26 @@ const updateOutletType = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.updateOutletType = updateOutletType;
 const updateOnlinePortalStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _6, _7, _8, _9;
+    var _5, _6, _7, _8;
     const { outletId } = req.params;
     const { status } = req.body;
     // @ts-ignore
-    const userId = (_6 = req === null || req === void 0 ? void 0 : req.user) === null || _6 === void 0 ? void 0 : _6.id;
+    const userId = (_5 = req === null || req === void 0 ? void 0 : req.user) === null || _5 === void 0 ? void 0 : _5.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
-    }
-    if (outlet.adminId !== userId) {
-        throw new unauthorized_1.UnauthorizedException("You are not authorized to update this outlet type", root_1.ErrorCode.UNAUTHORIZED);
     }
     yield __1.prismaDB.restaurant.update({
         where: { id: outlet.id },
         data: { onlinePortal: status },
     });
     yield Promise.all([
-        redis_1.redis.del(`O-${outletId}`),
-        (0, get_users_1.getFormatUserAndSendToRedis)(userId),
+        redis_1.redis.del(`O-${outlet.id}`),
+        redis_1.redis.del(outlet.adminId),
+        redis_1.redis.del(userId),
     ]);
-    if (((_8 = (_7 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _7 === void 0 ? void 0 : _7.sites) === null || _8 === void 0 ? void 0 : _8.length) > 0) {
-        for (const site of (_9 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _9 === void 0 ? void 0 : _9.sites) {
+    if (((_7 = (_6 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _6 === void 0 ? void 0 : _6.sites) === null || _7 === void 0 ? void 0 : _7.length) > 0) {
+        for (const site of (_8 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _8 === void 0 ? void 0 : _8.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }

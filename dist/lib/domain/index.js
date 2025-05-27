@@ -17,7 +17,7 @@ const getDomainDataAndFetchToRedis = (domain) => __awaiter(void 0, void 0, void 
         where: {
             subdomain: domain,
         },
-        include: { user: true, restaurant: true },
+        include: { user: true, restaurants: true },
     });
     if (getSite === null || getSite === void 0 ? void 0 : getSite.id) {
         yield redis_1.redis.set(`app-domain-${getSite === null || getSite === void 0 ? void 0 : getSite.subdomain}`, JSON.stringify(getSite));
