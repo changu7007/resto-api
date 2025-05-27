@@ -6,6 +6,7 @@ import { NotFoundException } from "../../../exceptions/not-found";
 import { ErrorCode } from "../../../exceptions/root";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
+import { inviteCode } from "../order/orderOutletController";
 
 export const getDomain = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -27,17 +28,33 @@ export const getDomain = async (req: Request, res: Response) => {
 
   const getDomain = await prismaDB.site.findFirst({
     where: {
-      restaurantId: outlet?.id,
-      // @ts-ignore
-      adminId: req.user?.id,
+      restaurants: {
+        some: {
+          id: outlet?.id,
+        },
+      },
     },
   });
 
-  await redis.set(`o-domain-${outletId}`, JSON.stringify(getDomain));
+  if (getDomain?.code === null) {
+    await prismaDB.site.update({
+      where: {
+        id: getDomain?.id,
+      },
+      data: { code: inviteCode() },
+    });
+  }
+
+  await redis.set(
+    `o-domain-${outletId}`,
+    JSON.stringify({ ...getDomain, franchiseModel: outlet?.franchiseModel }),
+    "EX",
+    60 * 60 // 1 hour
+  );
 
   return res.json({
     success: true,
-    domain: getDomain,
+    domain: { ...getDomain, franchiseModel: outlet?.franchiseModel },
     message: "Fetched Items by database ✅",
   });
 };
@@ -59,19 +76,62 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
     where: {
       subdomain: subdomain,
     },
-    include: { user: true, restaurant: true },
+    // include: { user: true, restaurants: true },
+    select: {
+      id: true,
+      subdomain: true,
+      customDomain: true,
+      restaurants: {
+        select: {
+          id: true,
+          name: true,
+          phoneNo: true,
+          address: true,
+          pincode: true,
+          city: true,
+          outletType: true,
+          email: true,
+          restaurantName: true,
+          imageUrl: true,
+          siteId: true,
+          areaLat: true,
+          onlinePortal: true,
+          areaLong: true,
+          orderRadius: true,
+          openTime: true,
+          closeTime: true,
+          isDineIn: true,
+          isDelivery: true,
+          isPickUp: true,
+          fssai: true,
+          deliveryFee: true,
+          googlePlaceId: true,
+          description: true,
+          packagingFee: true,
+        },
+      },
+    },
   });
+
+  const formattedSite = {
+    name: getSite?.restaurants[0]?.name,
+    imageUrl: getSite?.restaurants[0]?.imageUrl,
+    outletType: getSite?.restaurants[0]?.outletType,
+    ...getSite,
+  };
 
   if (getSite?.id) {
     await redis.set(
       `app-domain-${getSite?.subdomain}`,
-      JSON.stringify(getSite)
+      JSON.stringify(formattedSite),
+      "EX",
+      60 * 60 // 1 hour
     );
   }
 
   return res.json({
     success: true,
-    site: getSite,
+    site: formattedSite,
   });
 };
 
@@ -149,7 +209,11 @@ export const createSubDomain = async (req: Request, res: Response) => {
 
   const restaurantHasDomain = await prismaDB.site.findFirst({
     where: {
-      restaurantId: outlet?.id,
+      restaurants: {
+        some: {
+          id: outletId,
+        },
+      },
     },
   });
 
@@ -160,31 +224,35 @@ export const createSubDomain = async (req: Request, res: Response) => {
     );
   }
 
-  await prismaDB.site.create({
+  const getDomain = await prismaDB.site.create({
     data: {
       // @ts-ignore
       adminId: req?.user?.id,
-      restaurantId: outlet?.id,
       subdomain: subdomain,
+      code: inviteCode(),
+      restaurants: {
+        connect: {
+          id: outletId,
+        },
+      },
     },
   });
 
-  const getDomain = await prismaDB.site.findFirst({
+  await prismaDB.restaurant.update({
     where: {
-      restaurantId: outlet?.id,
-      // @ts-ignore
-      adminId: req.user?.id,
+      id: outletId,
+    },
+    data: {
+      siteId: getDomain?.id,
+      franchiseModel: "MASTER",
     },
   });
 
-  if (getDomain?.id) {
-    await redis.set(
-      `o-domain-${outletId}`,
-      JSON.stringify(getDomain),
-      "EX",
-      60 * 60 // 1 hour
-    );
-  }
+  await Promise.all([
+    redis.del(`O-${outlet?.id}`),
+    redis.del(`app-domain-${getDomain?.subdomain}`),
+    redis.del(`o-domain-${outletId}`),
+  ]);
 
   return res.json({
     success: true,
@@ -228,13 +296,15 @@ export const deleteSite = async (req: Request, res: Response) => {
   await prismaDB.site.delete({
     where: {
       id: findDomain?.id,
-      restaurantId: outletId,
       adminId: userId,
     },
   });
 
-  await redis.del(`app-domain-${findDomain?.subdomain}`);
-  await redis.del(`o-domain-${outletId}`);
+  await Promise.all([
+    redis.del(`O-${outlet?.id}`),
+    redis.del(`app-domain-${findDomain?.subdomain}`),
+    redis.del(`o-domain-${outletId}`),
+  ]);
 
   return res.json({
     success: true,
@@ -242,6 +312,84 @@ export const deleteSite = async (req: Request, res: Response) => {
   });
 };
 
+export const unlinkDomainForRestaurant = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId, siteId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+  // @ts-ignore
+  const userId = req?.user?.id;
+
+  if (outlet === undefined || !outlet.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const findDomain = await prismaDB.site.findFirst({
+    where: {
+      id: siteId,
+      restaurants: {
+        some: {
+          id: outletId,
+        },
+      },
+    },
+  });
+
+  if (!findDomain?.id) {
+    throw new BadRequestsException(
+      "Franchise Domain not Found",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  if (findDomain?.adminId === userId) {
+    throw new UnauthorizedException(
+      "Your Unauthorized To Unlink this Domain, this feature is only available for Franchise Domain",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  await prismaDB.site.update({
+    where: {
+      id: findDomain?.id,
+      restaurants: {
+        some: {
+          id: outletId,
+        },
+      },
+    },
+    data: {
+      restaurants: {
+        disconnect: {
+          id: outletId,
+        },
+      },
+    },
+  });
+
+  await prismaDB.restaurant.update({
+    where: {
+      id: outletId,
+    },
+    data: {
+      siteId: null,
+      franchiseModel: "MASTER",
+    },
+  });
+
+  await Promise.all([
+    redis.del(`O-${outlet?.id}`),
+    redis.del(`app-domain-${findDomain?.subdomain}`),
+    redis.del(`o-domain-${outletId}`),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Domain Unlinked Successfully",
+  });
+};
 export const checkDomain = async (req: Request, res: Response) => {
   const { outletId } = req.params;
   const { subdomain } = req.query as { subdomain: string };
@@ -279,5 +427,141 @@ export const checkDomain = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "Domain is available",
+  });
+};
+
+export const verifyFranchiseCode = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { code, franchiseModel } = req.body;
+
+  if (!code || !franchiseModel) {
+    throw new BadRequestsException(
+      "Code and Franchise Model are required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (franchiseModel === "MASTER") {
+    throw new BadRequestsException(
+      "Master Cannot be linked for Franchise Domain",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const findMaster = await prismaDB.site.findFirst({
+    where: {
+      code: code,
+    },
+  });
+
+  if (!findMaster?.id) {
+    throw new BadRequestsException(
+      "Invalid Franchise Code",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  console.log(findMaster);
+
+  // await prismaDB.site.update({
+  //   where: {
+  //     id: findMaster?.id,
+  //   },
+  //   data: {
+  //     restaurants: {
+  //       connect: {
+  //         id: outletId,
+  //       },
+  //     },
+  //   },
+  // });
+  // await redis.del(`app-domain-${findMaster?.subdomain}`);
+  // await redis.del(`o-domain-${outletId}`);
+
+  return res.json({
+    success: true,
+    message: "Franchise Domain Fetched",
+    data: {
+      id: findMaster?.id,
+      subDomain: findMaster?.subdomain,
+    },
+  });
+};
+
+export const linkFranchiseDomain = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const { siteId, franchiseModel } = req.body;
+
+  if (!siteId || !franchiseModel) {
+    throw new BadRequestsException(
+      "Verify Franchise Code and try again ",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  if (franchiseModel === "MASTER") {
+    throw new BadRequestsException(
+      "Master Cannot be linked for Franchise Domain",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const findMaster = await prismaDB.site.findFirst({
+    where: {
+      id: siteId,
+    },
+  });
+
+  if (!findMaster?.id) {
+    throw new BadRequestsException(
+      "Franchise Domain Not Found",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  await prismaDB.site.update({
+    where: {
+      id: findMaster?.id,
+    },
+    data: {
+      restaurants: {
+        connect: {
+          id: outletId,
+        },
+      },
+    },
+  });
+
+  await prismaDB.restaurant.update({
+    where: {
+      id: outletId,
+    },
+    data: {
+      siteId: findMaster?.id,
+      franchiseModel: franchiseModel,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`O-${outlet?.id}`),
+    redis.del(`app-domain-${findMaster?.subdomain}`),
+    redis.del(`o-domain-${outletId}`),
+  ]);
+
+  return res.json({
+    success: true,
+    message: "Franchise Domain Linked Successfully",
   });
 };

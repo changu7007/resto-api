@@ -105,6 +105,49 @@ export const getItemsForOnlineAndDelivery = async (
   });
 };
 
+export const getVegItemsForOnlineAndDelivery = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const redisItems = await redis.get(
+    `${outletId}-all-items-online-and-delivery`
+  );
+
+  if (redisItems) {
+    const items: FoodMenu[] = JSON.parse(redisItems);
+
+    return res.json({
+      success: true,
+      data: items.filter(
+        (item) =>
+          item.type === "VEG" ||
+          item.type === "MILK" ||
+          item.type === "SOFTDRINKS"
+      ),
+    });
+  } else {
+    const items = await getOAllItemsForOnlineAndDelivery(outletId);
+
+    return res.json({
+      success: true,
+      data: items.filter(
+        (item) =>
+          item.type === "VEG" ||
+          item.type === "MILK" ||
+          item.type === "SOFTDRINKS"
+      ),
+    });
+  }
+};
+
 export const getItemsByCategoryForOnlineAndDelivery = async (
   req: Request,
   res: Response
@@ -533,6 +576,8 @@ export const getItemForTable = async (req: Request, res: Response) => {
     isPos: item?.isDineIn,
     isOnline: item?.isOnline,
     isVariants: item?.isVariants,
+    isFeatured: item?.isFeatured,
+    isInStock: item?.isInStock,
     variants: item?.menuItemVariants?.map((variant) => ({
       name: variant?.variant?.name,
       price: variant?.price,
@@ -611,6 +656,7 @@ export const getCategoriesForTable = async (req: Request, res: Response) => {
   const formattedCategories = getCategories?.map((category) => ({
     id: category?.id,
     name: category?.name,
+    printLocationId: category?.printLocationId,
     createdAt: format(category.createdAt, "MMMM do, yyyy"),
     updatedAt: format(category.updatedAt, "MMMM do, yyyy"),
   }));
@@ -1230,8 +1276,9 @@ export const updateItembyId = async (req: Request, res: Response) => {
 
   await Promise.all([
     redis.del(`${outletId}-all-items`),
-    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
+    redis.del(`o-d-${outletId}-categories`),
   ]);
 
   categories?.map(async (c) => {
@@ -1412,8 +1459,9 @@ export const postItem = async (req: Request, res: Response) => {
 
   await Promise.all([
     redis.del(`${outletId}-all-items`),
-    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
+    redis.del(`o-d-${outletId}-categories`),
   ]);
 
   categories?.map(async (c) => {
@@ -1574,8 +1622,9 @@ export const duplicateItem = async (req: Request, res: Response) => {
 
     await Promise.all([
       redis.del(`${outletId}-all-items`),
-      redis.del(`${outletId}-all-items-for-online-and-delivery`),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
       redis.del(`o-${outletId}-categories`),
+      redis.del(`o-d-${outletId}-categories`),
     ]);
 
     categories?.map(async (c) => {
@@ -1640,8 +1689,9 @@ export const deleteItem = async (req: Request, res: Response) => {
 
   await Promise.all([
     redis.del(`${outletId}-all-items`),
-    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
+    redis.del(`o-d-${outletId}-categories`),
   ]);
 
   categories?.map(async (c) => {
@@ -1782,6 +1832,209 @@ export const getSingleAddons = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     addOnItems: formattedAddOns,
+  });
+};
+
+export const enableFeaturedStatus = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+  const { enabled } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const item = await getItemByOutletId(outlet.id, itemId);
+
+  if (!item?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.menuItem.update({
+    where: {
+      restaurantId: outlet.id,
+      id: item?.id,
+    },
+    data: {
+      isFeatured: true,
+    },
+  });
+
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
+
+  return res.json({
+    success: true,
+    message: "Item Updated",
+  });
+};
+export const disableFeaturedStatus = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+  const { enabled } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const item = await getItemByOutletId(outlet.id, itemId);
+
+  if (!item?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.menuItem.update({
+    where: {
+      restaurantId: outlet.id,
+      id: item?.id,
+    },
+    data: {
+      isFeatured: false,
+    },
+  });
+
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
+
+  return res.json({
+    success: true,
+    message: "Item Updated",
+  });
+};
+
+export const enableInStockStatus = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+  const { enabled } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const item = await getItemByOutletId(outlet.id, itemId);
+
+  if (!item?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.menuItem.update({
+    where: {
+      restaurantId: outlet.id,
+      id: item?.id,
+    },
+    data: {
+      isInStock: true,
+    },
+  });
+
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
+
+  return res.json({
+    success: true,
+    message: "Item Updated",
+  });
+};
+
+export const disableInStockStatus = async (req: Request, res: Response) => {
+  const { outletId, itemId } = req.params;
+  const { enabled } = req.body;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const item = await getItemByOutletId(outlet.id, itemId);
+
+  if (!item?.id) {
+    throw new NotFoundException("Item Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  await prismaDB.menuItem.update({
+    where: {
+      restaurantId: outlet.id,
+      id: item?.id,
+    },
+    data: {
+      isInStock: false,
+    },
+  });
+
+  const categories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  await Promise.all([
+    redis.del(`${outletId}-all-items`),
+    redis.del(`${outletId}-all-items-for-online-and-delivery`),
+    redis.del(`o-${outletId}-categories`),
+  ]);
+
+  categories?.map(async (c) => {
+    await redis.del(`${outletId}-category-${c.id}`);
+  });
+
+  return res.json({
+    success: true,
+    message: "Item Updated",
   });
 };
 

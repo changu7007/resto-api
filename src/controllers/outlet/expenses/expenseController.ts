@@ -30,17 +30,17 @@ const expenseSchema = z.object({
   ),
   restock: z.boolean().optional(),
   purchaseId: z.string().optional(),
-  vendorId: z.string().min(1, { message: "Vendor Is Required" }).optional(),
+  vendorId: z.string().optional(),
   rawMaterials: z.array(
     z.object({
       id: z.string().optional(),
       rawMaterialId: z.string().min(1, { message: "Raw Material Is Required" }),
       rawMaterialName: z.string().min(1, { message: "Raw Material Name" }),
       unitName: z.string().min(1, { message: "Unit Name is required" }),
-      requestUnitId: z.string().min(1, { message: "Request Unit is Required" }),
+      requestUnitId: z.string().min(0, { message: "Request Unit is Required" }),
       requestQuantity: z.coerce
         .number()
-        .min(1, { message: "Request Quantity is Required" }),
+        .min(0, { message: "Request Quantity is Required" }),
       netRate: z.number().optional(),
       gstType: z.nativeEnum(GstType),
       taxAmount: z.number().optional(),
@@ -354,6 +354,8 @@ export const createExpenses = async (req: Request, res: Response) => {
   if (result?.id) {
     await redis.publish("orderUpdated", JSON.stringify({ outletId }));
     await redis.del(`alerts-${outletId}`);
+    await redis.del(`${outletId}-all-items`);
+    await redis.del(`${outletId}-all-items-online-and-delivery`);
     websocketManager.notifyClients(outletId, "NEW_ALERT");
     return res.json({
       success: true,

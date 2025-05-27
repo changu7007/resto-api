@@ -2,6 +2,8 @@ import { Queue } from "bullmq";
 import { logger } from "../..";
 import {
   BillQueueData,
+  ORDER_QUEUE_NAME,
+  OrderQueueData,
   QUEUE_NAME,
   connection,
   defaultJobOptions,
@@ -76,3 +78,72 @@ class BillQueueProducer {
 }
 
 export const billQueueProducer = new BillQueueProducer();
+
+class OrderQueueProducer {
+  private queue: Queue<OrderQueueData>;
+
+  constructor() {
+    this.queue = new Queue<OrderQueueData>(ORDER_QUEUE_NAME, {
+      connection,
+      defaultJobOptions,
+    });
+  }
+
+  async addJob(data: OrderQueueData, jobId: string) {
+    try {
+      const job = await this.queue.add("process-order", data, {
+        jobId,
+        ...defaultJobOptions,
+      });
+      console.log(`Order Job added to queue`, {
+        jobId: job.id,
+        outletId: data.outletId,
+      });
+      logger.info("Order Job added to queue", {
+        jobId: job.id,
+        outletId: data.outletId,
+      });
+      return job;
+    } catch (error) {
+      logger.error("Failed to add order job to queue", {
+        error,
+        outletId: data.outletId,
+      });
+      throw error;
+    }
+  }
+
+  async getQueueStatus() {
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      this.queue.getWaitingCount(),
+      this.queue.getActiveCount(),
+      this.queue.getCompletedCount(),
+      this.queue.getFailedCount(),
+      this.queue.getDelayedCount(),
+    ]);
+
+    return {
+      waiting,
+      active,
+      completed,
+      failed,
+      delayed,
+    };
+  }
+
+  async retryFailedJobs() {
+    const failed = await this.queue.getFailed();
+    return Promise.all(failed.map((job) => job.retry()));
+  }
+
+  async cleanOldJobs(grace: number = 24 * 3600 * 1000) {
+    await this.queue.clean(grace, 2);
+    await this.queue.clean(grace, 3);
+  }
+
+  async close() {
+    await this.queue.close();
+  }
+}
+
+export const orderQueueProducer = new OrderQueueProducer();

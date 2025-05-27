@@ -12,6 +12,7 @@ import {
   parseISO,
 } from "date-fns";
 import {
+  CashTransaction,
   CashTransactionType,
   PaymentMethod,
   TransactionSource,
@@ -22,6 +23,7 @@ import { ErrorCode } from "../../../exceptions/root";
 import { z } from "zod";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { DateTime } from "luxon";
+import { calculateInOut } from "../../../lib/utils";
 
 export const getAllCashRegisters = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -536,6 +538,52 @@ export const getAdminRegisterStatus = async (req: Request, res: Response) => {
       },
     },
     denominations: register?.denominations || null,
+    cashIn: activeRegisters.reduce(
+      (sum, reg) =>
+        sum +
+        calculateInOut(reg.transactions.filter((tx) => tx.type === "CASH_IN")),
+      0
+    ),
+    cashOut: activeRegisters.reduce(
+      (sum, reg) =>
+        sum +
+        calculateInOut(reg.transactions.filter((tx) => tx.type === "CASH_OUT")),
+      0
+    ),
+    netPosition:
+      activeRegisters.reduce(
+        (sum, reg) =>
+          sum +
+          calculateInOut(
+            reg.transactions.filter((tx) => tx.type === "CASH_IN")
+          ),
+        0
+      ) -
+      activeRegisters.reduce(
+        (sum, reg) =>
+          sum +
+          calculateInOut(
+            reg.transactions.filter((tx) => tx.type === "CASH_OUT")
+          ),
+        0
+      ),
+    cashFlow: {
+      cash: activeRegisters.reduce(
+        (sum, reg) => sum + calculateBalanceByMethod(reg.transactions, "CASH"),
+        0
+      ),
+      upi: activeRegisters.reduce(
+        (sum, reg) => sum + calculateBalanceByMethod(reg.transactions, "UPI"),
+        0
+      ),
+      card: activeRegisters.reduce(
+        (sum, reg) =>
+          sum +
+          calculateBalanceByMethod(reg.transactions, "DEBIT") +
+          calculateBalanceByMethod(reg.transactions, "CREDIT"),
+        0
+      ),
+    },
   };
 
   const formatToSend = {

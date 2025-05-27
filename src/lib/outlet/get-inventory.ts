@@ -105,3 +105,74 @@ export const getfetchOutletStocksToRedis = async (outletId: string) => {
   );
   return formattedStocks;
 };
+
+export const getRawMaterialById = async (outletId: string, id: string) => {
+  const rawMaterial = await prismaDB.rawMaterial.findFirst({
+    where: {
+      id,
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+      name: true,
+      currentStock: true,
+      consumptionUnitId: true,
+      conversionFactor: true,
+    },
+  });
+  return rawMaterial;
+};
+
+export const calculateFoodServerForItemRecipe = async (
+  recipeId: string,
+  outletId: string
+) => {
+  const findrecipe = await prismaDB.itemRecipe.findFirst({
+    where: {
+      id: recipeId,
+      restaurantId: outletId,
+    },
+    include: {
+      ingredients: true,
+    },
+  });
+
+  const servingsList = [];
+
+  if (!findrecipe?.id) return 0;
+
+  for (const recipe of findrecipe?.ingredients) {
+    const ingredient = await getRawMaterialById(
+      outletId,
+      recipe?.rawMaterialId
+    );
+    //3.4L
+    const availableStock = ingredient?.currentStock;
+    console.log(`Ingredient ${ingredient?.name} = ${availableStock}`);
+    //gm UnitId
+    const unitId = ingredient?.consumptionUnitId;
+    console.log(
+      `Consumption UnitId:${unitId} & Recipe MOU Unit ${recipe?.unitId}`
+    );
+    //if gm consumptionyunitId is not equal to  recipe unit id i,e gm
+    if (unitId !== recipe?.unitId) {
+      //2.3 in Litre available stock and
+      const servings = Math.floor(
+        Number(availableStock) / Number(recipe?.quantity)
+      );
+      console.log(`Not Equals Unit ${servings}`);
+      servingsList.push(servings);
+    } else {
+      //2,3*1000
+      const conversion =
+        Number(availableStock || 0) * Number(ingredient?.conversionFactor);
+      const servings = Math.floor(
+        Number(conversion) / Number(recipe?.quantity)
+      );
+      console.log(` Equals Unit ${servings}`);
+      servingsList.push(servings);
+    }
+  }
+  console.log(servingsList);
+  return Math.min(...servingsList);
+};

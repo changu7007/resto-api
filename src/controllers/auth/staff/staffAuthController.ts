@@ -279,3 +279,48 @@ export const getLatestRecordByStaffId = async (req: Request, res: Response) => {
     checkInTime: formattedCheckInTime,
   });
 };
+
+/**
+ * Updates the push token for a staff member
+ * @param req Request object containing the push token
+ * @param res Response object
+ */
+export const updateStaffPushToken = async (req: Request, res: Response) => {
+  // @ts-ignore
+  const staffId = req?.user?.id;
+  const { pushToken } = req.body;
+
+  if (!staffId) {
+    throw new UnauthorizedException("Unauthorized", ErrorCode.UNAUTHORIZED);
+  }
+
+  if (!pushToken) {
+    throw new BadRequestsException(
+      "Push token is required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  try {
+    // Update the staff member's push token
+    await prismaDB.staff.update({
+      where: {
+        id: staffId,
+      },
+      data: {
+        pushToken,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Push token updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating push token:", error);
+    throw new BadRequestsException(
+      "Failed to update push token",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+};

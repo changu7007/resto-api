@@ -6,13 +6,14 @@ import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { NotFoundException } from "../../../exceptions/not-found";
 import {
+  ENCRYPT_KEY,
   ENV,
   PHONE_PE_CLIENT_ID,
   PHONE_PE_CLIENT_SECRET,
   RAZORPAY_KEY_ID,
   RAZORPAY_KEY_SECRET,
 } from "../../../secrets";
-import { getOutletById } from "../../../lib/outlet";
+import { getOrderSessionById, getOutletById } from "../../../lib/outlet";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
 import {
@@ -20,6 +21,7 @@ import {
   StandardCheckoutClient,
   StandardCheckoutPayRequest,
 } from "pg-sdk-node";
+import { decryptData } from "../../../lib/utils";
 
 const razorpay = new Razorpay({
   key_id: RAZORPAY_KEY_ID,
@@ -36,7 +38,7 @@ const FRONTEND =
 const clientId = PHONE_PE_CLIENT_ID;
 const clientSecret = PHONE_PE_CLIENT_SECRET;
 const clientVersion = 1;
-const env = Env.SANDBOX;
+const env = ENV === "development" ? Env.SANDBOX : Env.PRODUCTION;
 
 const phonePeClient = StandardCheckoutClient.getInstance(
   clientId,
@@ -44,6 +46,21 @@ const phonePeClient = StandardCheckoutClient.getInstance(
   clientVersion,
   env
 );
+
+// const outletPhonePeClient = ({
+//   outletClientId,
+//   outletClientSecret,
+// }: {
+//   outletClientId: string;
+//   outletClientSecret: string;
+// }) => {
+//   return StandardCheckoutClient.getInstance(
+//     outletClientId,
+//     outletClientSecret,
+//     clientVersion,
+//     env
+//   );
+// };
 
 export async function CreateRazorPayOrder(req: Request, res: Response) {
   const { amount } = req.body;
@@ -85,6 +102,171 @@ export async function createPhonePeOrder(req: Request, res: Response) {
   });
 }
 
+const outletPhonePeClient = async (outletId: string) => {
+  try {
+    const getOutlet = await getOutletById(outletId);
+
+    if (!getOutlet?.id) {
+      throw new NotFoundException(
+        "Outlet Not found",
+        ErrorCode.OUTLET_NOT_FOUND
+      );
+    }
+
+    const phonePeIntegration = await prismaDB.integration.findFirst({
+      where: {
+        restaurantId: outletId,
+        name: "PHONEPE",
+      },
+      select: {
+        phonePeAPIId: true,
+        phonePeAPISecretKey: true,
+      },
+    });
+
+    if (!phonePeIntegration) {
+      throw new NotFoundException(
+        "PhonePe Connection Error, Contact Support",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    const clientId = decryptData(phonePeIntegration?.phonePeAPIId as string);
+    const clientSecret = decryptData(
+      phonePeIntegration?.phonePeAPISecretKey as string
+    );
+    return StandardCheckoutClient.getInstance(
+      clientId,
+      clientSecret,
+      clientVersion,
+      env
+    );
+  } catch (error) {
+    console.log(error);
+    throw new BadRequestsException(
+      "Something Went wrong in the server",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+};
+
+export async function createDomainPhonePeOrder(req: Request, res: Response) {
+  const { outletId } = req.params;
+  const { amount, orderSessionId, from, domain } = req.body;
+  // @ts-ignore
+  const userId = req.user.id;
+
+  if (!amount) {
+    throw new NotFoundException(
+      "Amount is Required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (!from) {
+    throw new NotFoundException(
+      "PhonePe Initiialization Failed",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+
+  if (from === "paybill" && !orderSessionId) {
+    throw new NotFoundException(
+      "Order is Missing",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (!domain) {
+    throw new NotFoundException("Domain Not found", ErrorCode.NOT_FOUND);
+  }
+
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const ophonePeClient = await outletPhonePeClient(outletId);
+
+  const merchantOrderId = randomUUID();
+  if (from === "paybill") {
+    const getOrder = await getOrderSessionById(outletId, orderSessionId);
+    if (getOrder?.active === false && getOrder.isPaid) {
+      throw new BadRequestsException(
+        "Bill Already Cleared",
+        ErrorCode.INTERNAL_EXCEPTION
+      );
+    }
+
+    const redirectUrl = `${API}/outlet/${outletId}/check-phonepe-status?merchantOrderId=${merchantOrderId}&from=${from}&orderSessionId=${orderSessionId}&userId=${userId}&domain=${domain}`;
+
+    const request = StandardCheckoutPayRequest.builder()
+      .merchantOrderId(merchantOrderId)
+      .amount(amount)
+      .redirectUrl(redirectUrl)
+      .build();
+
+    const response = await ophonePeClient.pay(request);
+    return res.json({
+      success: true,
+      redirectUrl: response.redirectUrl,
+    });
+  } else {
+    const redirectUrl = `${API}/outlet/${outletId}/check-phonepe-status?merchantOrderId=${merchantOrderId}&from=${from}&userId=${userId}&domain=${domain}`;
+
+    const request = StandardCheckoutPayRequest.builder()
+      .merchantOrderId(merchantOrderId)
+      .amount(amount)
+      .redirectUrl(redirectUrl)
+      .build();
+
+    const response = await ophonePeClient.pay(request);
+    return res.json({
+      success: true,
+      redirectUrl: response.redirectUrl,
+    });
+  }
+}
+
+export async function posOutletPhonePeOrder(req: Request, res: Response) {
+  const { outletId } = req.params;
+  const { amount } = req.body;
+  // @ts-ignore
+  const userId = req.user.id;
+
+  if (!amount) {
+    throw new NotFoundException(
+      "Amount is Required",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  const getOutlet = await getOutletById(outletId);
+
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const ophonePeClient = await outletPhonePeClient(outletId);
+
+  const merchantOrderId = randomUUID();
+
+  const redirectUrl = `${API}/outlet/${outletId}/check-pos-phonepe-status?merchantOrderId=${merchantOrderId}&&userId=${userId}`;
+
+  const request = StandardCheckoutPayRequest.builder()
+    .merchantOrderId(merchantOrderId)
+    .amount(amount)
+    .redirectUrl(redirectUrl)
+    .build();
+
+  const response = await ophonePeClient.pay(request);
+  return res.json({
+    success: true,
+    redirectUrl: response.redirectUrl,
+  });
+}
+
 export async function statusPhonePeCheck(req: Request, res: Response) {
   const { merchantOrderId, subId, userId } = req.query;
 
@@ -94,6 +276,7 @@ export async function statusPhonePeCheck(req: Request, res: Response) {
       ErrorCode.UNAUTHORIZED
     );
   }
+
   const response = await phonePeClient.getOrderStatus(
     merchantOrderId as string
   );
@@ -165,6 +348,109 @@ export async function statusPhonePeCheck(req: Request, res: Response) {
   }
 }
 
+export async function posAmountPhoneCheck(req: Request, res: Response) {
+  const { outletId } = req.params;
+
+  const { merchantOrderId } = req.query;
+
+  if (!merchantOrderId) {
+    throw new NotFoundException(
+      "Merchant OrderId is Missing",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  const ophonePeClient = await outletPhonePeClient(outletId);
+  const response = await ophonePeClient.getOrderStatus(
+    merchantOrderId as string
+  );
+
+  const status = response.state;
+  let host =
+    ENV === "production"
+      ? `https://pos.restobytes.in/${outletId}/billing`
+      : `http://localhost:5173/${outletId}/billing`;
+
+  if (status === "COMPLETED") {
+    // Create subscription similar to buyPlan function
+    return res.redirect(
+      `${host}?payment=success&paymentId=${response?.orderId}&amount=${
+        response?.amount / 100
+      }`
+    );
+  } else {
+    return res.redirect(`${host}?payment=failure`);
+  }
+}
+
+export async function orderAmountPhoneCheck(req: Request, res: Response) {
+  const { outletId } = req.params;
+
+  const { merchantOrderId, orderSessionId, from, userId, domain } = req.query;
+
+  if (!merchantOrderId) {
+    throw new NotFoundException(
+      "Merchant OrderId is Missing",
+      ErrorCode.UNAUTHORIZED
+    );
+  }
+
+  if (!orderSessionId && from === "paybill") {
+    throw new NotFoundException(" OrderId is Missing", ErrorCode.UNAUTHORIZED);
+  }
+
+  const ophonePeClient = await outletPhonePeClient(outletId);
+  const response = await ophonePeClient.getOrderStatus(
+    merchantOrderId as string
+  );
+
+  const status = response.state;
+  const host =
+    ENV === "production"
+      ? `https://${domain}.restobytes.in/${outletId}`
+      : `http://${domain}.localhost:2000/${outletId}`;
+
+  const orderSession = await getOrderSessionById(
+    outletId,
+    orderSessionId as string
+  );
+
+  if (!orderSession) {
+    throw new NotFoundException("Order Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  if (status === "COMPLETED") {
+    // Create subscription similar to buyPlan function
+    if (!userId) {
+      throw new BadRequestsException(
+        "User is Missing",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+    if (from === "paybill") {
+      return res.redirect(
+        `${host}/paybill/${orderSession?.tableId}?payment=success&paymentId=${
+          response?.orderId
+        }&amount=${response?.amount / 100}`
+      );
+    } else {
+      return res.redirect(
+        `${host}/cart?payment=success&paymentId=${response?.orderId}&amount=${
+          response?.amount / 100
+        }`
+      );
+    }
+  } else {
+    if (from === "paybill") {
+      return res.redirect(
+        `${host}/paybill/${orderSession?.tableId}?payment=failure`
+      );
+    } else {
+      return res.redirect(`${host}/cart?payment=failure`);
+    }
+  }
+}
+
 export async function CreateRazorPayOrderForOutlet(
   req: Request,
   res: Response
@@ -178,8 +464,8 @@ export async function CreateRazorPayOrderForOutlet(
   }
 
   const { amount } = req.body;
-  const toSend = amount - 6;
-  console.log("To Send", " Split:", toSend, "Original:", amount);
+  const comission = amount * 0.02;
+  console.log("Comission", comission);
 
   const order = await razorpay.orders.create({
     amount: amount * 100,
@@ -188,7 +474,7 @@ export async function CreateRazorPayOrderForOutlet(
     transfers: [
       {
         account: outlet?.razorpayInfo?.acc_id!,
-        amount: toSend * 100,
+        amount: (amount - comission) * 100,
         currency: "INR",
         on_hold: 0,
       },
@@ -309,7 +595,7 @@ export const paymentWebhookVerification = async (
   req: Request,
   res: Response
 ) => {
-  const secret = "JaiHanumantha@15";
+  const secret = ENCRYPT_KEY;
   const shasum = crypto
     .createHmac("sha256", secret)
     .update(JSON.stringify(req.body));

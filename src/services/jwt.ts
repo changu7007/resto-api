@@ -51,7 +51,7 @@ export const sendToken = async (
   });
 
   if (user as FormattedPOSStaff) {
-    await redis.set(`pos-${user.id}`, JSON.stringify(user));
+    await redis.set(`pos-${user.id}`, JSON.stringify(user), "EX", 3 * 60 * 60);
   } else {
     await redis.set(user.id, JSON.stringify(user));
   }
@@ -60,12 +60,15 @@ export const sendToken = async (
     accessTokenOptions.secure = true;
   }
 
-  res.status(200).json({
-    success: true,
-    user,
-    tokens: {
-      accessToken,
-      refreshToken,
-    },
-  });
+  res
+    // .cookie("refreshToken", refreshToken, refreshTokenOptions)
+    .status(200)
+    .json({
+      success: true,
+      user,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
 };

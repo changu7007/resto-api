@@ -34,6 +34,7 @@ export const getAlerts = async (req: Request, res: Response) => {
       id: true,
       type: true,
       status: true,
+      orderId: true,
       priority: true,
       message: true,
       createdAt: true,
@@ -94,8 +95,13 @@ export const acknowledgeAlert = async (req: Request, res: Response) => {
       type: true,
       status: true,
       priority: true,
+      orderId: true,
+
       message: true,
       createdAt: true,
+    },
+    orderBy: {
+      createdAt: "desc",
     },
   });
 

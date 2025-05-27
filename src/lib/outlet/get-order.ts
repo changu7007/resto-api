@@ -62,6 +62,7 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
     id: order.id,
     billNo: order?.orderSession?.billId,
     generatedOrderId: order.generatedOrderId,
+    platform: order?.orderSession?.platform,
     name: order?.orderSession?.username,
     mode: order.orderType,
     table: order.orderSession.table?.name,
@@ -126,7 +127,12 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
     date: format(order.createdAt, "PP"),
   }));
 
-  await redis.set(`liv-o-${outletId}`, JSON.stringify(formattedOrderData));
+  await redis.set(
+    `liv-o-${outletId}`,
+    JSON.stringify(formattedOrderData),
+    "EX",
+    300
+  );
 
   return formattedOrderData;
 };
@@ -139,6 +145,12 @@ export const getFetchAllOrderByStaffToRedis = async (
     where: {
       restaurantId: outletId,
       staffId: staffId,
+      orderSession: {
+        staffId: staffId,
+        table: {
+          staffId: staffId,
+        },
+      },
     },
     include: {
       orderSession: {
@@ -186,6 +198,7 @@ export const getFetchAllOrderByStaffToRedis = async (
     id: order.id,
     billNo: order?.orderSession?.billId,
     generatedOrderId: order.generatedOrderId,
+    platform: order?.orderSession?.platform,
     name: order?.orderSession?.username,
     mode: order.orderType,
     table: order.orderSession.table?.name,
@@ -257,7 +270,9 @@ export const getFetchAllOrderByStaffToRedis = async (
 
   await redis.set(
     `all-staff-orders-${outletId}-${staffId}`,
-    JSON.stringify(formattedLiveOrders)
+    JSON.stringify(formattedLiveOrders),
+    "EX",
+    300
   );
 
   return formattedLiveOrders;
@@ -275,6 +290,9 @@ export const getFetchLiveOrderByStaffToRedis = async (
       },
       staffId: staffId,
       active: true,
+      orderSession: {
+        staffId: staffId,
+      },
       orderItems: {
         some: {
           strike: false,
@@ -327,6 +345,7 @@ export const getFetchLiveOrderByStaffToRedis = async (
     id: order.id,
     billNo: order?.orderSession?.billId,
     generatedOrderId: order.generatedOrderId,
+    platform: order?.orderSession?.platform,
     name: order?.orderSession?.username,
     mode: order.orderType,
     table: order.orderSession.table?.name,
@@ -398,7 +417,9 @@ export const getFetchLiveOrderByStaffToRedis = async (
 
   await redis.set(
     `liv-o-${outletId}-${staffId}`,
-    JSON.stringify(formattedLiveOrders)
+    JSON.stringify(formattedLiveOrders),
+    "EX",
+    300
   );
 
   return formattedLiveOrders;
@@ -412,6 +433,7 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
     },
     include: {
       table: true,
+
       orders: {
         include: {
           orderItems: {
@@ -452,86 +474,94 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
     },
   });
 
-  const formattedAllOrderData = activeOrders?.map((order) => ({
-    id: order.id,
-    billNo: order.billId,
-    phoneNo: order.phoneNo,
-    active: order.active,
-    sessionStatus: order.sessionStatus,
-    userName: order.username,
-    isPaid: order.isPaid,
-    paymentmethod: order.paymentMethod,
-    orderMode: order.orderType,
-    table: order.table?.name,
-    subTotal: order.subTotal,
-    orders: order.orders.map((order) => ({
+  const formattedAllOrderData = activeOrders?.map((order) => {
+    return {
       id: order.id,
-      generatedOrderId: order.generatedOrderId,
-      mode: order.orderType,
-      orderStatus: order.orderStatus,
-      paid: order.isPaid,
-      totalNetPrice: order?.totalNetPrice,
-      gstPrice: order?.gstPrice,
-      totalGrossProfit: order?.totalGrossProfit,
-      totalAmount: order.totalAmount,
-      createdAt: formatDistanceToNow(new Date(order.createdAt), {
-        addSuffix: true,
-      }),
-      date: format(order.createdAt, "PP"),
-      orderItems: order.orderItems.map((item) => ({
-        id: item.id,
-        menuItem: {
-          id: item.menuItem.id,
-          name: item.menuItem.name,
-          shortCode: item.menuItem.shortCode,
-          categoryId: item.menuItem.category.id,
-          categoryName: item.menuItem.category.name,
-          type: item.menuItem.type,
-          price: item.menuItem.price,
-          isVariants: item.menuItem.isVariants,
-          isAddOns: item.menuItem.isAddons,
-          images: item.menuItem.images.map((image) => ({
-            id: image.id,
-            url: image.url,
-          })),
-          menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
-            id: variant.id,
-            variantName: variant.variant.name,
-            price: variant.price,
-            type: variant.price,
-          })),
-          menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
-            id: groupAddOn.id,
-            addOnGroupName: groupAddOn.addOnGroups.title,
-            description: groupAddOn.addOnGroups.description,
-            addonVariants: groupAddOn.addOnGroups.addOnVariants.map(
-              (addOnVariant) => ({
-                id: addOnVariant.id,
-                name: addOnVariant.name,
-                price: addOnVariant.price,
-                type: addOnVariant.type,
+      billNo: order.billId,
+      platform: order?.platform,
+      phoneNo: order.phoneNo,
+      customerId: order.customerId,
+      active: order.active,
+      sessionStatus: order.sessionStatus,
+      userName: order.username,
+      isPaid: order.isPaid,
+      paymentmethod: order.paymentMethod,
+      orderMode: order.orderType,
+      table: order.table?.name,
+      subTotal: order.subTotal,
+      orders: order.orders.map((order) => ({
+        id: order.id,
+        generatedOrderId: order.generatedOrderId,
+        mode: order.orderType,
+        orderStatus: order.orderStatus,
+        paid: order.isPaid,
+        totalNetPrice: order?.totalNetPrice,
+        gstPrice: order?.gstPrice,
+        totalGrossProfit: order?.totalGrossProfit,
+        totalAmount: order.totalAmount,
+        createdAt: formatDistanceToNow(new Date(order.createdAt), {
+          addSuffix: true,
+        }),
+        date: format(order.createdAt, "PP"),
+        orderItems: order.orderItems.map((item) => ({
+          id: item.id,
+          menuItem: {
+            id: item.menuItem.id,
+            name: item.menuItem.name,
+            shortCode: item.menuItem.shortCode,
+            categoryId: item.menuItem.category.id,
+            categoryName: item.menuItem.category.name,
+            type: item.menuItem.type,
+            price: item.menuItem.price,
+            isVariants: item.menuItem.isVariants,
+            isAddOns: item.menuItem.isAddons,
+            images: item.menuItem.images.map((image) => ({
+              id: image.id,
+              url: image.url,
+            })),
+            menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+              id: variant.id,
+              variantName: variant.variant.name,
+              price: variant.price,
+              type: variant.price,
+            })),
+            menuGroupAddOns: item.menuItem.menuGroupAddOns.map(
+              (groupAddOn) => ({
+                id: groupAddOn.id,
+                addOnGroupName: groupAddOn.addOnGroups.title,
+                description: groupAddOn.addOnGroups.description,
+                addonVariants: groupAddOn.addOnGroups.addOnVariants.map(
+                  (addOnVariant) => ({
+                    id: addOnVariant.id,
+                    name: addOnVariant.name,
+                    price: addOnVariant.price,
+                    type: addOnVariant.type,
+                  })
+                ),
               })
             ),
-          })),
-        },
-        name: item.name,
-        quantity: item.quantity,
-        netPrice: item.netPrice,
-        gst: item.gst,
-        grossProfit: item.grossProfit,
-        originalRate: item.originalRate,
-        isVariants: item.isVariants,
-        totalPrice: item.totalPrice,
-        selectedVariant: item.selectedVariant,
-        addOnSelected: item.addOnSelected,
+          },
+          name: item.name,
+          quantity: item.quantity,
+          netPrice: item.netPrice,
+          gst: item.gst,
+          grossProfit: item.grossProfit,
+          originalRate: item.originalRate,
+          isVariants: item.isVariants,
+          totalPrice: item.totalPrice,
+          selectedVariant: item.selectedVariant,
+          addOnSelected: item.addOnSelected,
+        })),
       })),
-    })),
-    date: order.createdAt,
-  }));
+      date: order.createdAt,
+    };
+  });
 
   await redis.set(
     `active-os-${outletId}`,
-    JSON.stringify(formattedAllOrderData)
+    JSON.stringify(formattedAllOrderData),
+    "EX",
+    300
   );
 
   return formattedAllOrderData;
@@ -592,6 +622,7 @@ export const getFetchStaffActiveOrderSessionToRedis = async (
   const formattedAllOrderData = activeOrders?.map((order) => ({
     id: order.id,
     billNo: order.billId,
+    platform: order?.platform,
     phoneNo: order.phoneNo,
     active: order.active,
     sessionStatus: order.sessionStatus,
@@ -668,7 +699,9 @@ export const getFetchStaffActiveOrderSessionToRedis = async (
 
   await redis.set(
     `active-staff-os-${staffId}-${outletId}`,
-    JSON.stringify(formattedAllOrderData)
+    JSON.stringify(formattedAllOrderData),
+    "EX",
+    300
   );
 
   return formattedAllOrderData;

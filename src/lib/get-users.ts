@@ -216,7 +216,6 @@ export type FStaff = {
   checkIns: CheckInRecord | null;
   payroll: Payroll[];
   toRenewal: number | null;
-
   plan: "FREETRIAL" | "STARTER" | "PREMIUM" | "PRO" | "ENTERPRISE";
   restaurant: {
     id: string;
@@ -602,6 +601,9 @@ export const getCustomerById = async (id: string, outletId: string) => {
               },
             },
           },
+        },
+        orderBy: {
+          updatedAt: "desc",
         },
       },
     },

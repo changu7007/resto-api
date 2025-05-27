@@ -175,6 +175,7 @@ export class AdminCashRegisterService {
             expectedBalances.card,
           closedAt: new Date(),
           closingNotes: notes,
+          discrepancies: discrepancies,
           denominations: denominations
             ? {
                 update: {
@@ -187,24 +188,24 @@ export class AdminCashRegisterService {
       });
 
       // Record discrepancies if they exist
-      for (const [method, amount] of Object.entries(discrepancies)) {
-        if (amount !== 0) {
-          await tx.cashTransaction.create({
-            data: {
-              registerId,
-              type:
-                amount > 0
-                  ? CashTransactionType.CASH_IN
-                  : CashTransactionType.CASH_OUT,
-              amount: Math.abs(amount),
-              description: `Register ${method.toUpperCase()} balance discrepancy at closing`,
-              performedBy: adminId,
-              source: "MANUAL",
-              paymentMethod: method.toUpperCase() as PaymentMethod,
-            },
-          });
-        }
-      }
+      // for (const [method, amount] of Object.entries(discrepancies)) {
+      //   if (amount !== 0) {
+      //     await tx.cashTransaction.create({
+      //       data: {
+      //         registerId,
+      //         type:
+      //           amount > 0
+      //             ? CashTransactionType.CASH_IN
+      //             : CashTransactionType.CASH_OUT,
+      //         amount: Math.abs(amount),
+      //         description: `Register ${method.toUpperCase()} balance discrepancy at closing`,
+      //         performedBy: adminId,
+      //         source: "MANUAL",
+      //         paymentMethod: method.toUpperCase() as PaymentMethod,
+      //       },
+      //     });
+      //   }
+      // }
 
       return {
         register: closedRegister,

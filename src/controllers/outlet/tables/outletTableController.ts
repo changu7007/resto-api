@@ -732,13 +732,51 @@ export const getTableCurrentOrders = async (req: Request, res: Response) => {
     },
   });
 
+  const getIntegration = await prismaDB.integration.findMany({
+    where: {
+      restaurantId: outletId,
+      name: {
+        in: ["PHONEPE", "RAZORAPY"],
+      },
+    },
+    select: {
+      name: true,
+      status: true,
+      connected: true,
+    },
+  });
+
+  // orders: {
+  //   id: string;
+  //   generatedOrderId: string;
+  //   mode: OrderType;
+  //   orderStatus: OrderStatus;
+  //   paid: boolean;
+  //   totalNetPrice: number;
+  //   gstPrice: number;
+  //   totalGrossProfit: number;
+  //   totalAmount: string;
+  //   createdAt?: Date | string;
+  //   date: string;
+  //   orderItems: OrderItems[];
+  //   updatedAt?: Date | string;
+  // }[];
+
   const formattedOrders = {
     id: getTableOrders?.orderSession[0].id,
     tableId: getTableOrders?.orderSession[0].tableId,
     orders: getTableOrders?.orderSession[0].orders.map((orderItem) => ({
-      id: orderItem.id,
-      dineType: orderItem.orderType,
-      orderStatus: orderItem.orderStatus,
+      id: orderItem?.id,
+      generatedOrderId: orderItem?.generatedOrderId,
+      mode: orderItem?.orderType,
+      orderStatus: orderItem?.orderStatus,
+      paid: orderItem?.isPaid,
+      totalNetPrice: orderItem?.totalNetPrice,
+      gstPrice: orderItem?.gstPrice,
+      totalGrossProfit: orderItem?.totalGrossProfit,
+      totalAmount: orderItem?.totalAmount,
+      createdAt: orderItem?.createdAt,
+      date: orderItem?.createdAt,
       orderItems: orderItem.orderItems.map((foodItem) => ({
         id: foodItem.id,
         name: foodItem.name,
@@ -747,8 +785,26 @@ export const getTableCurrentOrders = async (req: Request, res: Response) => {
         basePrice: foodItem.originalRate,
         price: foodItem.totalPrice,
       })),
-      totalAmount: orderItem.totalAmount,
+      updatedAt: orderItem?.updatedAt,
+
+      // id: orderItem.id,
+      // generatedOrdeI
+      // dineType: orderItem.orderType,
+      // orderStatus: orderItem.orderStatus,
+      // orderItems: orderItem.orderItems.map((foodItem) => ({
+      //   id: foodItem.id,
+      //   name: foodItem.name,
+      //   type: foodItem.menuItem.type,
+      //   quantity: foodItem.quantity,
+      //   basePrice: foodItem.originalRate,
+      //   price: foodItem.totalPrice,
+      // })),
+      // totalAmount: orderItem.totalAmount,
     })),
+    phonePeConneted: getIntegration.find((int) => int.name === "PHONEPE")
+      ?.connected,
+    razorpayConneted: getIntegration.find((int) => int.name === "RAZORAPY")
+      ?.connected,
   };
 
   return res.json({

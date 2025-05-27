@@ -1,5 +1,8 @@
+import { CashTransaction } from "@prisma/client";
 import { prismaDB } from "..";
 import { v4 as uuidv4 } from "uuid";
+import { ENCRYPT_KEY } from "../secrets";
+import CryptoJS from "crypto-js";
 
 export function generateSlug(name: string) {
   return name.toLowerCase().replace(/\s+/g, "-");
@@ -113,3 +116,18 @@ export function getDaysRemaining(subscribedDate: Date) {
 
   return daysRemaining;
 }
+
+export const calculateInOut = (transactions: CashTransaction[]) => {
+  return transactions.reduce((balance, tx) => {
+    return balance + tx.amount;
+  }, 0);
+};
+
+export const encryptData = (data: string) => {
+  return CryptoJS.AES.encrypt(data, ENCRYPT_KEY).toString();
+};
+
+export const decryptData = (ciphertext: string) => {
+  const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPT_KEY);
+  return bytes.toString(CryptoJS.enc.Utf8);
+};

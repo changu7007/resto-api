@@ -852,7 +852,11 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
           gte: startDate,
           lte: endDate,
         },
-        orderStatus: "COMPLETED",
+        orderSession: {
+          sessionStatus: {
+            in: ["ONPROGRESS", "COMPLETED"],
+          },
+        },
       },
       menuItem: categoryFilter.categoryId ? { categoryId: categoryId } : {},
     },

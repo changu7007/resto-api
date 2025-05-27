@@ -168,6 +168,21 @@ export const getPOSTableAllSessionOrders = async (
       orderType: true,
       createdAt: true,
       updatedAt: true,
+      loyaltRedeemPoints: true,
+      discount: true,
+      discountAmount: true,
+      gstAmount: true,
+      amountReceived: true,
+      customer: {
+        select: {
+          customer: {
+            select: {
+              name: true,
+              phoneNo: true,
+            },
+          },
+        },
+      },
       table: {
         select: {
           name: true,
@@ -214,7 +229,12 @@ export const getPOSTableAllSessionOrders = async (
     activeOrders: activeOrders?.map((order) => ({
       id: order?.id,
       billId: order?.billId,
-      userName: order?.username,
+      userName: order?.username
+        ? order?.username
+        : order?.customer?.customer?.name,
+      phoneNo: order?.phoneNo
+        ? order?.phoneNo
+        : order?.customer?.customer?.phoneNo,
       isPaid: order?.isPaid,
       active: order?.active,
       invoiceUrl: order?.invoiceUrl,
@@ -225,6 +245,11 @@ export const getPOSTableAllSessionOrders = async (
         order?.orderType === "DINEIN" ? order?.table?.name : order?.orderType,
       date: order?.createdAt,
       modified: order?.updatedAt,
+      discount: order?.discount,
+      discountAmount: order?.discountAmount,
+      gstAmount: order?.gstAmount,
+      loyaltyDiscount: order?.loyaltRedeemPoints,
+      amountReceived: order?.amountReceived,
       viewOrders: order?.orders?.map((o) => ({
         id: o?.id,
         generatedOrderId: o?.generatedOrderId,

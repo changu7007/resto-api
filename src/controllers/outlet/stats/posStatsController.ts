@@ -382,8 +382,6 @@ export const getPosStats = async (req: Request, res: Response) => {
       count: number;
     }>;
 
-    console.log("Weekly Raw MongoDB Result:", JSON.stringify(result, null, 2));
-
     // MongoDB dayOfWeek: 1 (Sunday) to 7 (Saturday)
     // Convert to: 0 (Sunday) to 6 (Saturday)
     const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -524,13 +522,32 @@ export const getPopularItems = async (req: Request, res: Response) => {
   const limit = 5;
   const skip = (page - 1) * limit;
 
+  // Get today's date range in Asia/Kolkata timezone
+  const timeZone = "Asia/Kolkata"; // Default timezone
+  const todayStart = DateTime.now()
+    .setZone(timeZone)
+    .startOf("day")
+    .toUTC()
+    .toISO();
+  const todayEnd =
+    DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO() ??
+    new Date().toISOString();
+
+  if (!todayStart || !todayEnd) {
+    throw new Error("Failed to calculate today's date range.");
+  }
+
   const [popularItems, total] = await Promise.all([
     prismaDB.orderItem.groupBy({
-      by: ["menuId", "name"],
+      by: ["menuId", "name", "quantity"],
       where: {
         order: {
           restaurantId: outletId,
           orderStatus: "COMPLETED",
+          createdAt: {
+            gte: new Date(todayStart),
+            lte: new Date(todayEnd),
+          },
         },
       },
       _count: {
@@ -551,6 +568,10 @@ export const getPopularItems = async (req: Request, res: Response) => {
           order: {
             restaurantId: outletId,
             orderStatus: "COMPLETED",
+            createdAt: {
+              gte: new Date(todayStart),
+              lte: new Date(todayEnd),
+            },
           },
         },
       })
@@ -572,7 +593,7 @@ export const getPopularItems = async (req: Request, res: Response) => {
       return {
         name: item.name,
         category: menuItem?.category.name || "Uncategorized",
-        orderCount: item._count.menuId,
+        orderCount: item.quantity,
       };
     })
   );
@@ -597,6 +618,21 @@ export const getStaffPerformance = async (req: Request, res: Response) => {
   const limit = 5;
   const skip = (page - 1) * limit;
 
+  // Get today's date range in Asia/Kolkata timezone
+  const timeZone = "Asia/Kolkata"; // Default timezone
+  const todayStart = DateTime.now()
+    .setZone(timeZone)
+    .startOf("day")
+    .toUTC()
+    .toISO();
+  const todayEnd =
+    DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO() ??
+    new Date().toISOString();
+
+  if (!todayStart || !todayEnd) {
+    throw new Error("Failed to calculate today's date range.");
+  }
+
   const [staffPerformance, total] = await Promise.all([
     prismaDB.orderSession.groupBy({
       by: ["staffId"],
@@ -604,6 +640,10 @@ export const getStaffPerformance = async (req: Request, res: Response) => {
         restaurantId: outletId,
         sessionStatus: "COMPLETED",
         staffId: { not: null },
+        createdAt: {
+          gte: new Date(todayStart),
+          lte: new Date(todayEnd),
+        },
       },
       _count: {
         id: true,
@@ -623,6 +663,10 @@ export const getStaffPerformance = async (req: Request, res: Response) => {
           restaurantId: outletId,
           sessionStatus: "COMPLETED",
           staffId: { not: null },
+          createdAt: {
+            gte: new Date(todayStart),
+            lte: new Date(todayEnd),
+          },
         },
       })
       .then((staff) => staff.length),
@@ -949,7 +993,7 @@ export const getStockLevels = async (req: Request, res: Response) => {
       id: item.id,
       name: item.name,
       category: item.rawMaterialCategory.name,
-      currentStock: item.currentStock?.toFixed(2) || 0,
+      currentStock: `${item.currentStock?.toFixed(2)} - ${item?.purchasedUnit}`,
       unit: item.consumptionUnit.name,
       minStockLevel: item.minimumStockLevel || 0,
       minStockUnit: item.minimumStockUnit.name,

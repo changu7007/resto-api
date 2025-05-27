@@ -6,7 +6,7 @@ export const getDomainDataAndFetchToRedis = async (domain: string) => {
     where: {
       subdomain: domain,
     },
-    include: { user: true, restaurant: true },
+    include: { user: true, restaurants: true },
   });
 
   if (getSite?.id) {

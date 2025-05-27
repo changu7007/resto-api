@@ -5,7 +5,10 @@ import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
-import { getOAllMenuCategoriesToRedis } from "../../../lib/outlet/get-items";
+import {
+  getOAllMenuCategoriesForOnlineAndDeliveryToRedis,
+  getOAllMenuCategoriesToRedis,
+} from "../../../lib/outlet/get-items";
 import { generateSlug } from "../../../lib/utils";
 
 export const getAllCategories = async (req: Request, res: Response) => {
@@ -26,6 +29,35 @@ export const getAllCategories = async (req: Request, res: Response) => {
   }
 
   const getCategories = await getOAllMenuCategoriesToRedis(outlet.id);
+
+  return res.json({
+    success: true,
+    categories: getCategories,
+    message: "POWERINGUP.. ✅",
+  });
+};
+
+export const getAllDomainCategories = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const categories = await redis.get(`o-d-${outletId}-categories`);
+
+  if (categories) {
+    return res.json({
+      success: true,
+      categories: JSON.parse(categories),
+      message: "POWEREDUP ⚡",
+    });
+  }
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getCategories = await getOAllMenuCategoriesForOnlineAndDeliveryToRedis(
+    outlet.id
+  );
+
   return res.json({
     success: true,
     categories: getCategories,
@@ -42,7 +74,7 @@ export const createCategory = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const { name } = req.body;
+  const { name, printLocationId } = req.body;
 
   const slug = generateSlug(name);
 
@@ -51,6 +83,21 @@ export const createCategory = async (req: Request, res: Response) => {
       "Name Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
+  }
+
+  if (printLocationId !== undefined || printLocationId !== null) {
+    const findPrintLocation = await prismaDB.printLocation.findFirst({
+      where: {
+        id: printLocationId,
+      },
+    });
+
+    if (!findPrintLocation) {
+      throw new NotFoundException(
+        "The selected Print Location is not available",
+        ErrorCode.NOT_FOUND
+      );
+    }
   }
 
   const checkSlug = await prismaDB.category.findFirst({
@@ -72,10 +119,14 @@ export const createCategory = async (req: Request, res: Response) => {
       name,
       slug,
       restaurantId: outlet.id,
+      printLocationId: printLocationId,
     },
   });
 
-  await getOAllMenuCategoriesToRedis(outlet.id);
+  await Promise.all([
+    redis.del(`o-${outlet.id}-categories`),
+    redis.del(`o-d-${outletId}-categories`),
+  ]);
 
   return res.json({
     success: true,
@@ -92,7 +143,7 @@ export const updateCategory = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  const { name } = req.body;
+  const { name, printLocationId } = req.body;
 
   const slug = generateSlug(name);
 
@@ -103,8 +154,13 @@ export const updateCategory = async (req: Request, res: Response) => {
     );
   }
 
+  const category = await getCategoryByOutletId(outlet.id, categoryId);
+
   const checkSlug = await prismaDB.category.findFirst({
     where: {
+      NOT: {
+        id: category?.id,
+      },
       restaurantId: outlet.id,
       slug,
     },
@@ -112,12 +168,25 @@ export const updateCategory = async (req: Request, res: Response) => {
 
   if (checkSlug) {
     throw new BadRequestsException(
-      "Category already exists",
+      "Category Name already exists",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  const category = await getCategoryByOutletId(outlet.id, categoryId);
+  if (printLocationId !== undefined || printLocationId !== null) {
+    const findPrintLocation = await prismaDB.printLocation.findFirst({
+      where: {
+        id: printLocationId,
+      },
+    });
+
+    if (!findPrintLocation) {
+      throw new NotFoundException(
+        "The selected Print Location is not available",
+        ErrorCode.NOT_FOUND
+      );
+    }
+  }
 
   await prismaDB.category.update({
     where: {
@@ -127,19 +196,14 @@ export const updateCategory = async (req: Request, res: Response) => {
     data: {
       name,
       slug,
+      printLocationId,
     },
   });
 
-  const getCategories = await prismaDB.category.findMany({
-    where: {
-      restaurantId: outlet.id,
-    },
-    include: {
-      menuItems: true,
-    },
-  });
-
-  await redis.set(`o-${outlet.id}-categories`, JSON.stringify(getCategories));
+  await Promise.all([
+    redis.del(`o-${outlet.id}-categories`),
+    redis.del(`o-d-${outletId}-categories`),
+  ]);
 
   return res.json({
     success: true,
@@ -168,7 +232,12 @@ export const deleteCategory = async (req: Request, res: Response) => {
       id: category?.id,
     },
   });
-  await getOAllMenuCategoriesToRedis(outlet.id);
+
+  await Promise.all([
+    redis.del(`o-${outlet.id}-categories`),
+    redis.del(`o-d-${outletId}-categories`),
+  ]);
+
   return res.json({
     success: true,
     message: "Category Deleted ",

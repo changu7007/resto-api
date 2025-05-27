@@ -35,6 +35,7 @@ import {
 } from "../../../schema/staff";
 
 import { z } from "zod";
+import { sendNewOrderNotification } from "../../../services/expo-notifications";
 
 export const getLiveOrders = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -282,9 +283,21 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
       orderType: true,
       createdAt: true,
       updatedAt: true,
+      loyaltRedeemPoints: true,
       discount: true,
       discountAmount: true,
+      gstAmount: true,
       amountReceived: true,
+      customer: {
+        select: {
+          customer: {
+            select: {
+              name: true,
+              phoneNo: true,
+            },
+          },
+        },
+      },
       table: {
         select: {
           name: true,
@@ -331,7 +344,12 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
     activeOrders: activeOrders?.map((order) => ({
       id: order?.id,
       billId: order?.billId,
-      userName: order?.username,
+      userName: order?.username
+        ? order?.username
+        : order?.customer?.customer?.name,
+      phoneNo: order?.phoneNo
+        ? order?.phoneNo
+        : order?.customer?.customer?.phoneNo,
       isPaid: order?.isPaid,
       active: order?.active,
       invoiceUrl: order?.invoiceUrl,
@@ -344,6 +362,8 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
       modified: order?.updatedAt,
       discount: order?.discount,
       discountAmount: order?.discountAmount,
+      gstAmount: order?.gstAmount,
+      loyaltyDiscount: order?.loyaltRedeemPoints,
       amountReceived: order?.amountReceived,
       viewOrders: order?.orders?.map((o) => ({
         id: o?.id,
@@ -633,6 +653,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
     totalNetPrice,
     gstPrice,
     totalAmount,
+    customerId,
     totalGrossProfit,
     orderItems,
     tableId,
@@ -761,41 +782,17 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
       redis.del(`a-${outletId}`),
       redis.del(`o-n-${outletId}`),
       redis.del(`${outletId}-stocks`),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
+      redis.del(`${outletId}-all-items`),
     ]);
     let customer;
     if (isValid) {
-      customer = await prisma.customer.findFirst({
+      customer = await prisma.customerRestaurantAccess.findFirst({
         where: {
-          phoneNo: phoneNo,
-          restaurantAccess: {
-            some: {
-              restaurantId: getOutlet.id,
-            },
-          },
+          restaurantId: outletId,
+          customerId: customerId,
         },
       });
-      if (customer) {
-        customer = await prisma.customer.update({
-          where: {
-            id: customer.id,
-          },
-          data: {
-            name: username,
-          },
-        });
-      } else {
-        customer = await prisma.customer.create({
-          data: {
-            name: username,
-            phoneNo: phoneNo,
-            restaurantAccess: {
-              create: {
-                restaurantId: getOutlet.id,
-              },
-            },
-          },
-        });
-      }
     }
     const orderSession = await prisma.orderSession.create({
       data: {
@@ -1034,6 +1031,17 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
       },
     });
 
+    // Send push notifications for new dine-in orders
+    if (orderType === "DINEIN") {
+      await sendNewOrderNotification({
+        restaurantId: getOutlet.id,
+        orderId: orderId,
+        orderNumber: billNo,
+        customerName: username ?? findUser.name,
+        tableId: tableId, // This will be updated when staff is assigned
+      });
+    }
+
     if (getOutlet?.invoice?.id) {
       await prisma.invoice.update({
         where: {
@@ -1125,6 +1133,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     tableId,
     note,
     paymentId,
+    paymentMode,
   } = req.body;
 
   // @ts-ignore
@@ -1160,6 +1169,8 @@ export const postOrderForUser = async (req: Request, res: Response) => {
       redis.del(`a-${outletId}`),
       redis.del(`o-n-${outletId}`),
       redis.del(`${outletId}-stocks`),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
+      redis.del(`${outletId}-all-items`),
     ]);
     // Validate customer and access
     const validCustomer = await tx.customerRestaurantAccess.findFirst({
@@ -1169,7 +1180,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
 
     if (!validCustomer?.id) {
       throw new BadRequestsException(
-        "You Need to login & place the order",
+        "You Need to logout & login again to place the order",
         ErrorCode.UNPROCESSABLE_ENTITY
       );
     }
@@ -1198,7 +1209,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
       active: true,
       restaurantId: getOutlet.id,
       createdBy: `${validCustomer.customer.name} (${validCustomer.customer.role})`,
-      isPaid,
+      isPaid: paymentId ? true : false,
       generatedOrderId: orderId,
       orderType,
       totalNetPrice,
@@ -1297,6 +1308,8 @@ export const postOrderForUser = async (req: Request, res: Response) => {
         },
       });
 
+      console.log(`Staff Assigned-${staffTables?.name}`);
+
       if (!checkTable) {
         throw new BadRequestsException(
           "You Need to scan the Qr Code again to place Order",
@@ -1310,7 +1323,11 @@ export const postOrderForUser = async (req: Request, res: Response) => {
             where: { id: checkTable.currentOrderSessionId },
             data: {
               orders: {
-                create: { ...baseOrderData, orderStatus: "INCOMMING" },
+                create: {
+                  ...baseOrderData,
+                  staffId: staffTables?.id,
+                  orderStatus: "INCOMMING",
+                },
               },
             },
             include: {
@@ -1329,15 +1346,20 @@ export const postOrderForUser = async (req: Request, res: Response) => {
                     getOutlet?.invoice?.invoiceNo
                   }/${getYear(new Date())}`
                 : billNo,
-              username: validCustomer.customer.name,
-              phoneNo: validCustomer.customer.phoneNo,
-              customerId: validCustomer.id,
+              username: validCustomer?.customer?.name,
+              phoneNo: validCustomer?.customer?.phoneNo,
+              customerId: validCustomer?.id,
               staffId: staffTables?.id,
               tableId,
+              platform: "ONLINE",
               restaurantId: getOutlet.id,
               orderType,
               orders: {
-                create: { ...baseOrderData, orderStatus: "INCOMMING" },
+                create: {
+                  ...baseOrderData,
+                  staffId: staffTables?.id,
+                  orderStatus: "INCOMMING",
+                },
               },
             },
             include: {
@@ -1377,10 +1399,13 @@ export const postOrderForUser = async (req: Request, res: Response) => {
               }/${getYear(new Date())}`
             : billNo,
           orderType,
-          username: validCustomer.customer.name,
-          phoneNo: validCustomer.customer.phoneNo,
-          customerId: validCustomer.id,
-          restaurantId: getOutlet.id,
+          username: validCustomer?.customer?.name,
+          phoneNo: validCustomer?.customer?.phoneNo,
+          customerId: validCustomer?.id,
+          restaurantId: getOutlet?.id,
+          platform: "ONLINE",
+          transactionId: paymentId,
+          paymentMode: paymentMode,
           isPaid: true,
           paymentMethod: paymentId ? "UPI" : "CASH",
           subTotal: calculate.roundedTotal,
@@ -1547,19 +1572,17 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     // );
 
     // Update customer access stats
-    await tx.customerRestaurantAccess.update({
-      where: {
-        customerId_restaurantId: {
-          customerId: validCustomer.customer.id,
-          restaurantId: getOutlet.id,
-        },
-      },
-      data: {
-        lastVisit: new Date(),
-        totalOrders: { increment: 1 },
-        totalSpent: { increment: Number(totalAmount) },
-      },
-    });
+    // await tx.customerRestaurantAccess.update({
+    //   where: {
+    //     id: validCustomer?.id,
+    //     restaurantId: outletId,
+    //   },
+    //   data: {
+    //     lastVisit: new Date(),
+    //     totalOrders: { increment: 1 },
+    //     totalSpent: { increment: Number(totalAmount) },
+    //   },
+    // });
 
     // Delete any LOW_STOCK alerts for this restaurant
     await tx.alert.deleteMany({
@@ -1602,6 +1625,16 @@ export const postOrderForUser = async (req: Request, res: Response) => {
           }
         : undefined,
     };
+
+    if (orderType === "DINEIN" && orderSession?.tableId) {
+      await sendNewOrderNotification({
+        restaurantId: getOutlet.id,
+        orderId: orderId,
+        orderNumber: orderId,
+        customerName: orderData?.customerInfo?.name,
+        tableId: orderSession?.tableId,
+      });
+    }
     await redis.publish("orderUpdated", JSON.stringify({ outletId }));
     // Notify clients and update Redis
     websocketManager.notifyClients(
@@ -1852,6 +1885,16 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
     },
   });
 
+  if (getOrder?.orderType === "DINEIN" && getOrder?.tableId) {
+    await sendNewOrderNotification({
+      restaurantId: getOutlet.id,
+      orderId: orderId,
+      orderNumber: orderId,
+      customerName: getOrder?.username,
+      tableId: getOrder?.tableId,
+    });
+  }
+
   await Promise.all([
     redis.del(`active-os-${outletId}`),
     redis.del(`liv-o-${outletId}`),
@@ -1859,6 +1902,8 @@ export const existingOrderPatchApp = async (req: Request, res: Response) => {
     redis.del(`a-${outletId}`),
     redis.del(`o-n-${outletId}`),
     redis.del(`${outletId}-stocks`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
+    redis.del(`${outletId}-all-items`),
   ]);
   await redis.publish("orderUpdated", JSON.stringify({ outletId }));
   websocketManager.notifyClients(outletId, "NEW_ORDER_SESSION_UPDATED");
@@ -2018,6 +2063,8 @@ export const orderessionCancelPatch = async (req: Request, res: Response) => {
       redis.del(`a-${outletId}`),
       redis.del(`o-n-${outletId}`),
       redis.del(`${outletId}-stocks`),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
+      redis.del(`${outletId}-all-items`),
     ]);
 
     //if order is dineIn then update the table status to unoccupied
@@ -2306,6 +2353,8 @@ export const orderessionDeleteById = async (req: Request, res: Response) => {
     redis.del(`a-${outletId}`),
     redis.del(`o-n-${outletId}`),
     redis.del(`${outletId}-stocks`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
+    redis.del(`${outletId}-all-items`),
   ]);
 
   return res.json({
@@ -2349,6 +2398,8 @@ export const orderessionBatchDelete = async (req: Request, res: Response) => {
       redis.del(`a-${outletId}`),
       redis.del(`o-n-${outletId}`),
       redis.del(`${outletId}-stocks`),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
+      redis.del(`${outletId}-all-items`),
     ]);
 
     // Get all orders in these order sessions with their order items
@@ -2900,6 +2951,8 @@ export const orderItemModification = async (req: Request, res: Response) => {
       redis.del(`o-n-${outletId}`),
       redis.del(`${outletId}-stocks`),
       redis.del(`alerts-${outletId}`),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
+      redis.del(`${outletId}-all-items`),
     ]);
   });
 
@@ -2984,6 +3037,8 @@ export const deleteOrderItem = async (req: Request, res: Response) => {
       redis.del(`a-${outletId}`),
       redis.del(`o-n-${outletId}`),
       redis.del(`${outletId}-stocks`),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
+      redis.del(`${outletId}-all-items`),
     ]);
 
     // If menuItem's chooseProfit is "itemRecipe", restore raw material stock

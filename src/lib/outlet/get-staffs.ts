@@ -7,10 +7,6 @@ export const getAllStaff = async (outletId: string) => {
       restaurantId: outletId,
     },
   });
-  if (staffs?.length > 0) {
-    await redis.set(`staffs-${outletId}`, JSON.stringify(staffs));
-    return staffs;
-  } else {
-    await redis.del(`staffs-${outletId}`);
-  }
+
+  await redis.set(`staffs-${outletId}`, JSON.stringify(staffs), "EX", 300);
 };

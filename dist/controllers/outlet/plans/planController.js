@@ -58,7 +58,7 @@ const FRONTEND = secrets_1.ENV === "production" ? "https://app.restobytes.in" : 
 const clientId = secrets_1.PHONE_PE_CLIENT_ID;
 const clientSecret = secrets_1.PHONE_PE_CLIENT_SECRET;
 const clientVersion = 1;
-const env = pg_sdk_node_1.Env.SANDBOX;
+const env = secrets_1.ENV === "development" ? pg_sdk_node_1.Env.SANDBOX : pg_sdk_node_1.Env.PRODUCTION;
 const phonePeClient = pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env);
 function CreateRazorPayOrder(req, res) {
     return __awaiter(this, void 0, void 0, function* () {

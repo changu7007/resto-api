@@ -1,6 +1,7 @@
 import { prismaDB } from "../..";
 import { FoodMenu } from "../../controllers/outlet/items/itemsController";
 import { redis } from "../../services/redis";
+import { calculateFoodServerForItemRecipe } from "./get-inventory";
 
 export const getOAllMenuCategoriesToRedis = async (outletId: string) => {
   const getCategories = await prismaDB.category.findMany({
@@ -14,27 +15,77 @@ export const getOAllMenuCategoriesToRedis = async (outletId: string) => {
       createdAt: true,
       updatedAt: true,
       menuItems: {
-        include: {
+        select: {
           _count: true,
         },
       },
+      printLocationId: true,
     },
   });
 
-  const formattedCategories = getCategories.map((category) => ({
-    id: category.id,
-    name: category.name,
-    description: category.description,
-    createdAt: category.createdAt,
-    updatedAt: category.updatedAt,
-    menuItems: category?.menuItems?.length,
-  }));
+  const formattedCategories = getCategories
+    .filter((cat) => cat.menuItems?.length > 0)
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      description: category.description,
+      createdAt: category.createdAt,
+      updatedAt: category.updatedAt,
+      menuItems: category?.menuItems?.length,
+      printLocationId: category?.printLocationId,
+    }));
 
   await redis.set(
     `o-${outletId}-categories`,
-    JSON.stringify(formattedCategories)
+    JSON.stringify(formattedCategories),
+    "EX",
+    300
   );
-  return getCategories;
+  return formattedCategories;
+};
+
+export const getOAllMenuCategoriesForOnlineAndDeliveryToRedis = async (
+  outletId: string
+) => {
+  const getCategories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      createdAt: true,
+      updatedAt: true,
+      menuItems: {
+        where: {
+          isOnline: true,
+          isDelivery: true,
+        },
+      },
+      printLocationId: true,
+    },
+  });
+
+  const formattedCategories = getCategories
+    .filter((cat) => cat.menuItems?.length > 0)
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      description: category.description,
+      createdAt: category.createdAt,
+      updatedAt: category.updatedAt,
+      menuItems: category?.menuItems?.length,
+      printLocationId: category?.printLocationId,
+    }));
+
+  await redis.set(
+    `o-d-${outletId}-categories`,
+    JSON.stringify(formattedCategories),
+    "EX",
+    300
+  );
+  return formattedCategories;
 };
 
 export const getOAllItemsForOnlineAndDelivery = async (outletId: string) => {
@@ -69,63 +120,81 @@ export const getOAllItemsForOnlineAndDelivery = async (outletId: string) => {
     },
   });
 
-  const formattedItems: FoodMenu[] = getItems
-    ?.filter((i) => i.isDelivery === true || i.isOnline === true)
-    ?.map((menuItem) => ({
-      id: menuItem?.id,
-      name: menuItem?.name,
-      shortCode: menuItem?.shortCode!,
-      description: menuItem?.description!,
-      images: menuItem?.images?.map((image) => ({
-        id: image.id,
-        url: image.url,
-      })),
-      categoryId: menuItem?.categoryId,
-      categoryName: menuItem?.category?.name,
-      price: menuItem.price,
-      netPrice: menuItem?.netPrice || "0",
-      chooseProfit: menuItem?.chooseProfit!,
-      gst: menuItem?.gst || 0,
-      itemRecipe: {
-        id: menuItem?.itemRecipe?.id!,
-        menuId: menuItem?.itemRecipe?.menuId || null,
-        menuVariantId: menuItem?.itemRecipe?.menuVariantId || null,
-        addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId || null,
-      },
-      grossProfit: menuItem?.grossProfit!,
-      isVariants: menuItem?.isVariants!,
-      isAddOns: menuItem?.isAddons!,
-      menuItemVariants: menuItem?.menuItemVariants?.map((variant) => ({
-        id: variant?.id!,
-        variantName: variant?.variant?.name!,
-        price: variant?.price!,
-        netPrice: variant?.netPrice!,
-        gst: variant?.gst!,
-        grossProfit: variant?.grossProfit!,
-        type: variant?.foodType!,
-      })),
-      menuGroupAddOns: menuItem?.menuGroupAddOns?.map((addOns) => ({
-        id: addOns?.id!,
-        addOnGroupName: addOns?.addOnGroups?.title!,
-        description: addOns?.addOnGroups?.description!,
-        addonVariants: addOns?.addOnGroups?.addOnVariants?.map(
-          (addOnVariant) => ({
-            id: addOnVariant?.id!,
-            name: addOnVariant?.name!,
-            netPrice: addOnVariant?.netPrice!,
-            gst: addOnVariant?.gst!,
-            price: addOnVariant?.price!,
-            type: addOnVariant?.type!,
-          })
-        ),
-      })),
-      favourite: true,
-      type: menuItem?.type,
-    }));
+  const formattedItems: FoodMenu[] = await Promise.all(
+    getItems
+      ?.filter((i) => i?.isDineIn === true)
+      ?.map(async (menuItem) => {
+        const servings = menuItem?.itemRecipeId
+          ? await calculateFoodServerForItemRecipe(
+              menuItem?.itemRecipeId,
+              outletId
+            )
+          : 0;
+
+        return {
+          id: menuItem?.id,
+          name: menuItem?.name,
+          shortCode: menuItem?.shortCode!,
+          isFeatured: menuItem?.isFeatured,
+          inStock: menuItem?.isInStock,
+          upSale: menuItem?.isUpSale,
+          sku: servings,
+          description: menuItem?.description!,
+          images: menuItem?.images?.map((image) => ({
+            id: image.id,
+            url: image.url,
+          })),
+          categoryId: menuItem?.categoryId,
+          categoryName: menuItem?.category?.name,
+          price: menuItem.price,
+          netPrice: menuItem?.netPrice || "0",
+          chooseProfit: menuItem?.chooseProfit!,
+          gst: menuItem?.gst || 0,
+          itemRecipe: {
+            id: menuItem?.itemRecipe?.id!,
+            menuId: menuItem?.itemRecipe?.menuId || null,
+            menuVariantId: menuItem?.itemRecipe?.menuVariantId || null,
+            addonItemVariantId:
+              menuItem?.itemRecipe?.addonItemVariantId || null,
+          },
+          grossProfit: menuItem?.grossProfit!,
+          isVariants: menuItem?.isVariants!,
+          isAddOns: menuItem?.isAddons!,
+          menuItemVariants: menuItem?.menuItemVariants?.map((variant) => ({
+            id: variant?.id!,
+            variantName: variant?.variant?.name!,
+            price: variant?.price!,
+            netPrice: variant?.netPrice!,
+            gst: variant?.gst!,
+            grossProfit: variant?.grossProfit!,
+            type: variant?.foodType!,
+          })),
+          menuGroupAddOns: menuItem?.menuGroupAddOns?.map((addOns) => ({
+            id: addOns?.id!,
+            addOnGroupName: addOns?.addOnGroups?.title!,
+            description: addOns?.addOnGroups?.description!,
+            addonVariants: addOns?.addOnGroups?.addOnVariants?.map(
+              (addOnVariant) => ({
+                id: addOnVariant?.id!,
+                name: addOnVariant?.name!,
+                netPrice: addOnVariant?.netPrice!,
+                gst: addOnVariant?.gst!,
+                price: addOnVariant?.price!,
+                type: addOnVariant?.type!,
+              })
+            ),
+          })),
+          favourite: true,
+          type: menuItem?.type,
+        };
+      })
+  );
 
   await redis.set(
     `${outletId}-all-items-online-and-delivery`,
-    JSON.stringify(formattedItems)
+    JSON.stringify(formattedItems),
+    "EX",
+    300
   );
 
   return formattedItems;
@@ -163,59 +232,75 @@ export const getOAllItems = async (outletId: string) => {
     },
   });
 
-  const formattedItems: FoodMenu[] = getItems
-    ?.filter((i) => i?.isDineIn === true)
-    ?.map((menuItem) => ({
-      id: menuItem?.id,
-      name: menuItem?.name,
-      shortCode: menuItem?.shortCode!,
-      description: menuItem?.description!,
-      images: menuItem?.images?.map((image) => ({
-        id: image.id,
-        url: image.url,
-      })),
-      categoryId: menuItem?.categoryId,
-      categoryName: menuItem?.category?.name,
-      price: menuItem.price,
-      netPrice: menuItem?.netPrice || "0",
-      chooseProfit: menuItem?.chooseProfit!,
-      gst: menuItem?.gst || 0,
-      itemRecipe: {
-        id: menuItem?.itemRecipe?.id!,
-        menuId: menuItem?.itemRecipe?.menuId || null,
-        menuVariantId: menuItem?.itemRecipe?.menuVariantId || null,
-        addonItemVariantId: menuItem?.itemRecipe?.addonItemVariantId || null,
-      },
-      grossProfit: menuItem?.grossProfit!,
-      isVariants: menuItem?.isVariants!,
-      isAddOns: menuItem?.isAddons!,
-      menuItemVariants: menuItem?.menuItemVariants?.map((variant) => ({
-        id: variant?.id!,
-        variantName: variant?.variant?.name!,
-        price: variant?.price!,
-        netPrice: variant?.netPrice!,
-        gst: variant?.gst!,
-        grossProfit: variant?.grossProfit!,
-        type: variant?.foodType!,
-      })),
-      menuGroupAddOns: menuItem?.menuGroupAddOns?.map((addOns) => ({
-        id: addOns?.id!,
-        addOnGroupName: addOns?.addOnGroups?.title!,
-        description: addOns?.addOnGroups?.description!,
-        addonVariants: addOns?.addOnGroups?.addOnVariants?.map(
-          (addOnVariant) => ({
-            id: addOnVariant?.id!,
-            name: addOnVariant?.name!,
-            netPrice: addOnVariant?.netPrice!,
-            gst: addOnVariant?.gst!,
-            price: addOnVariant?.price!,
-            type: addOnVariant?.type!,
-          })
-        ),
-      })),
-      favourite: true,
-      type: menuItem?.type,
-    }));
+  const formattedItems: FoodMenu[] = await Promise.all(
+    getItems
+      ?.filter((i) => i?.isDineIn === true)
+      ?.map(async (menuItem) => {
+        const servings = menuItem?.itemRecipeId
+          ? await calculateFoodServerForItemRecipe(
+              menuItem?.itemRecipeId,
+              outletId
+            )
+          : 0;
+
+        return {
+          id: menuItem?.id,
+          name: menuItem?.name,
+          shortCode: menuItem?.shortCode!,
+          isFeatured: menuItem?.isFeatured,
+          inStock: menuItem?.isInStock,
+          upSale: menuItem?.isUpSale,
+          sku: servings,
+          description: menuItem?.description!,
+          images: menuItem?.images?.map((image) => ({
+            id: image.id,
+            url: image.url,
+          })),
+          categoryId: menuItem?.categoryId,
+          categoryName: menuItem?.category?.name,
+          price: menuItem.price,
+          netPrice: menuItem?.netPrice || "0",
+          chooseProfit: menuItem?.chooseProfit!,
+          gst: menuItem?.gst || 0,
+          itemRecipe: {
+            id: menuItem?.itemRecipe?.id!,
+            menuId: menuItem?.itemRecipe?.menuId || null,
+            menuVariantId: menuItem?.itemRecipe?.menuVariantId || null,
+            addonItemVariantId:
+              menuItem?.itemRecipe?.addonItemVariantId || null,
+          },
+          grossProfit: menuItem?.grossProfit!,
+          isVariants: menuItem?.isVariants!,
+          isAddOns: menuItem?.isAddons!,
+          menuItemVariants: menuItem?.menuItemVariants?.map((variant) => ({
+            id: variant?.id!,
+            variantName: variant?.variant?.name!,
+            price: variant?.price!,
+            netPrice: variant?.netPrice!,
+            gst: variant?.gst!,
+            grossProfit: variant?.grossProfit!,
+            type: variant?.foodType!,
+          })),
+          menuGroupAddOns: menuItem?.menuGroupAddOns?.map((addOns) => ({
+            id: addOns?.id!,
+            addOnGroupName: addOns?.addOnGroups?.title!,
+            description: addOns?.addOnGroups?.description!,
+            addonVariants: addOns?.addOnGroups?.addOnVariants?.map(
+              (addOnVariant) => ({
+                id: addOnVariant?.id!,
+                name: addOnVariant?.name!,
+                netPrice: addOnVariant?.netPrice!,
+                gst: addOnVariant?.gst!,
+                price: addOnVariant?.price!,
+                type: addOnVariant?.type!,
+              })
+            ),
+          })),
+          favourite: true,
+          type: menuItem?.type,
+        };
+      })
+  );
 
   await redis.set(
     `${outletId}-all-items`,

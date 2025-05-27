@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 import { redis } from "../../../services/redis";
 import {
+  calculateFoodServerForItemRecipe,
   fetchOutletRawMaterialCAtegoryToRedis,
   fetchOutletRawMaterialsToRedis,
   fetchOutletRawMaterialUnitToRedis,
@@ -649,7 +650,7 @@ const purchaseRequestFormSchema = z.object({
       requestUnitId: z.string().min(1, { message: "Request Unit is Required" }),
       requestQuantity: z.coerce
         .number()
-        .min(1, { message: "Request Quantity is Required" }),
+        .min(0, { message: "Request Quantity is Required" }),
       netRate: z.number().optional(),
       gstType: z.nativeEnum(GstType),
       taxAmount: z.number().optional(),
@@ -1083,7 +1084,7 @@ const validatePurchaseSchema = z.object({
 
         requestQuantity: z.coerce
           .number()
-          .min(1, { message: "Request Quantity is Required" }),
+          .min(0, { message: "Request Quantity is Required" }),
         netRate: z.coerce.number(),
         gstType: z.nativeEnum(GstType),
         taxAmount: z.coerce.number(),
@@ -1384,6 +1385,20 @@ export const validatePurchasenRestock = async (req: Request, res: Response) => {
         },
       },
     });
+
+    //register with cash register
+    if (validateFields?.isPaid && validateFields.paymentMethod !== undefined) {
+      await prisma.expenses.create({
+        data: {
+          restaurantId: outletId,
+          category: "Ingredients",
+          amount: validateFields?.amountToBePaid,
+          date: new Date(),
+          description: `${findVendor?.name} - Purchase (${findPurchase?.invoiceNo})`,
+          paymentMethod: validateFields?.paymentMethod,
+        },
+      });
+    }
 
     return updatePurchase;
   });
@@ -3917,5 +3932,22 @@ export const deleteItemRecipe = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "Recipe deleted and linked items updated successfully",
+  });
+};
+
+export const calculateItemServes = async (req: Request, res: Response) => {
+  const { outletId, recipeId } = req.params;
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const serves = await calculateFoodServerForItemRecipe(recipeId, outletId);
+
+  return res.json({
+    success: true,
+    message: `This Item Serves ${serves}`,
   });
 };

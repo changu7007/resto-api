@@ -48,8 +48,12 @@ import {
 import {
   addItemToUserFav,
   deleteItem,
+  disableFeaturedStatus,
+  disableInStockStatus,
   disablePosStatus,
   duplicateItem,
+  enableFeaturedStatus,
+  enableInStockStatus,
   enablePosStatus,
   getAddONById,
   getAddonsForTable,
@@ -67,6 +71,7 @@ import {
   getSingleAddons,
   getVariantById,
   getVariantsForTable,
+  getVegItemsForOnlineAndDelivery,
   postItem,
   updateItembyId,
 } from "../../controllers/outlet/items/itemsController";
@@ -74,6 +79,7 @@ import {
   createCategory,
   deleteCategory,
   getAllCategories,
+  getAllDomainCategories,
   updateCategory,
 } from "../../controllers/outlet/categories/outletCategories";
 import {
@@ -95,7 +101,11 @@ import {
   updateTable,
   verifyTable,
 } from "../../controllers/outlet/tables/outletTableController";
-import { billingOrderSession } from "../../controllers/outlet/order/orderSession/orderSessionController";
+import {
+  assignCustomerToOrder,
+  billingOrderSession,
+  completebillingOrderSession,
+} from "../../controllers/outlet/order/orderSession/orderSessionController";
 import {
   createAddOn,
   deleteAddon,
@@ -129,6 +139,9 @@ import {
   createSubDomain,
   deleteSite,
   getDomain,
+  linkFranchiseDomain,
+  unlinkDomainForRestaurant,
+  verifyFranchiseCode,
 } from "../../controllers/outlet/domains/domainController";
 import {
   bulkPosAccessDisable,
@@ -149,16 +162,23 @@ import {
   updatePayrollStatus,
 } from "../../controllers/outlet/payroll/payrollController";
 import {
+  createCustomer,
   getAllCustomer,
   getCustomersForTable,
+  searchCustomers,
 } from "../../controllers/outlet/customers/customerController";
 import {
+  createDomainPhonePeOrder,
   createVendorAccount,
   fetchBankAccountStatus,
+  orderAmountPhoneCheck,
+  posAmountPhoneCheck,
+  posOutletPhonePeOrder,
 } from "../../controllers/outlet/plans/planController";
 import {
   allStocks,
   allTableStocks,
+  calculateItemServes,
   cancelRequestPurchase,
   createItemRecipe,
   createRaiseRequestPurchase,
@@ -225,6 +245,7 @@ import {
 import {
   createReport,
   getReportsForTable,
+  posGenerateReport,
 } from "../../controllers/outlet/reports/reports-controller";
 import {
   existingOrderPatchForStaff,
@@ -275,6 +296,19 @@ import {
 } from "../../controllers/outlet/printers/printer-controller";
 import { assignTablesForWaiters } from "../../controllers/outlet/staffs/staffController";
 import { generateMenuFromImage } from "../../controllers/outlet/items/aiMenuController";
+import {
+  addCustomerToLoyaltyProgram,
+  awardPointsToCustomer,
+  createCampaign,
+  createLoyaltyProgram,
+  deleteLoyaltyProgram,
+  getCampaigns,
+  getLoyaltyCustomers,
+  getLoyaltyOverview,
+  getLoyaltyPrograms,
+  updateLoyaltyProgram,
+} from "../../controllers/outlet/loyalty/loyaltyController";
+import { phonePeDetails } from "../../controllers/outlet/integration/intergation-controller";
 const outletRoute: Router = Router();
 
 outletRoute.get("/get-all-outlets", errorHandler(getAllOutlets));
@@ -453,6 +487,18 @@ outletRoute.get(
 );
 
 outletRoute.get(
+  "/:outletId/online-and-delivery-categories",
+  // isAuthMiddelware,
+  errorHandler(getAllDomainCategories)
+);
+
+outletRoute.get(
+  "/:outletId/veg-online-and-delivery-items",
+  // isAuthMiddelware,
+  errorHandler(getVegItemsForOnlineAndDelivery)
+);
+
+outletRoute.get(
   "/:outletId/online-and-delivery-items-search",
   // isAuthMiddelware,
   errorHandler(getItemsBySearchForOnlineAndDelivery)
@@ -541,6 +587,12 @@ outletRoute.patch(
   "/:outletId/orderSession/:orderSessionId",
   isAuthMiddelware,
   errorHandler(billingOrderSession)
+);
+
+outletRoute.patch(
+  "/:outletId/complete-orderSession/:orderSessionId",
+  isAuthMiddelware,
+  errorHandler(completebillingOrderSession)
 );
 
 outletRoute.patch(
@@ -682,6 +734,27 @@ outletRoute.patch(
   isAuthMiddelware,
   errorHandler(enablePosStatus)
 );
+outletRoute.patch(
+  "/:outletId/items/:itemId/enable-featured",
+  isAuthMiddelware,
+  errorHandler(enableFeaturedStatus)
+);
+outletRoute.patch(
+  "/:outletId/items/:itemId/enable-in-stock",
+  isAuthMiddelware,
+  errorHandler(enableInStockStatus)
+);
+outletRoute.patch(
+  "/:outletId/items/:itemId/disable-featured",
+  isAuthMiddelware,
+  errorHandler(disableFeaturedStatus)
+);
+outletRoute.patch(
+  "/:outletId/items/:itemId/disable-in-stock",
+  isAuthMiddelware,
+  errorHandler(disableInStockStatus)
+);
+
 outletRoute.patch(
   "/:outletId/items/:itemId/disable-pos",
   isAuthMiddelware,
@@ -1355,13 +1428,13 @@ outletRoute.post(
 
 outletRoute.get(
   "/:outletId/printers",
-  isAuthMiddelware,
+  // isAuthMiddelware,
   errorHandler(getPrinters)
 );
 
 outletRoute.get(
   "/:outletId/printers/:printerId",
-  isAuthMiddelware,
+  // isAuthMiddelware,
   errorHandler(getPrinterById)
 );
 
@@ -1466,7 +1539,7 @@ outletRoute.patch(
 
 outletRoute.get(
   "/:outletId/print-details",
-  isAuthMiddelware,
+  // isAuthMiddelware,
   errorHandler(getPrintDetails)
 );
 
@@ -1479,6 +1552,141 @@ outletRoute.get(
   "/:outletId/get-todays-cash-transactions",
   isAuthMiddelware,
   errorHandler(getTodaysTransaction)
+);
+
+// Overview routes
+outletRoute.get(
+  "/:restaurantId/loyalty/overview",
+  isAuthMiddelware,
+  errorHandler(getLoyaltyOverview)
+);
+
+// Program routes
+outletRoute.get(
+  "/:restaurantId/loyalty/programs",
+  isAuthMiddelware,
+  errorHandler(getLoyaltyPrograms)
+);
+
+outletRoute.post(
+  "/:restaurantId/loyalty/programs",
+  isAuthMiddelware,
+  errorHandler(createLoyaltyProgram)
+);
+
+outletRoute.patch(
+  "/:restaurantId/loyalty/programs/:programId",
+  isAuthMiddelware,
+  errorHandler(updateLoyaltyProgram)
+);
+
+outletRoute.delete(
+  "/:restaurantId/loyalty/programs/:programId",
+  isAuthMiddelware,
+  errorHandler(deleteLoyaltyProgram)
+);
+
+// Customer routes
+outletRoute.get(
+  "/:restaurantId/loyalty/customers",
+  isAuthMiddelware,
+  errorHandler(getLoyaltyCustomers)
+);
+
+outletRoute.post(
+  "/:restaurantId/loyalty/customers",
+  isAuthMiddelware,
+  errorHandler(addCustomerToLoyaltyProgram)
+);
+
+outletRoute.post(
+  "/:restaurantId/loyalty/customers/award-points",
+  isAuthMiddelware,
+  errorHandler(awardPointsToCustomer)
+);
+
+// Campaign routes
+outletRoute.get(
+  "/:restaurantId/loyalty/campaigns",
+  isAuthMiddelware,
+  errorHandler(getCampaigns)
+);
+
+outletRoute.post(
+  "/:restaurantId/loyalty/campaigns",
+  isAuthMiddelware,
+  errorHandler(createCampaign)
+);
+
+outletRoute.get(
+  "/:outletId/search-customers",
+  isAuthMiddelware,
+  errorHandler(searchCustomers)
+);
+
+outletRoute.post(
+  "/:outletId/create-customers",
+  isAuthMiddelware,
+  errorHandler(createCustomer)
+);
+outletRoute.patch(
+  "/:outletId/app-integration-phonepe",
+  isAuthMiddelware,
+  errorHandler(phonePeDetails)
+);
+outletRoute.post(
+  "/:outletId/outlet-phonepe",
+  isAuthMiddelware,
+  errorHandler(createDomainPhonePeOrder)
+);
+outletRoute.get(
+  "/:outletId/check-phonepe-status",
+  errorHandler(orderAmountPhoneCheck)
+);
+
+outletRoute.post(
+  "/:outletId/pos-phonepe",
+  isAuthMiddelware,
+  errorHandler(posOutletPhonePeOrder)
+);
+outletRoute.get(
+  "/:outletId/check-pos-phonepe-status",
+  errorHandler(posAmountPhoneCheck)
+);
+
+outletRoute.get(
+  "/:outletId/item-serves/:recipeId",
+  errorHandler(calculateItemServes)
+);
+
+outletRoute.patch(
+  "/:outletId/order-session/:orderSessionId/assign-customer",
+  isAuthMiddelware,
+  errorHandler(assignCustomerToOrder)
+);
+
+outletRoute.post(
+  "/:outletId/verify-franchise-domain",
+  isAuthMiddelware,
+  errorHandler(verifyFranchiseCode)
+);
+
+outletRoute.post(
+  "/:outletId/link-franchise-domain",
+  isAuthMiddelware,
+  errorHandler(linkFranchiseDomain)
+);
+
+outletRoute.patch(
+  "/:outletId/unlink-franchise-domain/:siteId",
+  isAuthMiddelware,
+  errorHandler(unlinkDomainForRestaurant)
+);
+
+outletRoute.post(
+  "/:outletId/pos-generate-report",
+  isAuthMiddelware,
+  errorHandler(posGenerateReport)
 );
 
 export default outletRoute;

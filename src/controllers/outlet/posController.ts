@@ -8,6 +8,8 @@ import { getOutletById } from "../../lib/outlet";
 import { redis } from "../../services/redis";
 import { z } from "zod";
 import { StaffCheckInServices } from "../../services/staffCheckInServices";
+import { DateTime } from "luxon";
+import { CashTransaction } from "@prisma/client";
 
 const staffCheckInService = new StaffCheckInServices();
 
@@ -58,7 +60,7 @@ export const posStaffCheckInAndRegister = async (
   }
 
   const { checkIn, register } = await staffCheckInService.handleStaffChecIn(
-    validatedBody.data.staffId,
+    id,
     outletId,
     validatedBody.data.openingBalance,
     validatedBody.data.openingNotes,
@@ -150,16 +152,36 @@ export const posGetRegisterStatus = async (req: Request, res: Response) => {
   // @ts-ignore
   const id = req.user?.id;
 
+  const timeZone = "Asia/Kolkata"; // Default to a specific time zone
+
+  const todayStart = DateTime.now()
+    .setZone(timeZone)
+    .startOf("day")
+    .toUTC()
+    .toISO();
+  const todayEnd =
+    DateTime.now().setZone(timeZone).endOf("day").toUTC().toISO() ??
+    new Date().toISOString();
+
   const outlet = await getOutletById(outletId);
+
   if (!outlet) {
     throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
+  }
+
+  if (!todayStart || !todayEnd) {
+    throw new Error("Failed to calculate today's date range.");
   }
 
   const register = await prismaDB.cashRegister.findFirst({
     where: {
       restaurantId: outletId,
-      status: "OPEN",
       openedBy: id,
+      status: "OPEN",
+      // createdAt: {
+      //   gte: new Date(todayStart),
+      //   lte: new Date(todayEnd),
+      // },
     },
     include: {
       transactions: {
@@ -186,8 +208,73 @@ export const posGetRegisterStatus = async (req: Request, res: Response) => {
     },
   });
 
-  return res.status(200).json({
-    success: true,
-    data: register,
-  });
+  const calculateTotal = (transaction: CashTransaction[]) => {
+    return transaction?.reduce((sum, tx) => sum + tx?.amount, 0);
+  };
+
+  if (register) {
+    const cashIn = calculateTotal(
+      register?.transactions?.filter((tx) => tx.type === "CASH_IN")
+    );
+    const cashOut = calculateTotal(
+      register?.transactions?.filter((tx) => tx.type === "CASH_OUT")
+    );
+    const registerData = {
+      ...register,
+      floatingBalance: cashIn - cashOut,
+      cashIn: cashIn,
+      cashOut: cashOut,
+      netposition: cashIn - cashOut,
+      discrepancy: cashIn - cashOut - Number(register?.closingBalance || 0),
+      paymentDistribution: {
+        cash:
+          calculateTotal(
+            register?.transactions?.filter(
+              (tx) => tx.type === "CASH_IN" && tx.paymentMethod === "CASH"
+            )
+          ) -
+          calculateTotal(
+            register?.transactions?.filter(
+              (tx) => tx.type === "CASH_OUT" && tx.paymentMethod === "CASH"
+            )
+          ),
+        upi:
+          calculateTotal(
+            register?.transactions?.filter(
+              (tx) => tx.type === "CASH_IN" && tx.paymentMethod === "UPI"
+            )
+          ) -
+          calculateTotal(
+            register?.transactions?.filter(
+              (tx) => tx.type === "CASH_OUT" && tx.paymentMethod === "UPI"
+            )
+          ),
+        card:
+          calculateTotal(
+            register?.transactions?.filter(
+              (tx) =>
+                tx.type === "CASH_IN" &&
+                (tx.paymentMethod === "DEBIT" || tx.paymentMethod === "CREDIT")
+            )
+          ) -
+          calculateTotal(
+            register?.transactions?.filter(
+              (tx) =>
+                tx.type === "CASH_OUT" &&
+                (tx.paymentMethod === "DEBIT" || tx.paymentMethod === "CREDIT")
+            )
+          ),
+      },
+    };
+
+    return res.json({
+      success: true,
+      data: registerData,
+    });
+  } else {
+    return res.json({
+      success: true,
+      data: null,
+    });
+  }
 };

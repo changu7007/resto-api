@@ -28,6 +28,7 @@ export class StaffCheckInServices {
   ) {
     return await prismaDB.$transaction(async (tx) => {
       //check if the staff is already checked in
+
       const activeCheckIn = await tx.checkInRecord.findFirst({
         where: {
           staffId: staffId,
@@ -52,7 +53,7 @@ export class StaffCheckInServices {
       const unclosedCheckIn = await tx.checkInRecord.findFirst({
         where: {
           staffId: staffId,
-          status: CheckInStatus.ACTIVE,
+          status: "ACTIVE",
           checkOutTime: null,
           date: {
             lt: new Date(),
@@ -62,6 +63,8 @@ export class StaffCheckInServices {
           register: true,
         },
       });
+
+      console.log("unclosedCheckIn", unclosedCheckIn);
 
       if (unclosedCheckIn) {
         // Force close previous check-in
@@ -290,6 +293,7 @@ export class StaffCheckInServices {
             expectedBalanceCash + expectedBalanceUPI + expectedCardBalance,
           closedAt: new Date(),
           closingNotes: notes,
+          discrepancies: discrepancy,
           denominations: denominations
             ? {
                 update: {
@@ -302,22 +306,22 @@ export class StaffCheckInServices {
       });
 
       // Record discrepancy if exists
-      if (discrepancy !== 0) {
-        await tx.cashTransaction.create({
-          data: {
-            registerId: activeCheckIn.register.id,
-            type:
-              discrepancy > 0
-                ? CashTransactionType.CASH_IN
-                : CashTransactionType.CASH_OUT,
-            amount: Math.abs(discrepancy),
-            description: `Register balance discrepancy at closing`,
-            performedBy: staffId,
-            source: "MANUAL",
-            paymentMethod: "CASH",
-          },
-        });
-      }
+      // if (discrepancy !== 0) {
+      //   await tx.cashTransaction.create({
+      //     data: {
+      //       registerId: activeCheckIn.register.id,
+      //       type:
+      //         discrepancy > 0
+      //           ? CashTransactionType.CASH_IN
+      //           : CashTransactionType.CASH_OUT,
+      //       amount: Math.abs(discrepancy),
+      //       description: `Register balance discrepancy at closing`,
+      //       performedBy: staffId,
+      //       source: "MANUAL",
+      //       paymentMethod: "CASH",
+      //     },
+      //   });
+      // }
 
       // Close check-in
       const closedCheckIn = await tx.checkInRecord.update({

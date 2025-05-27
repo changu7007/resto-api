@@ -331,7 +331,7 @@ export const CustomerLogin = async (req: Request, res: Response) => {
 export const customerUpdateSession = async (req: Request, res: Response) => {
   const { outletId, customerId } = req.params;
 
-  const { userType, tableId } = req.body;
+  const { userType, tableId, address, location } = req.body;
 
   if (!outletId) {
     throw new BadRequestsException(
@@ -366,6 +366,10 @@ export const customerUpdateSession = async (req: Request, res: Response) => {
     },
     data: {
       userType: userType,
+      address: `${address?.area},${address?.address}`,
+      landmark: address?.landmark,
+      latitude: location?.lat ? location?.lat.toString() : null,
+      longitude: location?.lng ? location?.lng.toString() : null,
     },
   });
 
@@ -427,7 +431,6 @@ export const getCustomerOrdersById = async (req: Request, res: Response) => {
         })),
       })),
     }));
-
   return res.json({
     success: true,
     orders: formattedOrder,
@@ -455,6 +458,9 @@ export const getCurrentOrderForCustomer = async (
     .filter((s) => s.active === true)
     .map((session) => ({
       id: session?.id,
+      orderStatus: session?.orders?.some(
+        (o) => o?.orderStatus !== "SERVED" && o?.orderStatus !== "CANCELLED"
+      ),
       billId: session?.billId,
       active: session?.active,
       invoiceUrl: session?.invoiceUrl,

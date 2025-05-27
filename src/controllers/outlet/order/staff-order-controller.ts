@@ -20,6 +20,7 @@ import { BadRequestsException } from "../../../exceptions/bad-request";
 import { OrderStatus, OrderType, CashRegister } from "@prisma/client";
 import { getYear } from "date-fns";
 import { inviteCode, menuCardSchema } from "./orderOutletController";
+import { sendNewOrderNotification } from "../../../services/expo-notifications";
 
 export const getByStaffLiveOrders = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -59,6 +60,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
   const {
     staffId,
     username,
+    customerId,
     isPaid,
     cashRegisterId,
     isValid,
@@ -185,38 +187,12 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
   const result = await prismaDB.$transaction(async (prisma) => {
     let customer;
     if (isValid) {
-      customer = await prisma.customer.findFirst({
+      customer = await prisma.customerRestaurantAccess.findFirst({
         where: {
-          phoneNo: phoneNo,
-          restaurantAccess: {
-            some: {
-              restaurantId: getOutlet.id,
-            },
-          },
+          restaurantId: outletId,
+          customerId: customerId,
         },
       });
-      if (customer) {
-        customer = await prisma.customer.update({
-          where: {
-            id: customer.id,
-          },
-          data: {
-            name: username,
-          },
-        });
-      } else {
-        customer = await prisma.customer.create({
-          data: {
-            name: username,
-            phoneNo: phoneNo,
-            restaurantAccess: {
-              create: {
-                restaurantId: getOutlet.id,
-              },
-            },
-          },
-        });
-      }
     }
     const orderSession = await prisma.orderSession.create({
       data: {
@@ -515,6 +491,16 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
       },
     });
 
+    if (orderType === "DINEIN" && orderSession?.tableId) {
+      await sendNewOrderNotification({
+        restaurantId: outletId,
+        orderId: orderId,
+        orderNumber: orderId,
+        customerName: orderSession?.username,
+        tableId: orderSession?.tableId,
+      });
+    }
+
     return orderSession;
   });
   // Post-transaction tasks
@@ -526,6 +512,485 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     redis.del(`o-n-${outletId}`),
     redis.del(`${outletId}-stocks`),
     redis.del(`liv-o-${outletId}-${staffId}`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
+    redis.del(`${outletId}-all-items`),
+  ]);
+
+  websocketManager.notifyClients(getOutlet?.id, "NEW_ORDER_SESSION_CREATED");
+
+  return res.json({
+    success: true,
+    orderSessionId: result.id,
+    kotNumber: orderId,
+    message: "Order Created from Captain ✅",
+  });
+};
+
+export const postOrderForStafUsingQueue = async (
+  req: Request,
+  res: Response
+) => {
+  const { outletId } = req.params;
+
+  const validTypes = Object.values(OrderType);
+
+  const {
+    staffId,
+    username,
+    customerId,
+    isPaid,
+    cashRegisterId,
+    isValid,
+    phoneNo,
+    orderType,
+    totalNetPrice,
+    gstPrice,
+    totalAmount,
+    totalGrossProfit,
+    orderItems,
+    tableId,
+    paymentMethod,
+    orderMode,
+    isSplitPayment,
+    splitPayments,
+    receivedAmount,
+    changeAmount,
+  } = req.body;
+
+  if (isValid === true && !phoneNo) {
+    throw new BadRequestsException(
+      "please provide Phone No",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  // Authorization and basic validation
+  // @ts-ignore
+  if (staffId !== req.user?.id) {
+    throw new BadRequestsException("Invalid Staff", ErrorCode.UNAUTHORIZED);
+  }
+
+  // Normal payment validation
+  if (isPaid === true && !isSplitPayment && !paymentMethod) {
+    throw new BadRequestsException(
+      "Please Select Payment Mode",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  // Split payment validation
+  if (isPaid === true && isSplitPayment === true) {
+    if (
+      !splitPayments ||
+      !Array.isArray(splitPayments) ||
+      splitPayments.length === 0
+    ) {
+      throw new BadRequestsException(
+        "Split payment selected but no payment details provided",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    // Calculate total amount from split payments
+    const totalPaid = splitPayments.reduce(
+      (sum, payment) => sum + Number(payment.amount),
+      0
+    );
+
+    // Validate split payment total matches bill total (allow small difference for rounding)
+    if (Math.abs(totalPaid - totalAmount) > 0.1) {
+      throw new BadRequestsException(
+        `Total split payment amount (${totalPaid.toFixed(
+          2
+        )}) must equal bill total (${totalAmount.toFixed(2)})`,
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+  }
+
+  let cashRegister: CashRegister | null = null;
+
+  if (isPaid === true) {
+    const findCashRegister = await prismaDB.cashRegister.findFirst({
+      where: { id: cashRegisterId, status: "OPEN" },
+    });
+    if (!findCashRegister?.id) {
+      throw new NotFoundException(
+        "Cash Register Not Found",
+        ErrorCode.NOT_FOUND
+      );
+    }
+    cashRegister = findCashRegister;
+  }
+
+  const [findStaff, getOutlet] = await Promise.all([
+    prismaDB.staff.findFirst({ where: { id: staffId } }),
+    getOutletById(outletId),
+  ]);
+
+  if (!findStaff?.id || !getOutlet?.id) {
+    throw new NotFoundException("Unauthorized Access", ErrorCode.NOT_FOUND);
+  }
+
+  if (!validTypes.includes(orderType)) {
+    throw new BadRequestsException(
+      "Invalid Order Type",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  if (orderType === "DINEIN" && !tableId) {
+    throw new BadRequestsException(
+      "Table ID is required for DINEIN order type",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  // Generate IDs
+  const [orderId, billNo] = await Promise.all([
+    generatedOrderId(getOutlet.id),
+    generateBillNo(getOutlet.id),
+  ]);
+  // Determine order status
+  const orderStatus =
+    orderMode === "KOT"
+      ? "INCOMMING"
+      : orderMode === "EXPRESS"
+      ? "COMPLETED"
+      : orderMode === "READY"
+      ? "FOODREADY"
+      : "SERVED";
+
+  const result = await prismaDB.$transaction(async (prisma) => {
+    let customer;
+    if (isValid) {
+      customer = await prisma.customerRestaurantAccess.findFirst({
+        where: {
+          restaurantId: outletId,
+          customerId: customerId,
+        },
+      });
+    }
+    const orderSession = await prisma.orderSession.create({
+      data: {
+        active: isPaid === true && orderStatus === "COMPLETED" ? false : true,
+        sessionStatus:
+          isPaid === true && orderStatus === "COMPLETED"
+            ? "COMPLETED"
+            : "ONPROGRESS",
+        billId: getOutlet?.invoice?.isGSTEnabled
+          ? `${getOutlet?.invoice?.prefix}${
+              getOutlet?.invoice?.invoiceNo
+            }/${getYear(new Date())}`
+          : billNo,
+        orderType: orderType,
+        username: username ?? findStaff.name,
+        phoneNo: phoneNo ?? null,
+        staffId: findStaff.id,
+        customerId: isValid === true ? customer?.id : null,
+        paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
+        tableId: tableId,
+        isPaid: isPaid,
+        restaurantId: getOutlet.id,
+        createdBy: `${findStaff?.name} (${findStaff?.role})`,
+        subTotal: isPaid ? totalAmount : null,
+        amountReceived:
+          isPaid && !isSplitPayment && receivedAmount ? receivedAmount : null,
+        change: isPaid && !isSplitPayment && changeAmount ? changeAmount : null,
+        isSplitPayment: isPaid && isSplitPayment ? true : false,
+        splitPayments:
+          isPaid && isSplitPayment && splitPayments
+            ? {
+                create: splitPayments.map((payment: any) => ({
+                  method: payment.method,
+                  amount: Number(payment.amount),
+                  note: `Part of split payment for bill #${billNo}`,
+                  createdBy: `${findStaff?.name} (${findStaff?.role})`,
+                })),
+              }
+            : undefined,
+        orders: {
+          create: {
+            restaurantId: getOutlet.id,
+            staffId: staffId,
+            createdBy: `${findStaff?.name} (${findStaff?.role})`,
+            isPaid: isPaid,
+            active: true,
+            orderStatus:
+              isPaid === true && orderStatus === "COMPLETED"
+                ? "COMPLETED"
+                : orderStatus,
+            totalNetPrice: totalNetPrice,
+            gstPrice: gstPrice,
+            totalAmount: totalAmount,
+            totalGrossProfit: totalGrossProfit,
+            generatedOrderId: orderId,
+            orderType: orderType,
+            paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
+            orderItems: {
+              create: orderItems?.map((item: any) => ({
+                menuId: item?.menuId,
+                name: item?.menuItem?.name,
+                strike: false,
+                isVariants: item?.menuItem?.isVariants,
+                originalRate: item?.originalPrice,
+                quantity: item?.quantity,
+                netPrice: item?.netPrice.toString(),
+                gst: item?.gst,
+                grossProfit: item?.grossProfit,
+                totalPrice: item?.price,
+                selectedVariant: item?.sizeVariantsId
+                  ? {
+                      create: {
+                        sizeVariantId: item?.sizeVariantsId,
+                        name: item?.menuItem?.menuItemVariants?.find(
+                          (variant: any) => variant?.id === item?.sizeVariantsId
+                        )?.variantName,
+                        type: item?.menuItem?.menuItemVariants?.find(
+                          (variant: any) => variant?.id === item?.sizeVariantsId
+                        )?.type,
+                        price: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.price as string
+                        ),
+                        gst: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.gst
+                        ),
+                        netPrice: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.netPrice as string
+                        ).toString(),
+                        grossProfit: Number(
+                          item?.menuItem.menuItemVariants.find(
+                            (v: any) => v?.id === item?.sizeVariantsId
+                          )?.grossProfit
+                        ),
+                      },
+                    }
+                  : undefined,
+                addOnSelected: {
+                  create: item?.addOnSelected?.map((addon: any) => {
+                    const groupAddOn = item?.menuItem?.menuGroupAddOns?.find(
+                      (gAddon: any) => gAddon?.id === addon?.id
+                    );
+                    return {
+                      addOnId: addon?.id,
+                      name: groupAddOn?.addOnGroupName,
+                      selectedAddOnVariantsId: {
+                        create: addon?.selectedVariantsId?.map(
+                          (addOnVariant: any) => {
+                            const matchedVaraint =
+                              groupAddOn?.addonVariants?.find(
+                                (variant: any) =>
+                                  variant?.id === addOnVariant?.id
+                              );
+                            return {
+                              selectedAddOnVariantId: addOnVariant?.id,
+                              name: matchedVaraint?.name,
+                              type: matchedVaraint?.type,
+                              price: Number(matchedVaraint?.price),
+                              gst: Number(
+                                item?.menuItem.menuItemVariants.find(
+                                  (v: any) => v?.id === item?.sizeVariantsId
+                                )?.gst
+                              ),
+                              netPrice: Number(
+                                item?.menuItem.menuItemVariants.find(
+                                  (v: any) => v?.id === item?.sizeVariantsId
+                                )?.netPrice as string
+                              ).toString(),
+                              grossProfit: Number(
+                                item?.menuItem.menuItemVariants.find(
+                                  (v: any) => v?.id === item?.sizeVariantsId
+                                )?.grossProfit
+                              ),
+                            };
+                          }
+                        ),
+                      },
+                    };
+                  }),
+                },
+              })),
+            },
+          },
+        },
+      },
+    });
+
+    // Update raw material stock if `chooseProfit` is "itemRecipe"
+    await Promise.all(
+      orderItems.map(async (item: any) => {
+        const menuItem = await prisma.menuItem.findUnique({
+          where: { id: item.menuId },
+          include: { itemRecipe: { include: { ingredients: true } } },
+        });
+
+        if (menuItem?.chooseProfit === "itemRecipe" && menuItem.itemRecipe) {
+          await Promise.all(
+            menuItem.itemRecipe.ingredients.map(async (ingredient) => {
+              const rawMaterial = await prisma.rawMaterial.findUnique({
+                where: { id: ingredient.rawMaterialId },
+              });
+
+              if (rawMaterial) {
+                let decrementStock = 0;
+
+                // Check if the ingredient's unit matches the purchase unit or consumption unit
+                if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
+                  // If MOU is linked to purchaseUnit, multiply directly with quantity
+                  decrementStock =
+                    Number(ingredient.quantity) * Number(item.quantity || 1);
+                } else if (
+                  ingredient.unitId === rawMaterial.consumptionUnitId
+                ) {
+                  // If MOU is linked to consumptionUnit, apply conversion factor
+                  decrementStock =
+                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                    Number(rawMaterial.conversionFactor || 1);
+                } else {
+                  // Default fallback if MOU doesn't match either unit
+                  decrementStock =
+                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
+                    Number(rawMaterial.conversionFactor || 1);
+                }
+
+                if (Number(rawMaterial.currentStock) < decrementStock) {
+                  throw new BadRequestsException(
+                    `Insufficient stock for raw material: ${rawMaterial.name}`,
+                    ErrorCode.UNPROCESSABLE_ENTITY
+                  );
+                }
+
+                await prisma.rawMaterial.update({
+                  where: { id: rawMaterial.id },
+                  data: {
+                    currentStock:
+                      Number(rawMaterial.currentStock) - Number(decrementStock),
+                  },
+                });
+              }
+            })
+          );
+        }
+      })
+    );
+
+    if (tableId) {
+      const table = await prisma.table.findFirst({
+        where: { id: tableId, restaurantId: getOutlet.id },
+      });
+
+      if (!table) {
+        throw new NotFoundException("No Table found", ErrorCode.NOT_FOUND);
+      }
+
+      await prisma.table.update({
+        where: { id: table.id, restaurantId: getOutlet.id },
+        data: {
+          occupied: true,
+          inviteCode: inviteCode(),
+          currentOrderSessionId: orderSession.id,
+        },
+      });
+    }
+
+    await prisma.notification.create({
+      data: {
+        restaurantId: getOutlet.id,
+        orderId: orderId,
+        message: "You have a new Order",
+        orderType: tableId ? "DINEIN" : orderType,
+      },
+    });
+
+    if (getOutlet?.invoice?.id) {
+      await prisma.invoice.update({
+        where: {
+          restaurantId: getOutlet.id,
+        },
+        data: {
+          invoiceNo: { increment: 1 },
+        },
+      });
+    }
+
+    if (isPaid && cashRegister?.id) {
+      const registerIdString = cashRegister.id; // Ensure we have a string value
+
+      if (isSplitPayment && splitPayments && splitPayments.length > 0) {
+        // Create multiple cash transactions for split payments
+        await Promise.all(
+          splitPayments.map(async (payment: any) => {
+            await prismaDB.cashTransaction.create({
+              data: {
+                registerId: registerIdString,
+                amount: Number(payment.amount),
+                type: "CASH_IN",
+                source: "ORDER",
+                description: `Split Payment (${payment.method}) - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
+                paymentMethod: payment.method,
+                performedBy: staffId,
+                orderId: orderSession.id,
+                referenceId: orderSession.id, // Add reference ID for easier tracing
+              },
+            });
+          })
+        );
+      } else {
+        // Create a single cash transaction for regular payment
+        await prismaDB.cashTransaction.create({
+          data: {
+            registerId: registerIdString,
+            amount: totalAmount,
+            type: "CASH_IN",
+            source: "ORDER",
+            description: `Order Sales - #${orderSession.billId} - ${orderSession.orderType} - ${orderItems?.length} x Items`,
+            paymentMethod: paymentMethod,
+            performedBy: staffId,
+            orderId: orderSession.id,
+            referenceId: orderSession.id, // Add reference ID for easier tracing
+          },
+        });
+      }
+    }
+
+    // Delete any LOW_STOCK alerts for this restaurant
+    await prisma.alert.deleteMany({
+      where: {
+        restaurantId: getOutlet.id,
+        type: "LOW_STOCK",
+        status: { in: ["PENDING", "ACKNOWLEDGED"] },
+      },
+    });
+
+    if (orderType === "DINEIN" && orderSession?.tableId) {
+      await sendNewOrderNotification({
+        restaurantId: outletId,
+        orderId: orderId,
+        orderNumber: orderId,
+        customerName: orderSession?.username,
+        tableId: orderSession?.tableId,
+      });
+    }
+
+    return orderSession;
+  });
+  // Post-transaction tasks
+  await Promise.all([
+    redis.del(`active-os-${outletId}`),
+    redis.del(`liv-o-${outletId}`),
+    redis.del(`tables-${outletId}`),
+    redis.del(`a-${outletId}`),
+    redis.del(`o-n-${outletId}`),
+    redis.del(`${outletId}-stocks`),
+    redis.del(`liv-o-${outletId}-${staffId}`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
+    redis.del(`${outletId}-all-items`),
   ]);
 
   websocketManager.notifyClients(getOutlet?.id, "NEW_ORDER_SESSION_CREATED");
@@ -708,7 +1173,7 @@ export const existingOrderPatchForStaff = async (
       },
     });
     // Update raw material stock if `chooseProfit` is "itemRecipe"
-    await Promise.all(
+    await Promise.all([
       orderItems.map(async (item: any) => {
         const menuItem = await tx.menuItem.findUnique({
           where: { id: item.menuId },
@@ -762,8 +1227,10 @@ export const existingOrderPatchForStaff = async (
             })
           );
         }
-      })
-    );
+      }),
+      redis.del(`${outletId}-all-items-online-and-delivery`),
+      redis.del(`${outletId}-all-items`),
+    ]);
   });
 
   await prismaDB.notification.create({
@@ -778,6 +1245,15 @@ export const existingOrderPatchForStaff = async (
     },
   });
 
+  if (getOrder?.orderType === "DINEIN" && getOrder?.tableId) {
+    await sendNewOrderNotification({
+      restaurantId: getOutlet.id,
+      orderId: orderId,
+      orderNumber: orderId,
+      customerName: getOrder?.username,
+      tableId: getOrder?.tableId,
+    });
+  }
   // Delete any LOW_STOCK alerts for this restaurant
   await prismaDB.alert.deleteMany({
     where: {
@@ -1105,6 +1581,8 @@ export const orderItemModificationByStaff = async (
     redis.del(`o-n-${outletId}`),
     redis.del(`${outletId}-stocks`),
     redis.del(`liv-o-${outletId}-${staffId}`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
+    redis.del(`${outletId}-all-items`),
   ]);
 
   return res.json({

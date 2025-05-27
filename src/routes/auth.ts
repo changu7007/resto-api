@@ -10,6 +10,7 @@ import {
   StaffLogin,
   StaffLogout,
   StaffUpdateAccessToken,
+  updateStaffPushToken,
 } from "../controllers/auth/staff/staffAuthController";
 import {
   AppLogout,
@@ -86,6 +87,11 @@ authRoute.post("/staff-logout", isAuthMiddelware, errorHandler(StaffLogout));
 authRoute.get("/staff-user", isAuthMiddelware, errorHandler(GetStaff));
 authRoute.get("/staff-refresh-token", errorHandler(StaffUpdateAccessToken));
 authRoute.get("/pos-refresh-token", errorHandler(POSUpdateAccessToken));
+authRoute.patch(
+  "/update-push-token",
+  isAuthMiddelware,
+  errorHandler(updateStaffPushToken)
+);
 authRoute.post("/social-auth", errorHandler(socialAuthLogin));
 
 authRoute.get("/outlet/:userId", isAuthMiddelware, errorHandler(getMainOutlet));

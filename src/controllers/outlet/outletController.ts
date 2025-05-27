@@ -363,36 +363,20 @@ export const patchOutletOnlinePOrtalDetails = async (
       },
       data: {
         onlinePortal: true,
-        openTime: validateFields.data.openTime.time,
-        closeTime: validateFields.data.closeTime.time,
+        openTime: validateFields.data.openTime,
+        closeTime: validateFields.data.closeTime,
         areaLat: validateFields.data.areaLat,
         areaLong: validateFields.data.areaLong,
         orderRadius: Number(validateFields.data.orderRadius),
         isDelivery: validateFields.data.isDelivery,
         isDineIn: validateFields.data.isDineIn,
         isPickUp: validateFields.data.isPickUp,
+        deliveryFee: validateFields.data.deliveryFee,
+        googlePlaceId: validateFields.data.googlePlaceId,
+        description: validateFields.data.description,
+        packagingFee: validateFields.data.packagingFee,
       },
     });
-
-    if (!outlet.integrations.find((outlet) => outlet?.name === "ONLINEHUB")) {
-      await prismaDB.integration.create({
-        data: {
-          restaurantId: outlet.id,
-          name: "ONLINEHUB",
-          connected: true,
-          status: true,
-          link: validateFields.data.subdomain,
-        },
-      });
-      await prismaDB.site.create({
-        data: {
-          // @ts-ignore
-          adminId: req?.user?.id,
-          restaurantId: outlet?.id,
-          subdomain: validateFields.data.subdomain,
-        },
-      });
-    }
   });
 
   await fetchOutletByIdToRedis(outlet?.id);
@@ -406,7 +390,7 @@ export const patchOutletOnlinePOrtalDetails = async (
 
   return res.json({
     success: true,
-    message: "Online Hub Integrated Success",
+    message: "Online Portal Updated Successfully",
   });
 };
 
@@ -1004,21 +988,15 @@ export const updateOnlinePortalStatus = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  if (outlet.adminId !== userId) {
-    throw new UnauthorizedException(
-      "You are not authorized to update this outlet type",
-      ErrorCode.UNAUTHORIZED
-    );
-  }
-
   await prismaDB.restaurant.update({
     where: { id: outlet.id },
     data: { onlinePortal: status },
   });
 
   await Promise.all([
-    redis.del(`O-${outletId}`),
-    getFormatUserAndSendToRedis(userId),
+    redis.del(`O-${outlet.id}`),
+    redis.del(outlet.adminId),
+    redis.del(userId),
   ]);
 
   if (outlet?.users?.sites?.length > 0) {

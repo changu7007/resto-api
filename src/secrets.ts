@@ -25,3 +25,4 @@ export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 export const PHONE_PE_CLIENT_ID = process.env.PHONE_PE_CLIENT_ID as string;
 export const PHONE_PE_CLIENT_SECRET = process.env
   .PHONE_PE_CLIENT_SECRET as string;
+export const ENCRYPT_KEY = process.env.ENCRYPT_KEY as string;

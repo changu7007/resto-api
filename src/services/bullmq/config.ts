@@ -1,5 +1,6 @@
 import { Redis } from "ioredis";
 import { REDIS_QUEUE_URL } from "../../secrets";
+import { OrderStatus, OrderType } from "@prisma/client";
 
 export interface BillQueueData {
   invoiceData: any;
@@ -11,6 +12,53 @@ export interface BillQueueData {
 }
 
 export const QUEUE_NAME = "bill-processing";
+export const ORDER_QUEUE_NAME = "order-processing";
+
+export interface OrderQueueData {
+  id: string;
+  outletId: string;
+  orderId: string;
+  orderStatus: OrderStatus;
+  orderType: OrderType;
+  staffId: string;
+  username: string;
+  customerId?: string;
+  isPaid: boolean;
+  cashRegisterId?: string;
+  isValid: boolean;
+  phoneNo?: string;
+  totalNetPrice: number;
+  gstPrice: number;
+  totalAmount: number;
+  totalGrossProfit: number;
+  orderItems: Array<{
+    menuId: string;
+    menuItem: any;
+    quantity: number;
+    netPrice: string;
+    gst: number;
+    grossProfit: number;
+    price: number;
+    originalPrice: number;
+    sizeVariantsId?: string;
+    addOnSelected?: Array<{
+      id: string;
+      selectedVariantsId: Array<{
+        id: string;
+      }>;
+    }>;
+  }>;
+  tableId?: string;
+  paymentMethod?: string;
+  orderMode: string;
+  isSplitPayment?: boolean;
+  splitPayments?: Array<{
+    method: string;
+    amount: number;
+  }>;
+  receivedAmount?: number;
+  changeAmount?: number;
+}
 
 const redisClient = () => {
   if (REDIS_QUEUE_URL) {
@@ -26,7 +74,6 @@ export const connection = new Redis(redisClient(), {
 
 export const defaultJobOptions = {
   attempts: 3,
-
   backoff: {
     type: "exponential" as const,
     delay: 1000,

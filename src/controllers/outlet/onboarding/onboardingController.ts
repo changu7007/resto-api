@@ -142,7 +142,7 @@ export const createOutlet = async (req: Request, res: Response) => {
         data: {
           name: "RAZORAPY",
           description: "Integrate your own payment for receiveing the Order",
-          logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/95513bb1836068b2b6776b6678b37991135335e4830540728f69b12f11df3c78",
+          logo: "https://app-restobytes.s3.ap-south-1.amazonaws.com/66710f2af99f1affa13031a5/menu/e9aecb204a19b3ff05a920ecc002e9a9a9d385dfe676a8ef5ff85dcf083165af",
           connected: false,
           status: true,
           restaurantId: outlet.id,
@@ -154,7 +154,7 @@ export const createOutlet = async (req: Request, res: Response) => {
           name: "ZOMATO",
           connected: false,
           description: "Manage your Zomato Orders through our portal",
-          logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/96cbea8b97fe457801b3519df3d1fca2691aa8e59c962535920476f04781068f",
+          logo: "https://app-restobytes.s3.ap-south-1.amazonaws.com/66710f2af99f1affa13031a5/menu/6d11d26fb03ca31b3d71090afee2d3d6fc6705c4b0cc46279b094c85c1575c2a",
           status: false,
           restaurantId: outlet.id,
         },
@@ -165,7 +165,19 @@ export const createOutlet = async (req: Request, res: Response) => {
           name: "SWIGGY",
           connected: false,
           description: "Manage your Swiggy Orders through our portal",
-          logo: "https://s3.ap-south-1.amazonaws.com/dr.sync/66710f2af99f1affa13031a5/menu/fea654c0a9447f453c5142377b23e594b73c29dc435822363627e3743e7f0dc3",
+          logo: "https://app-restobytes.s3.ap-south-1.amazonaws.com/66710f2af99f1affa13031a5/menu/0f334bb9850c0e913c5a969f5a464cf26ca55df63fe269121dae04ad802dd8bc",
+          status: false,
+          restaurantId: outlet.id,
+        },
+      });
+
+      await prisma.integration.create({
+        data: {
+          name: "PHONEPE",
+          connected: false,
+          description:
+            "To start receving payment integrate your client ID and client Secret",
+          logo: "https://app-restobytes.s3.ap-south-1.amazonaws.com/66710f2af99f1affa13031a5/menu/dac84bca0161c7e447ef9b4aff8f9b5a38632aead75e146b9911da862aa10abf",
           status: false,
           restaurantId: outlet.id,
         },
