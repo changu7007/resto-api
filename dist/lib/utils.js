@@ -126,10 +126,16 @@ const calculateInOut = (transactions) => {
 };
 exports.calculateInOut = calculateInOut;
 const encryptData = (data) => {
+    if (!secrets_1.ENCRYPT_KEY) {
+        throw new Error("Encryption key is not configured. Please set ENCRYPT_KEY environment variable.");
+    }
     return crypto_js_1.default.AES.encrypt(data, secrets_1.ENCRYPT_KEY).toString();
 };
 exports.encryptData = encryptData;
 const decryptData = (ciphertext) => {
+    if (!secrets_1.ENCRYPT_KEY) {
+        throw new Error("Encryption key is not configured. Please set ENCRYPT_KEY environment variable.");
+    }
     const bytes = crypto_js_1.default.AES.decrypt(ciphertext, secrets_1.ENCRYPT_KEY);
     return bytes.toString(crypto_js_1.default.enc.Utf8);
 };

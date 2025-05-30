@@ -65,6 +65,11 @@ export const getFetchLiveOrderToRedis = async (outletId: string) => {
     platform: order?.orderSession?.platform,
     name: order?.orderSession?.username,
     mode: order.orderType,
+    deliveryArea: order?.orderSession?.deliveryArea,
+    deliveryAreaAddress: order?.orderSession?.deliveryAreaAddress,
+    deliveryAreaLandmark: order?.orderSession?.deliveryAreaLandmark,
+    deliveryAreaLat: order?.orderSession?.deliveryAreaLat,
+    deliveryAreaLong: order?.orderSession?.deliveryAreaLong,
     table: order.orderSession.table?.name,
     orderItems: order.orderItems.map((item) => ({
       id: item.id,
@@ -202,6 +207,11 @@ export const getFetchAllOrderByStaffToRedis = async (
     name: order?.orderSession?.username,
     mode: order.orderType,
     table: order.orderSession.table?.name,
+    deliveryArea: order?.orderSession?.deliveryArea,
+    deliveryAreaAddress: order?.orderSession?.deliveryAreaAddress,
+    deliveryAreaLandmark: order?.orderSession?.deliveryAreaLandmark,
+    deliveryAreaLat: order?.orderSession?.deliveryAreaLat,
+    deliveryAreaLong: order?.orderSession?.deliveryAreaLong,
     orderItems: order.orderItems.map((item: any) => ({
       id: item.id,
       menuItem: {
@@ -349,6 +359,11 @@ export const getFetchLiveOrderByStaffToRedis = async (
     name: order?.orderSession?.username,
     mode: order.orderType,
     table: order.orderSession.table?.name,
+    deliveryArea: order?.orderSession?.deliveryArea,
+    deliveryAreaAddress: order?.orderSession?.deliveryAreaAddress,
+    deliveryAreaLandmark: order?.orderSession?.deliveryAreaLandmark,
+    deliveryAreaLat: order?.orderSession?.deliveryAreaLat,
+    deliveryAreaLong: order?.orderSession?.deliveryAreaLong,
     orderItems: order.orderItems.map((item: any) => ({
       id: item.id,
       menuItem: {
@@ -487,6 +502,11 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
       isPaid: order.isPaid,
       paymentmethod: order.paymentMethod,
       orderMode: order.orderType,
+      deliveryArea: order?.deliveryArea,
+      deliveryAreaAddress: order?.deliveryAreaAddress,
+      deliveryAreaLandmark: order?.deliveryAreaLandmark,
+      deliveryAreaLat: order?.deliveryAreaLat,
+      deliveryAreaLong: order?.deliveryAreaLong,
       table: order.table?.name,
       subTotal: order.subTotal,
       orders: order.orders.map((order) => ({
@@ -630,6 +650,11 @@ export const getFetchStaffActiveOrderSessionToRedis = async (
     isPaid: order.isPaid,
     paymentmethod: order.paymentMethod,
     orderMode: order.orderType,
+    deliveryArea: order?.deliveryArea,
+    deliveryAreaAddress: order?.deliveryAreaAddress,
+    deliveryAreaLandmark: order?.deliveryAreaLandmark,
+    deliveryAreaLat: order?.deliveryAreaLat,
+    deliveryAreaLong: order?.deliveryAreaLong,
     table: order.table?.name,
     subTotal: order.subTotal,
     orders: order.orders.map((order) => ({

@@ -124,10 +124,20 @@ export const calculateInOut = (transactions: CashTransaction[]) => {
 };
 
 export const encryptData = (data: string) => {
+  if (!ENCRYPT_KEY) {
+    throw new Error(
+      "Encryption key is not configured. Please set ENCRYPT_KEY environment variable."
+    );
+  }
   return CryptoJS.AES.encrypt(data, ENCRYPT_KEY).toString();
 };
 
 export const decryptData = (ciphertext: string) => {
+  if (!ENCRYPT_KEY) {
+    throw new Error(
+      "Encryption key is not configured. Please set ENCRYPT_KEY environment variable."
+    );
+  }
   const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPT_KEY);
   return bytes.toString(CryptoJS.enc.Utf8);
 };

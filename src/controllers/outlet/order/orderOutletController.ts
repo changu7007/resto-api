@@ -1134,6 +1134,11 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     note,
     paymentId,
     paymentMode,
+    deliveryArea,
+    deliveryAreaAddress,
+    deliveryAreaLandmark,
+    deliveryAreaLat,
+    deliveryAreaLong,
   } = req.body;
 
   // @ts-ignore
@@ -1155,55 +1160,58 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     );
   }
 
+  if (orderType === "DELIVERY") {
+    if (
+      !deliveryArea ||
+      !deliveryAreaAddress ||
+      !deliveryAreaLandmark ||
+      !deliveryAreaLat ||
+      !deliveryAreaLong
+    ) {
+      throw new BadRequestsException(
+        "Please check your delivery address, delivery mode / area and landmark is filled",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+  }
+
   if (!outletId) {
     throw new BadRequestsException(
       "Outlet Id is Required",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
-  return await prismaDB.$transaction(async (tx) => {
-    await Promise.all([
-      redis.del(`active-os-${outletId}`),
-      redis.del(`liv-o-${outletId}`),
-      redis.del(`tables-${outletId}`),
-      redis.del(`a-${outletId}`),
-      redis.del(`o-n-${outletId}`),
-      redis.del(`${outletId}-stocks`),
-      redis.del(`${outletId}-all-items-online-and-delivery`),
-      redis.del(`${outletId}-all-items`),
-    ]);
-    // Validate customer and access
-    const validCustomer = await tx.customerRestaurantAccess.findFirst({
-      where: { customerId: customerId, restaurantId: outletId },
-      include: { customer: true },
-    });
 
-    if (!validCustomer?.id) {
-      throw new BadRequestsException(
-        "You Need to logout & login again to place the order",
-        ErrorCode.UNPROCESSABLE_ENTITY
-      );
-    }
+  // Get outlet
+  const getOutlet = await getOutletById(outletId);
 
-    // Get outlet
-    const getOutlet = await tx.restaurant.findUnique({
-      where: { id: outletId },
-      include: { invoice: true },
-    });
+  if (!getOutlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
+  }
 
-    if (!getOutlet?.id) {
-      throw new NotFoundException("Outlet Not Found", ErrorCode.NOT_FOUND);
-    }
+  // Generate order and bill numbers
+  const [orderId, billNo] = await Promise.all([
+    generatedOrderId(getOutlet.id),
+    generateBillNo(getOutlet.id),
+  ]);
 
-    // Generate order and bill numbers
-    const [orderId, billNo] = await Promise.all([
-      generatedOrderId(getOutlet.id),
-      generateBillNo(getOutlet.id),
-    ]);
+  // Validate customer and access
+  const validCustomer = await prismaDB.customerRestaurantAccess.findFirst({
+    where: { customerId: customerId, restaurantId: outletId },
+    include: { customer: true },
+  });
 
-    // Calculate totals for takeaway/delivery
-    const calculate = calculateTotalsForTakewayAndDelivery(orderItems);
+  if (!validCustomer?.id) {
+    throw new BadRequestsException(
+      "You Need to logout & login again to place the order",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
 
+  // Calculate totals for takeaway/delivery
+  const calculate = calculateTotalsForTakewayAndDelivery(orderItems);
+
+  const result = await prismaDB.$transaction(async (tx) => {
     // Create base order data
     const baseOrderData = {
       active: true,
@@ -1354,6 +1362,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
               platform: "ONLINE",
               restaurantId: getOutlet.id,
               orderType,
+
               orders: {
                 create: {
                   ...baseOrderData,
@@ -1409,6 +1418,11 @@ export const postOrderForUser = async (req: Request, res: Response) => {
           isPaid: true,
           paymentMethod: paymentId ? "UPI" : "CASH",
           subTotal: calculate.roundedTotal,
+          deliveryArea,
+          deliveryAreaAddress,
+          deliveryAreaLandmark,
+          deliveryAreaLat,
+          deliveryAreaLong,
           orders: { create: { ...baseOrderData, orderStatus: "INCOMMING" } },
         },
         include: {
@@ -1421,67 +1435,6 @@ export const postOrderForUser = async (req: Request, res: Response) => {
         },
       });
 
-      // Update inventory for non-DINEIN orders
-      await Promise.all(
-        orderItems.map(async (item: any) => {
-          const menuItem = await tx.menuItem.findUnique({
-            where: { id: item.menuId },
-            include: { itemRecipe: { include: { ingredients: true } } },
-          });
-
-          if (menuItem?.chooseProfit === "itemRecipe" && menuItem.itemRecipe) {
-            await Promise.all(
-              menuItem.itemRecipe.ingredients.map(async (ingredient: any) => {
-                const rawMaterial = await tx.rawMaterial.findUnique({
-                  where: { id: ingredient.rawMaterialId },
-                });
-
-                if (rawMaterial) {
-                  let decrementStock = 0;
-
-                  // Check if the ingredient's unit matches the purchase unit or consumption unit
-                  if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
-                    // If MOU is linked to purchaseUnit, multiply directly with quantity
-                    decrementStock =
-                      Number(ingredient.quantity) * Number(item.quantity || 1);
-                  } else if (
-                    ingredient.unitId === rawMaterial.consumptionUnitId
-                  ) {
-                    // If MOU is linked to consumptionUnit, apply conversion factor
-                    decrementStock =
-                      (Number(ingredient.quantity) *
-                        Number(item.quantity || 1)) /
-                      Number(rawMaterial.conversionFactor || 1);
-                  } else {
-                    // Default fallback if MOU doesn't match either unit
-                    decrementStock =
-                      (Number(ingredient.quantity) *
-                        Number(item.quantity || 1)) /
-                      Number(rawMaterial.conversionFactor || 1);
-                  }
-
-                  if (Number(rawMaterial.currentStock) < decrementStock) {
-                    throw new BadRequestsException(
-                      `Insufficient stock for raw material: ${rawMaterial.name}`,
-                      ErrorCode.UNPROCESSABLE_ENTITY
-                    );
-                  }
-
-                  await tx.rawMaterial.update({
-                    where: { id: rawMaterial.id },
-                    data: {
-                      currentStock: {
-                        decrement: decrementStock,
-                      },
-                    },
-                  });
-                }
-              })
-            );
-          }
-        })
-      );
-
       if (getOutlet?.invoice?.id) {
         await tx.invoice.update({
           where: {
@@ -1492,17 +1445,19 @@ export const postOrderForUser = async (req: Request, res: Response) => {
           },
         });
       }
+      // Update customer access stats
+      await tx.customerRestaurantAccess.update({
+        where: {
+          id: validCustomer?.id,
+          restaurantId: outletId,
+        },
+        data: {
+          lastVisit: new Date(),
+          totalOrders: { increment: 1 },
+          totalSpent: { increment: Number(totalAmount) },
+        },
+      });
     }
-
-    // Create notification
-    await tx.notification.create({
-      data: {
-        restaurantId: getOutlet.id,
-        orderId,
-        message: "You have a new Order",
-        orderType,
-      },
-    });
 
     // Update raw material stock if `chooseProfit` is "itemRecipe"
     await Promise.all(
@@ -1571,19 +1526,6 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     //   `Order: ${orderItems?.length}`
     // );
 
-    // Update customer access stats
-    // await tx.customerRestaurantAccess.update({
-    //   where: {
-    //     id: validCustomer?.id,
-    //     restaurantId: outletId,
-    //   },
-    //   data: {
-    //     lastVisit: new Date(),
-    //     totalOrders: { increment: 1 },
-    //     totalSpent: { increment: Number(totalAmount) },
-    //   },
-    // });
-
     // Delete any LOW_STOCK alerts for this restaurant
     await tx.alert.deleteMany({
       where: {
@@ -1635,20 +1577,37 @@ export const postOrderForUser = async (req: Request, res: Response) => {
         tableId: orderSession?.tableId,
       });
     }
-    await redis.publish("orderUpdated", JSON.stringify({ outletId }));
-    // Notify clients and update Redis
-    websocketManager.notifyClients(
-      getOutlet.id,
-      "NEW_ORDER_FROM_PRIME",
-      orderData
-    );
 
-    return res.json({
-      success: true,
-      sessionId: orderSession.id,
-      kotNumber: orderId,
-      message: "Order Created by Customer ✅",
-    });
+    return orderSession;
+  });
+
+  // Create notification
+  await prismaDB.notification.create({
+    data: {
+      restaurantId: getOutlet.id,
+      orderId,
+      message: "You have a new Order",
+      orderType,
+    },
+  });
+  await Promise.all([
+    redis.del(`active-os-${outletId}`),
+    redis.del(`liv-o-${outletId}`),
+    redis.del(`tables-${outletId}`),
+    redis.del(`a-${outletId}`),
+    redis.del(`o-n-${outletId}`),
+    redis.del(`${outletId}-stocks`),
+    redis.del(`${outletId}-all-items-online-and-delivery`),
+    redis.del(`${outletId}-all-items`),
+  ]);
+  await redis.publish("orderUpdated", JSON.stringify({ outletId }));
+  // Notify clients and update Redis
+  websocketManager.notifyClients(getOutlet.id, "NEW_ORDER_FROM_PRIME");
+  return res.json({
+    success: true,
+    sessionId: result.id,
+    kotNumber: orderId,
+    message: "Order Created by Customer ✅",
   });
 };
 

@@ -69,7 +69,7 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
         },
     });
     const formattedOrderData = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
@@ -77,7 +77,12 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
             platform: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.platform,
             name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
             mode: order.orderType,
-            table: (_d = order.orderSession.table) === null || _d === void 0 ? void 0 : _d.name,
+            deliveryArea: (_d = order === null || order === void 0 ? void 0 : order.orderSession) === null || _d === void 0 ? void 0 : _d.deliveryArea,
+            deliveryAreaAddress: (_e = order === null || order === void 0 ? void 0 : order.orderSession) === null || _e === void 0 ? void 0 : _e.deliveryAreaAddress,
+            deliveryAreaLandmark: (_f = order === null || order === void 0 ? void 0 : order.orderSession) === null || _f === void 0 ? void 0 : _f.deliveryAreaLandmark,
+            deliveryAreaLat: (_g = order === null || order === void 0 ? void 0 : order.orderSession) === null || _g === void 0 ? void 0 : _g.deliveryAreaLat,
+            deliveryAreaLong: (_h = order === null || order === void 0 ? void 0 : order.orderSession) === null || _h === void 0 ? void 0 : _h.deliveryAreaLong,
+            table: (_j = order.orderSession.table) === null || _j === void 0 ? void 0 : _j.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -194,7 +199,7 @@ const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, 
         },
     });
     const formattedLiveOrders = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
@@ -203,6 +208,11 @@ const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, 
             name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
             mode: order.orderType,
             table: (_d = order.orderSession.table) === null || _d === void 0 ? void 0 : _d.name,
+            deliveryArea: (_e = order === null || order === void 0 ? void 0 : order.orderSession) === null || _e === void 0 ? void 0 : _e.deliveryArea,
+            deliveryAreaAddress: (_f = order === null || order === void 0 ? void 0 : order.orderSession) === null || _f === void 0 ? void 0 : _f.deliveryAreaAddress,
+            deliveryAreaLandmark: (_g = order === null || order === void 0 ? void 0 : order.orderSession) === null || _g === void 0 ? void 0 : _g.deliveryAreaLandmark,
+            deliveryAreaLat: (_h = order === null || order === void 0 ? void 0 : order.orderSession) === null || _h === void 0 ? void 0 : _h.deliveryAreaLat,
+            deliveryAreaLong: (_j = order === null || order === void 0 ? void 0 : order.orderSession) === null || _j === void 0 ? void 0 : _j.deliveryAreaLong,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -326,7 +336,7 @@ const getFetchLiveOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0,
         },
     });
     const formattedLiveOrders = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
@@ -335,6 +345,11 @@ const getFetchLiveOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0,
             name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
             mode: order.orderType,
             table: (_d = order.orderSession.table) === null || _d === void 0 ? void 0 : _d.name,
+            deliveryArea: (_e = order === null || order === void 0 ? void 0 : order.orderSession) === null || _e === void 0 ? void 0 : _e.deliveryArea,
+            deliveryAreaAddress: (_f = order === null || order === void 0 ? void 0 : order.orderSession) === null || _f === void 0 ? void 0 : _f.deliveryAreaAddress,
+            deliveryAreaLandmark: (_g = order === null || order === void 0 ? void 0 : order.orderSession) === null || _g === void 0 ? void 0 : _g.deliveryAreaLandmark,
+            deliveryAreaLat: (_h = order === null || order === void 0 ? void 0 : order.orderSession) === null || _h === void 0 ? void 0 : _h.deliveryAreaLat,
+            deliveryAreaLong: (_j = order === null || order === void 0 ? void 0 : order.orderSession) === null || _j === void 0 ? void 0 : _j.deliveryAreaLong,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {
@@ -459,6 +474,11 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
             isPaid: order.isPaid,
             paymentmethod: order.paymentMethod,
             orderMode: order.orderType,
+            deliveryArea: order === null || order === void 0 ? void 0 : order.deliveryArea,
+            deliveryAreaAddress: order === null || order === void 0 ? void 0 : order.deliveryAreaAddress,
+            deliveryAreaLandmark: order === null || order === void 0 ? void 0 : order.deliveryAreaLandmark,
+            deliveryAreaLat: order === null || order === void 0 ? void 0 : order.deliveryAreaLat,
+            deliveryAreaLong: order === null || order === void 0 ? void 0 : order.deliveryAreaLong,
             table: (_a = order.table) === null || _a === void 0 ? void 0 : _a.name,
             subTotal: order.subTotal,
             orders: order.orders.map((order) => ({
@@ -589,6 +609,11 @@ const getFetchStaffActiveOrderSessionToRedis = (outletId, staffId) => __awaiter(
             isPaid: order.isPaid,
             paymentmethod: order.paymentMethod,
             orderMode: order.orderType,
+            deliveryArea: order === null || order === void 0 ? void 0 : order.deliveryArea,
+            deliveryAreaAddress: order === null || order === void 0 ? void 0 : order.deliveryAreaAddress,
+            deliveryAreaLandmark: order === null || order === void 0 ? void 0 : order.deliveryAreaLandmark,
+            deliveryAreaLat: order === null || order === void 0 ? void 0 : order.deliveryAreaLat,
+            deliveryAreaLong: order === null || order === void 0 ? void 0 : order.deliveryAreaLong,
             table: (_a = order.table) === null || _a === void 0 ? void 0 : _a.name,
             subTotal: order.subTotal,
             orders: order.orders.map((order) => ({

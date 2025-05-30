@@ -23,6 +23,7 @@ import axios from "axios";
 import { PUPPETEER_EXECUTABLE_PATH } from "../../../../secrets";
 import { billQueueProducer } from "../../../../services/bullmq/producer";
 import { z } from "zod";
+import { FoodMenu } from "../../items/itemsController";
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION!,
@@ -1281,10 +1282,15 @@ export const calculateTotals = (orders: Orders[]) => {
 // };
 
 export interface CartItems {
+  id: string;
   menuId: string;
+  menuItem: FoodMenu;
   quantity: number;
   originalPrice: number;
   price: number;
+  netPrice: number;
+  gst: number;
+  grossProfit: number;
   sizeVariantsId: string | null;
   addOnSelected: {
     id: string | undefined;
@@ -1296,8 +1302,8 @@ export interface CartItems {
 
 export const calculateTotalsForTakewayAndDelivery = (orders: CartItems[]) => {
   const subtotal = orders?.reduce((acc, order) => acc + order?.price, 0);
-  const sgst = subtotal * 0.025;
-  const cgst = subtotal * 0.025;
+  const sgst = subtotal * orders?.reduce((acc, order) => acc + order?.gst, 0);
+  const cgst = subtotal * orders?.reduce((acc, order) => acc + order?.gst, 0);
   const total = subtotal + sgst + cgst;
   const tax = cgst + sgst;
   const roundedTotal = Math.floor(total); // Rounded down total

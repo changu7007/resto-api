@@ -882,7 +882,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
     var _j;
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderType);
-    const { customerId, isPaid, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, note, paymentId, paymentMode, } = req.body;
+    const { customerId, isPaid, orderType, totalNetPrice, gstPrice, totalAmount, totalGrossProfit, orderItems, tableId, note, paymentId, paymentMode, deliveryArea, deliveryAreaAddress, deliveryAreaLandmark, deliveryAreaLat, deliveryAreaLong, } = req.body;
     // @ts-ignore
     if (customerId !== ((_j = req.user) === null || _j === void 0 ? void 0 : _j.id)) {
         throw new bad_request_1.BadRequestsException("Invalid User", root_1.ErrorCode.UNAUTHORIZED);
@@ -893,44 +893,40 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
     if (!validTypes.includes(orderType)) {
         throw new bad_request_1.BadRequestsException("You Need to choose either HOME DELIVERY / TAKEAWAY", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
+    if (orderType === "DELIVERY") {
+        if (!deliveryArea ||
+            !deliveryAreaAddress ||
+            !deliveryAreaLandmark ||
+            !deliveryAreaLat ||
+            !deliveryAreaLong) {
+            throw new bad_request_1.BadRequestsException("Please check your delivery address, delivery mode / area and landmark is filled", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+    }
     if (!outletId) {
         throw new bad_request_1.BadRequestsException("Outlet Id is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    return yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+    // Get outlet
+    const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    // Generate order and bill numbers
+    const [orderId, billNo] = yield Promise.all([
+        (0, outlet_1.generatedOrderId)(getOutlet.id),
+        (0, outlet_1.generateBillNo)(getOutlet.id),
+    ]);
+    // Validate customer and access
+    const validCustomer = yield __1.prismaDB.customerRestaurantAccess.findFirst({
+        where: { customerId: customerId, restaurantId: outletId },
+        include: { customer: true },
+    });
+    if (!(validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.id)) {
+        throw new bad_request_1.BadRequestsException("You Need to logout & login again to place the order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    // Calculate totals for takeaway/delivery
+    const calculate = (0, orderSessionController_1.calculateTotalsForTakewayAndDelivery)(orderItems);
+    const result = yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
         var _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
-        yield Promise.all([
-            redis_1.redis.del(`active-os-${outletId}`),
-            redis_1.redis.del(`liv-o-${outletId}`),
-            redis_1.redis.del(`tables-${outletId}`),
-            redis_1.redis.del(`a-${outletId}`),
-            redis_1.redis.del(`o-n-${outletId}`),
-            redis_1.redis.del(`${outletId}-stocks`),
-            redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
-            redis_1.redis.del(`${outletId}-all-items`),
-        ]);
-        // Validate customer and access
-        const validCustomer = yield tx.customerRestaurantAccess.findFirst({
-            where: { customerId: customerId, restaurantId: outletId },
-            include: { customer: true },
-        });
-        if (!(validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.id)) {
-            throw new bad_request_1.BadRequestsException("You Need to logout & login again to place the order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-        }
-        // Get outlet
-        const getOutlet = yield tx.restaurant.findUnique({
-            where: { id: outletId },
-            include: { invoice: true },
-        });
-        if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
-            throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.NOT_FOUND);
-        }
-        // Generate order and bill numbers
-        const [orderId, billNo] = yield Promise.all([
-            (0, outlet_1.generatedOrderId)(getOutlet.id),
-            (0, outlet_1.generateBillNo)(getOutlet.id),
-        ]);
-        // Calculate totals for takeaway/delivery
-        const calculate = (0, orderSessionController_1.calculateTotalsForTakewayAndDelivery)(orderItems);
         // Create base order data
         const baseOrderData = {
             active: true,
@@ -1096,6 +1092,11 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     isPaid: true,
                     paymentMethod: paymentId ? "UPI" : "CASH",
                     subTotal: calculate.roundedTotal,
+                    deliveryArea,
+                    deliveryAreaAddress,
+                    deliveryAreaLandmark,
+                    deliveryAreaLat,
+                    deliveryAreaLong,
                     orders: { create: Object.assign(Object.assign({}, baseOrderData), { orderStatus: "INCOMMING" }) },
                 },
                 include: {
@@ -1107,54 +1108,6 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     table: true,
                 },
             });
-            // Update inventory for non-DINEIN orders
-            yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
-                const menuItem = yield tx.menuItem.findUnique({
-                    where: { id: item.menuId },
-                    include: { itemRecipe: { include: { ingredients: true } } },
-                });
-                if ((menuItem === null || menuItem === void 0 ? void 0 : menuItem.chooseProfit) === "itemRecipe" && menuItem.itemRecipe) {
-                    yield Promise.all(menuItem.itemRecipe.ingredients.map((ingredient) => __awaiter(void 0, void 0, void 0, function* () {
-                        const rawMaterial = yield tx.rawMaterial.findUnique({
-                            where: { id: ingredient.rawMaterialId },
-                        });
-                        if (rawMaterial) {
-                            let decrementStock = 0;
-                            // Check if the ingredient's unit matches the purchase unit or consumption unit
-                            if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
-                                // If MOU is linked to purchaseUnit, multiply directly with quantity
-                                decrementStock =
-                                    Number(ingredient.quantity) * Number(item.quantity || 1);
-                            }
-                            else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
-                                // If MOU is linked to consumptionUnit, apply conversion factor
-                                decrementStock =
-                                    (Number(ingredient.quantity) *
-                                        Number(item.quantity || 1)) /
-                                        Number(rawMaterial.conversionFactor || 1);
-                            }
-                            else {
-                                // Default fallback if MOU doesn't match either unit
-                                decrementStock =
-                                    (Number(ingredient.quantity) *
-                                        Number(item.quantity || 1)) /
-                                        Number(rawMaterial.conversionFactor || 1);
-                            }
-                            if (Number(rawMaterial.currentStock) < decrementStock) {
-                                throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-                            }
-                            yield tx.rawMaterial.update({
-                                where: { id: rawMaterial.id },
-                                data: {
-                                    currentStock: {
-                                        decrement: decrementStock,
-                                    },
-                                },
-                            });
-                        }
-                    })));
-                }
-            })));
             if ((_w = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.invoice) === null || _w === void 0 ? void 0 : _w.id) {
                 yield tx.invoice.update({
                     where: {
@@ -1165,16 +1118,19 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     },
                 });
             }
+            // Update customer access stats
+            yield tx.customerRestaurantAccess.update({
+                where: {
+                    id: validCustomer === null || validCustomer === void 0 ? void 0 : validCustomer.id,
+                    restaurantId: outletId,
+                },
+                data: {
+                    lastVisit: new Date(),
+                    totalOrders: { increment: 1 },
+                    totalSpent: { increment: Number(totalAmount) },
+                },
+            });
         }
-        // Create notification
-        yield tx.notification.create({
-            data: {
-                restaurantId: getOutlet.id,
-                orderId,
-                message: "You have a new Order",
-                orderType,
-            },
-        });
         // Update raw material stock if `chooseProfit` is "itemRecipe"
         yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
             const menuItem = yield tx.menuItem.findUnique({
@@ -1227,18 +1183,6 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         //   }`,
         //   `Order: ${orderItems?.length}`
         // );
-        // Update customer access stats
-        // await tx.customerRestaurantAccess.update({
-        //   where: {
-        //     id: validCustomer?.id,
-        //     restaurantId: outletId,
-        //   },
-        //   data: {
-        //     lastVisit: new Date(),
-        //     totalOrders: { increment: 1 },
-        //     totalSpent: { increment: Number(totalAmount) },
-        //   },
-        // });
         // Delete any LOW_STOCK alerts for this restaurant
         yield tx.alert.deleteMany({
             where: {
@@ -1288,16 +1232,36 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 tableId: orderSession === null || orderSession === void 0 ? void 0 : orderSession.tableId,
             });
         }
-        yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
-        // Notify clients and update Redis
-        ws_1.websocketManager.notifyClients(getOutlet.id, "NEW_ORDER_FROM_PRIME", orderData);
-        return res.json({
-            success: true,
-            sessionId: orderSession.id,
-            kotNumber: orderId,
-            message: "Order Created by Customer ✅",
-        });
+        return orderSession;
     }));
+    // Create notification
+    yield __1.prismaDB.notification.create({
+        data: {
+            restaurantId: getOutlet.id,
+            orderId,
+            message: "You have a new Order",
+            orderType,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`active-os-${outletId}`),
+        redis_1.redis.del(`liv-o-${outletId}`),
+        redis_1.redis.del(`tables-${outletId}`),
+        redis_1.redis.del(`a-${outletId}`),
+        redis_1.redis.del(`o-n-${outletId}`),
+        redis_1.redis.del(`${outletId}-stocks`),
+        redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
+        redis_1.redis.del(`${outletId}-all-items`),
+    ]);
+    yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
+    // Notify clients and update Redis
+    ws_1.websocketManager.notifyClients(getOutlet.id, "NEW_ORDER_FROM_PRIME");
+    return res.json({
+        success: true,
+        sessionId: result.id,
+        kotNumber: orderId,
+        message: "Order Created by Customer ✅",
+    });
 });
 exports.postOrderForUser = postOrderForUser;
 const existingOrderPatchApp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {

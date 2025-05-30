@@ -1070,12 +1070,8 @@ model OrderSession {
   deliveryAreaLat      Float?
   deliveryAreaLong     Float?
   deliveryRadius       Float?
-  deliveryAreaType     String?
+  deliveryArea         String?
   deliveryAreaAddress  String?
-  deliveryAreaCity     String?
-  deliveryAreaState    String?
-  deliveryAreaCountry  String?
-  deliveryAreaPincode  String?
   deliveryAreaLandmark String?
   transactionId        String?
   paymentMode          PaymentMode?

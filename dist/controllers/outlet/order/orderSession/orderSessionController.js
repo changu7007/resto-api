@@ -1035,8 +1035,8 @@ const calculateTotals = (orders) => {
 exports.calculateTotals = calculateTotals;
 const calculateTotalsForTakewayAndDelivery = (orders) => {
     const subtotal = orders === null || orders === void 0 ? void 0 : orders.reduce((acc, order) => acc + (order === null || order === void 0 ? void 0 : order.price), 0);
-    const sgst = subtotal * 0.025;
-    const cgst = subtotal * 0.025;
+    const sgst = subtotal * (orders === null || orders === void 0 ? void 0 : orders.reduce((acc, order) => acc + (order === null || order === void 0 ? void 0 : order.gst), 0));
+    const cgst = subtotal * (orders === null || orders === void 0 ? void 0 : orders.reduce((acc, order) => acc + (order === null || order === void 0 ? void 0 : order.gst), 0));
     const total = subtotal + sgst + cgst;
     const tax = cgst + sgst;
     const roundedTotal = Math.floor(total); // Rounded down total
