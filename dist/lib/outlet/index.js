@@ -72,7 +72,8 @@ const getOutletCustomerAndFetchToRedis = (outletId) => __awaiter(void 0, void 0,
         },
     });
     if ((customers === null || customers === void 0 ? void 0 : customers.length) > 0) {
-        yield redis_1.redis.set(`customers-${outletId}`, JSON.stringify(customers));
+        yield redis_1.redis.set(`customers-${outletId}`, JSON.stringify(customers), "EX", 60 * 60 * 3 // 3 hour
+        );
         return customers;
     }
     else {

@@ -84,6 +84,7 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
         select: {
           id: true,
           name: true,
+          legalName: true,
           phoneNo: true,
           address: true,
           pincode: true,
@@ -107,6 +108,13 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
           googlePlaceId: true,
           description: true,
           packagingFee: true,
+          integrations: {
+            select: {
+              name: true,
+              status: true,
+              connected: true,
+            },
+          },
         },
       },
     },
@@ -114,6 +122,9 @@ export const getPrimeDomain = async (req: Request, res: Response) => {
 
   const formattedSite = {
     name: getSite?.restaurants[0]?.name,
+    restaurantName: getSite?.restaurants[0]?.restaurantName,
+    phoneNo: getSite?.restaurants[0]?.phoneNo,
+    legalName: getSite?.restaurants[0]?.legalName,
     imageUrl: getSite?.restaurants[0]?.imageUrl,
     outletType: getSite?.restaurants[0]?.outletType,
     ...getSite,

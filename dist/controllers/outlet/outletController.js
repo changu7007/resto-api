@@ -219,7 +219,7 @@ exports.getMainOutlet = getMainOutlet;
 const patchOutletDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _q, _r, _s, _t;
     const { outletId } = req.params;
-    const { name, imageUrl, restaurantName, phoneNo, email, address, city, pincode, } = req.body;
+    const { name, imageUrl, restaurantName, legalName, phoneNo, email, address, city, pincode, } = req.body;
     console.log(req.body);
     const getOutlet = yield __1.prismaDB.restaurant.findFirst({
         where: {
@@ -251,6 +251,7 @@ const patchOutletDetails = (req, res) => __awaiter(void 0, void 0, void 0, funct
             address: address !== null && address !== void 0 ? address : getOutlet.address,
             city: city !== null && city !== void 0 ? city : getOutlet.city,
             pincode: pincode !== null && pincode !== void 0 ? pincode : getOutlet.pincode,
+            legalName: legalName !== null && legalName !== void 0 ? legalName : getOutlet.legalName,
         },
     });
     yield redis_1.redis.del(`O-${getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id}`);

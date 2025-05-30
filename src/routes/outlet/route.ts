@@ -50,10 +50,12 @@ import {
   deleteItem,
   disableFeaturedStatus,
   disableInStockStatus,
+  disableOnline,
   disablePosStatus,
   duplicateItem,
   enableFeaturedStatus,
   enableInStockStatus,
+  enableOnline,
   enablePosStatus,
   getAddONById,
   getAddonsForTable,
@@ -733,6 +735,16 @@ outletRoute.patch(
   "/:outletId/items/:itemId/enable-pos",
   isAuthMiddelware,
   errorHandler(enablePosStatus)
+);
+outletRoute.patch(
+  "/:outletId/items/:itemId/enable-online",
+  isAuthMiddelware,
+  errorHandler(enableOnline)
+);
+outletRoute.patch(
+  "/:outletId/items/:itemId/disable-online",
+  isAuthMiddelware,
+  errorHandler(disableOnline)
 );
 outletRoute.patch(
   "/:outletId/items/:itemId/enable-featured",

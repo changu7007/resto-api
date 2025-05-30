@@ -255,6 +255,7 @@ export const patchOutletDetails = async (req: Request, res: Response) => {
     name,
     imageUrl,
     restaurantName,
+    legalName,
     phoneNo,
     email,
     address,
@@ -296,6 +297,7 @@ export const patchOutletDetails = async (req: Request, res: Response) => {
       address: address ?? getOutlet.address,
       city: city ?? getOutlet.city,
       pincode: pincode ?? getOutlet.pincode,
+      legalName: legalName ?? getOutlet.legalName,
     },
   });
 

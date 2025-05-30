@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteItems = exports.disablePosStatus = exports.enablePosStatus = exports.disableInStockStatus = exports.enableInStockStatus = exports.disableFeaturedStatus = exports.enableFeaturedStatus = exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.duplicateItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = exports.getItemsBySearchForOnlineAndDelivery = exports.getItemsByCategoryForOnlineAndDelivery = exports.getVegItemsForOnlineAndDelivery = exports.getItemsForOnlineAndDelivery = void 0;
+exports.deleteItems = exports.disablePosStatus = exports.enablePosStatus = exports.disableOnline = exports.enableOnline = exports.disableInStockStatus = exports.enableInStockStatus = exports.disableFeaturedStatus = exports.enableFeaturedStatus = exports.getSingleAddons = exports.addItemToUserFav = exports.getMenuVariants = exports.getShortCodeStatus = exports.deleteItem = exports.duplicateItem = exports.postItem = exports.updateItembyId = exports.getAddONById = exports.getVariantById = exports.getItemById = exports.getAllItem = exports.getAddonsForTable = exports.getVariantsForTable = exports.getCategoriesForTable = exports.getItemForTable = exports.getItemsBySearch = exports.getItemsByCategory = exports.getItemsBySearchForOnlineAndDelivery = exports.getItemsByCategoryForOnlineAndDelivery = exports.getVegItemsForOnlineAndDelivery = exports.getItemsForOnlineAndDelivery = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -1653,6 +1653,90 @@ const disableInStockStatus = (req, res) => __awaiter(void 0, void 0, void 0, fun
     });
 });
 exports.disableInStockStatus = disableInStockStatus;
+const enableOnline = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, itemId } = req.params;
+    const { enabled } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const item = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
+    if (!(item === null || item === void 0 ? void 0 : item.id)) {
+        throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.menuItem.update({
+        where: {
+            restaurantId: outlet.id,
+            id: item === null || item === void 0 ? void 0 : item.id,
+        },
+        data: {
+            isOnline: true,
+        },
+    });
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
+    return res.json({
+        success: true,
+        message: "Item Updated",
+    });
+});
+exports.enableOnline = enableOnline;
+const disableOnline = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId, itemId } = req.params;
+    const { enabled } = req.body;
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const item = yield (0, outlet_1.getItemByOutletId)(outlet.id, itemId);
+    if (!(item === null || item === void 0 ? void 0 : item.id)) {
+        throw new not_found_1.NotFoundException("Item Not Found", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.menuItem.update({
+        where: {
+            restaurantId: outlet.id,
+            id: item === null || item === void 0 ? void 0 : item.id,
+        },
+        data: {
+            isOnline: false,
+        },
+    });
+    const categories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`${outletId}-all-items`),
+        redis_1.redis.del(`${outletId}-all-items-for-online-and-delivery`),
+        redis_1.redis.del(`o-${outletId}-categories`),
+    ]);
+    categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
+        yield redis_1.redis.del(`${outletId}-category-${c.id}`);
+    }));
+    return res.json({
+        success: true,
+        message: "Item Updated",
+    });
+});
+exports.disableOnline = disableOnline;
 const enablePosStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId, itemId } = req.params;
     const { enabled } = req.body;

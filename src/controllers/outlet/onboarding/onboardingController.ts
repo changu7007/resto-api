@@ -151,6 +151,18 @@ export const createOutlet = async (req: Request, res: Response) => {
 
       await prisma.integration.create({
         data: {
+          name: "PHONEPE",
+          description: "Integrate phonePe for taking payment from customers",
+          logo: "https://app-restobytes.s3.ap-south-1.amazonaws.com/66710f2af99f1affa13031a5/menu/e9aecb204a19b3ff05a920ecc002e9a9a9d385dfe676a8ef5ff85dcf083165af",
+          link: "https://business.phonepe.com/register?referral-code=RF2505191803179405044688",
+          connected: false,
+          status: true,
+          restaurantId: outlet.id,
+        },
+      });
+
+      await prisma.integration.create({
+        data: {
           name: "ZOMATO",
           connected: false,
           description: "Manage your Zomato Orders through our portal",

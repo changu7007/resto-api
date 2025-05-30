@@ -134,6 +134,8 @@ outletRoute.get("/:outletId/get-addons-items", (0, error_handler_1.errorHandler)
 outletRoute.get("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemById));
 outletRoute.patch("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.updateItembyId));
 outletRoute.patch("/:outletId/items/:itemId/enable-pos", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enablePosStatus));
+outletRoute.patch("/:outletId/items/:itemId/enable-online", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enableOnline));
+outletRoute.patch("/:outletId/items/:itemId/disable-online", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.disableOnline));
 outletRoute.patch("/:outletId/items/:itemId/enable-featured", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enableFeaturedStatus));
 outletRoute.patch("/:outletId/items/:itemId/enable-in-stock", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.enableInStockStatus));
 outletRoute.patch("/:outletId/items/:itemId/disable-featured", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.disableFeaturedStatus));

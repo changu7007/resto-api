@@ -59,7 +59,7 @@ const getDomain = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getDomain = getDomain;
 const getPrimeDomain = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f;
     const { subdomain } = req.params;
     const site = yield redis_1.redis.get(`app-domain-${subdomain}`);
     if (site) {
@@ -81,6 +81,7 @@ const getPrimeDomain = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 select: {
                     id: true,
                     name: true,
+                    legalName: true,
                     phoneNo: true,
                     address: true,
                     pincode: true,
@@ -104,11 +105,18 @@ const getPrimeDomain = (req, res) => __awaiter(void 0, void 0, void 0, function*
                     googlePlaceId: true,
                     description: true,
                     packagingFee: true,
+                    integrations: {
+                        select: {
+                            name: true,
+                            status: true,
+                            connected: true,
+                        },
+                    },
                 },
             },
         },
     });
-    const formattedSite = Object.assign({ name: (_a = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _a === void 0 ? void 0 : _a.name, imageUrl: (_b = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _b === void 0 ? void 0 : _b.imageUrl, outletType: (_c = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _c === void 0 ? void 0 : _c.outletType }, getSite);
+    const formattedSite = Object.assign({ name: (_a = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _a === void 0 ? void 0 : _a.name, restaurantName: (_b = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _b === void 0 ? void 0 : _b.restaurantName, phoneNo: (_c = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _c === void 0 ? void 0 : _c.phoneNo, legalName: (_d = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _d === void 0 ? void 0 : _d.legalName, imageUrl: (_e = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _e === void 0 ? void 0 : _e.imageUrl, outletType: (_f = getSite === null || getSite === void 0 ? void 0 : getSite.restaurants[0]) === null || _f === void 0 ? void 0 : _f.outletType }, getSite);
     if (getSite === null || getSite === void 0 ? void 0 : getSite.id) {
         yield redis_1.redis.set(`app-domain-${getSite === null || getSite === void 0 ? void 0 : getSite.subdomain}`, JSON.stringify(formattedSite), "EX", 60 * 60 // 1 hour
         );
@@ -120,7 +128,7 @@ const getPrimeDomain = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.getPrimeDomain = getPrimeDomain;
 const createSubDomain = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _d;
+    var _g;
     const { outletId } = req.params;
     const { subdomain } = req.body;
     if (!subdomain) {
@@ -171,7 +179,7 @@ const createSubDomain = (req, res) => __awaiter(void 0, void 0, void 0, function
     const getDomain = yield __1.prismaDB.site.create({
         data: {
             // @ts-ignore
-            adminId: (_d = req === null || req === void 0 ? void 0 : req.user) === null || _d === void 0 ? void 0 : _d.id,
+            adminId: (_g = req === null || req === void 0 ? void 0 : req.user) === null || _g === void 0 ? void 0 : _g.id,
             subdomain: subdomain,
             code: (0, orderOutletController_1.inviteCode)(),
             restaurants: {
@@ -204,11 +212,11 @@ const createSubDomain = (req, res) => __awaiter(void 0, void 0, void 0, function
 });
 exports.createSubDomain = createSubDomain;
 const deleteSite = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _e;
+    var _h;
     const { outletId, siteId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_e = req === null || req === void 0 ? void 0 : req.user) === null || _e === void 0 ? void 0 : _e.id;
+    const userId = (_h = req === null || req === void 0 ? void 0 : req.user) === null || _h === void 0 ? void 0 : _h.id;
     if (outlet === undefined || !outlet.id) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -241,11 +249,11 @@ const deleteSite = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 });
 exports.deleteSite = deleteSite;
 const unlinkDomainForRestaurant = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _f;
+    var _j;
     const { outletId, siteId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_f = req === null || req === void 0 ? void 0 : req.user) === null || _f === void 0 ? void 0 : _f.id;
+    const userId = (_j = req === null || req === void 0 ? void 0 : req.user) === null || _j === void 0 ? void 0 : _j.id;
     if (outlet === undefined || !outlet.id) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }

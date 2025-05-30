@@ -26,6 +26,7 @@ model Restaurant {
   email                 String?
   phoneNo               String?
   restaurantName        String?
+  legalName             String?
   GSTIN                 String?
   city                  String?
   state                 String?

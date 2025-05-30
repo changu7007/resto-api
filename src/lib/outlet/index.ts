@@ -73,7 +73,12 @@ export const getOutletCustomerAndFetchToRedis = async (outletId: string) => {
   });
 
   if (customers?.length > 0) {
-    await redis.set(`customers-${outletId}`, JSON.stringify(customers));
+    await redis.set(
+      `customers-${outletId}`,
+      JSON.stringify(customers),
+      "EX",
+      60 * 60 * 3 // 3 hour
+    );
     return customers;
   } else {
     await redis.del(`customers-${outletId}`);
