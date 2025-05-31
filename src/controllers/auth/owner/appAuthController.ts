@@ -771,6 +771,8 @@ export const verifyInvite = async (req: Request, res: Response) => {
       data: {
         email: getToken.email,
         role: getToken.role, // Default role for invited users
+        emailVerified: new Date(),
+        onboardingStatus: true,
         name: getToken.email.split("@")[0], // Default name from email
       },
     });

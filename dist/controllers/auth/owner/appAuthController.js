@@ -637,6 +637,8 @@ const verifyInvite = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             data: {
                 email: getToken.email,
                 role: getToken.role, // Default role for invited users
+                emailVerified: new Date(),
+                onboardingStatus: true,
                 name: getToken.email.split("@")[0], // Default name from email
             },
         });

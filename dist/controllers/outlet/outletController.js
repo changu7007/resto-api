@@ -90,7 +90,6 @@ const getPOSStaffOutlet = (req, res) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.getPOSStaffOutlet = getPOSStaffOutlet;
 const getByOutletId = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _k;
     const { outletId } = req.params;
     const outlet = yield redis_1.redis.get(`O-${outletId}`);
     if (outlet) {
@@ -102,8 +101,6 @@ const getByOutletId = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
     const getOutlet = yield __1.prismaDB.restaurant.findFirst({
         where: {
-            // @ts-ignore
-            adminId: (_k = req.user) === null || _k === void 0 ? void 0 : _k.id,
             id: outletId,
         },
         include: {
@@ -184,14 +181,14 @@ const deleteNotificationById = (req, res) => __awaiter(void 0, void 0, void 0, f
 });
 exports.deleteNotificationById = deleteNotificationById;
 const getMainOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _l, _m, _o, _p;
+    var _k, _l, _m, _o;
     const { userId } = req.params;
     //@ts-ignore
-    if (userId !== ((_l = req.user) === null || _l === void 0 ? void 0 : _l.id)) {
+    if (userId !== ((_k = req.user) === null || _k === void 0 ? void 0 : _k.id)) {
         throw new bad_request_1.BadRequestsException("Unauthorized Access", root_1.ErrorCode.UNAUTHORIZED);
     }
     //@ts-ignore
-    const getOutlet = yield redis_1.redis.get(`O-${(_m = req === null || req === void 0 ? void 0 : req.user) === null || _m === void 0 ? void 0 : _m.restaurantId}`);
+    const getOutlet = yield redis_1.redis.get(`O-${(_l = req === null || req === void 0 ? void 0 : req.user) === null || _l === void 0 ? void 0 : _l.restaurantId}`);
     if (getOutlet) {
         console.log("Redis");
         return res.status(200).json({
@@ -202,9 +199,9 @@ const getMainOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
     const outlet = yield (0, outlet_1.getOutletByAdminId)(
     //@ts-ignore
-    (_o = req === null || req === void 0 ? void 0 : req.user) === null || _o === void 0 ? void 0 : _o.restaurantId, 
+    (_m = req === null || req === void 0 ? void 0 : req.user) === null || _m === void 0 ? void 0 : _m.restaurantId, 
     //@ts-ignore
-    (_p = req === null || req === void 0 ? void 0 : req.user) === null || _p === void 0 ? void 0 : _p.id);
+    (_o = req === null || req === void 0 ? void 0 : req.user) === null || _o === void 0 ? void 0 : _o.id);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -217,14 +214,14 @@ const getMainOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.getMainOutlet = getMainOutlet;
 const patchOutletDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _q, _r, _s, _t;
+    var _p, _q, _r, _s;
     const { outletId } = req.params;
     const { name, imageUrl, restaurantName, legalName, phoneNo, email, address, city, pincode, } = req.body;
     console.log(req.body);
     const getOutlet = yield __1.prismaDB.restaurant.findFirst({
         where: {
             // @ts-ignore
-            adminId: (_q = req.user) === null || _q === void 0 ? void 0 : _q.id,
+            adminId: (_p = req.user) === null || _p === void 0 ? void 0 : _p.id,
             id: outletId,
         },
         include: {
@@ -255,8 +252,8 @@ const patchOutletDetails = (req, res) => __awaiter(void 0, void 0, void 0, funct
         },
     });
     yield redis_1.redis.del(`O-${getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id}`);
-    if (((_s = (_r = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.users) === null || _r === void 0 ? void 0 : _r.sites) === null || _s === void 0 ? void 0 : _s.length) > 0) {
-        for (const site of (_t = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.users) === null || _t === void 0 ? void 0 : _t.sites) {
+    if (((_r = (_q = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.users) === null || _q === void 0 ? void 0 : _q.sites) === null || _r === void 0 ? void 0 : _r.length) > 0) {
+        for (const site of (_s = getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.users) === null || _s === void 0 ? void 0 : _s.sites) {
             if (site === null || site === void 0 ? void 0 : site.subdomain) {
                 yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
             }
@@ -285,7 +282,7 @@ const addFMCTokenToOutlet = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.addFMCTokenToOutlet = addFMCTokenToOutlet;
 const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _u, _v, _w;
+    var _t, _u, _v;
     const validateFields = staff_1.outletOnlinePortalSchema.safeParse(req.body);
     if (!validateFields.success) {
         throw new bad_request_1.BadRequestsException(validateFields.error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
@@ -319,8 +316,8 @@ const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, v
     }));
     yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
     yield (0, get_users_1.getFormatUserAndSendToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.adminId);
-    if (((_v = (_u = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _u === void 0 ? void 0 : _u.sites) === null || _v === void 0 ? void 0 : _v.length) > 0) {
-        for (const site of (_w = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _w === void 0 ? void 0 : _w.sites) {
+    if (((_u = (_t = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _t === void 0 ? void 0 : _t.sites) === null || _u === void 0 ? void 0 : _u.length) > 0) {
+        for (const site of (_v = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _v === void 0 ? void 0 : _v.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }
@@ -331,7 +328,7 @@ const patchOutletOnlinePOrtalDetails = (req, res) => __awaiter(void 0, void 0, v
 });
 exports.patchOutletOnlinePOrtalDetails = patchOutletOnlinePOrtalDetails;
 const updateOrCreateOperatingHours = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _x, _y, _z;
+    var _w, _x, _y;
     const { outletId } = req.params;
     const validateFields = staff_1.operatingHoursSchema.safeParse(req.body);
     if (!validateFields.success) {
@@ -351,8 +348,8 @@ const updateOrCreateOperatingHours = (req, res) => __awaiter(void 0, void 0, voi
         },
     });
     yield redis_1.redis.del(`O-${outlet.id}`);
-    if (((_y = (_x = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _x === void 0 ? void 0 : _x.sites) === null || _y === void 0 ? void 0 : _y.length) > 0) {
-        for (const site of (_z = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _z === void 0 ? void 0 : _z.sites) {
+    if (((_x = (_w = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _w === void 0 ? void 0 : _w.sites) === null || _x === void 0 ? void 0 : _x.length) > 0) {
+        for (const site of (_y = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _y === void 0 ? void 0 : _y.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }
@@ -446,11 +443,11 @@ const fetchInvoiceDetails = (req, res) => __awaiter(void 0, void 0, void 0, func
 });
 exports.fetchInvoiceDetails = fetchInvoiceDetails;
 const deleteOutlet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _0;
+    var _z;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    const userId = (_0 = req === null || req === void 0 ? void 0 : req.user) === null || _0 === void 0 ? void 0 : _0.id;
+    const userId = (_z = req === null || req === void 0 ? void 0 : req.user) === null || _z === void 0 ? void 0 : _z.id;
     if (outlet === undefined || !outlet.id) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -760,11 +757,11 @@ const createOutletFromOutletHub = (req, res) => __awaiter(void 0, void 0, void 0
 });
 exports.createOutletFromOutletHub = createOutletFromOutletHub;
 const updateOutletType = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _1, _2, _3, _4;
+    var _0, _1, _2, _3;
     const { outletId } = req.params;
     const { outletType } = req.body;
     // @ts-ignore
-    const userId = (_1 = req === null || req === void 0 ? void 0 : req.user) === null || _1 === void 0 ? void 0 : _1.id;
+    const userId = (_0 = req === null || req === void 0 ? void 0 : req.user) === null || _0 === void 0 ? void 0 : _0.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -778,8 +775,8 @@ const updateOutletType = (req, res) => __awaiter(void 0, void 0, void 0, functio
     });
     yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
     yield (0, get_users_1.getFormatUserAndSendToRedis)(userId);
-    if (((_3 = (_2 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _2 === void 0 ? void 0 : _2.sites) === null || _3 === void 0 ? void 0 : _3.length) > 0) {
-        for (const site of (_4 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _4 === void 0 ? void 0 : _4.sites) {
+    if (((_2 = (_1 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _1 === void 0 ? void 0 : _1.sites) === null || _2 === void 0 ? void 0 : _2.length) > 0) {
+        for (const site of (_3 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _3 === void 0 ? void 0 : _3.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }
@@ -790,11 +787,11 @@ const updateOutletType = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.updateOutletType = updateOutletType;
 const updateOnlinePortalStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _5, _6, _7, _8;
+    var _4, _5, _6, _7;
     const { outletId } = req.params;
     const { status } = req.body;
     // @ts-ignore
-    const userId = (_5 = req === null || req === void 0 ? void 0 : req.user) === null || _5 === void 0 ? void 0 : _5.id;
+    const userId = (_4 = req === null || req === void 0 ? void 0 : req.user) === null || _4 === void 0 ? void 0 : _4.id;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
@@ -808,8 +805,8 @@ const updateOnlinePortalStatus = (req, res) => __awaiter(void 0, void 0, void 0,
         redis_1.redis.del(outlet.adminId),
         redis_1.redis.del(userId),
     ]);
-    if (((_7 = (_6 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _6 === void 0 ? void 0 : _6.sites) === null || _7 === void 0 ? void 0 : _7.length) > 0) {
-        for (const site of (_8 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _8 === void 0 ? void 0 : _8.sites) {
+    if (((_6 = (_5 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _5 === void 0 ? void 0 : _5.sites) === null || _6 === void 0 ? void 0 : _6.length) > 0) {
+        for (const site of (_7 = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _7 === void 0 ? void 0 : _7.sites) {
             yield redis_1.redis.del(`app-domain-${site === null || site === void 0 ? void 0 : site.subdomain}`);
         }
     }

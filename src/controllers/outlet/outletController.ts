@@ -112,8 +112,6 @@ export const getByOutletId = async (req: Request, res: Response) => {
 
   const getOutlet = await prismaDB.restaurant.findFirst({
     where: {
-      // @ts-ignore
-      adminId: req.user?.id,
       id: outletId,
     },
     include: {
