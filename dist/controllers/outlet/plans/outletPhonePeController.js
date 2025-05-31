@@ -39,6 +39,10 @@ const outletPhonePeClient = (outletId) => __awaiter(void 0, void 0, void 0, func
         if (!phonePeIntegration) {
             throw new not_found_1.NotFoundException("PhonePe Connection Error, Contact Support", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
         }
+        if (!(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPIId) ||
+            !(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPISecretKey)) {
+            throw new not_found_1.NotFoundException("PhonePe Not Configured for this outlet", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
         const clientId = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPIId);
         const clientSecret = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPISecretKey);
         return pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, 1, secrets_1.ENV === "development" ? pg_sdk_node_1.Env.SANDBOX : pg_sdk_node_1.Env.PRODUCTION);

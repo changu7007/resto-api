@@ -43,10 +43,18 @@ const outletPhonePeClient = async (outletId: string) => {
       );
     }
 
-    const clientId = decryptData(phonePeIntegration?.phonePeAPIId as string);
-    const clientSecret = decryptData(
-      phonePeIntegration?.phonePeAPISecretKey as string
-    );
+    if (
+      !phonePeIntegration?.phonePeAPIId ||
+      !phonePeIntegration?.phonePeAPISecretKey
+    ) {
+      throw new NotFoundException(
+        "PhonePe Not Configured for this outlet",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    const clientId = decryptData(phonePeIntegration?.phonePeAPIId);
+    const clientSecret = decryptData(phonePeIntegration?.phonePeAPISecretKey);
     return StandardCheckoutClient.getInstance(
       clientId,
       clientSecret,
