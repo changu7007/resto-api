@@ -40,22 +40,37 @@ const clientSecret = PHONE_PE_CLIENT_SECRET;
 const clientVersion = 1;
 const env = ENV === "development" ? Env.SANDBOX : Env.PRODUCTION;
 
-// Create a map to store outlet-specific clients
-const outletPhonePeClients = new Map<string, StandardCheckoutClient>();
+class PhonePeClientManager {
+  private static instance: PhonePeClientManager;
+  private mainClient: StandardCheckoutClient;
+  private outletClients: Map<string, StandardCheckoutClient>;
 
-// Initialize the main PhonePe client
-const phonePeClient = StandardCheckoutClient.getInstance(
-  clientId,
-  clientSecret,
-  clientVersion,
-  env
-);
+  private constructor() {
+    this.mainClient = StandardCheckoutClient.getInstance(
+      clientId,
+      clientSecret,
+      clientVersion,
+      env
+    );
+    this.outletClients = new Map();
+  }
 
-const outletPhonePeClient = async (outletId: string) => {
-  try {
-    // Check if we already have a client for this outlet
-    if (outletPhonePeClients.has(outletId)) {
-      return outletPhonePeClients.get(outletId)!;
+  public static getInstance(): PhonePeClientManager {
+    if (!PhonePeClientManager.instance) {
+      PhonePeClientManager.instance = new PhonePeClientManager();
+    }
+    return PhonePeClientManager.instance;
+  }
+
+  public getMainClient(): StandardCheckoutClient {
+    return this.mainClient;
+  }
+
+  public async getOutletClient(
+    outletId: string
+  ): Promise<StandardCheckoutClient> {
+    if (this.outletClients.has(outletId)) {
+      return this.outletClients.get(outletId)!;
     }
 
     const getOutlet = await getOutletById(outletId);
@@ -92,7 +107,6 @@ const outletPhonePeClient = async (outletId: string) => {
       phonePeIntegration?.phonePeAPISecretKey as string
     );
 
-    // Create new client and store it in the map
     const client = StandardCheckoutClient.getInstance(
       decryptedClientId,
       decryptedClientSecret,
@@ -100,8 +114,21 @@ const outletPhonePeClient = async (outletId: string) => {
       env
     );
 
-    outletPhonePeClients.set(outletId, client);
+    this.outletClients.set(outletId, client);
     return client;
+  }
+}
+
+// Initialize the PhonePe client manager
+const phonePeManager = PhonePeClientManager.getInstance();
+
+// Replace the old phonePeClient with the main client from manager
+const phonePeClient = phonePeManager.getMainClient();
+
+// Replace the old outletPhonePeClient function with the manager's method
+const outletPhonePeClient = async (outletId: string) => {
+  try {
+    return await phonePeManager.getOutletClient(outletId);
   } catch (error) {
     console.log(error);
     throw new BadRequestsException(
