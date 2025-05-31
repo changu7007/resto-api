@@ -13,7 +13,7 @@ import {
   RAZORPAY_KEY_ID,
   RAZORPAY_KEY_SECRET,
 } from "../../../secrets";
-import { getOrderSessionById, getOutletById } from "../../../lib/outlet";
+import { getOutletById } from "../../../lib/outlet";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
 import {
@@ -21,14 +21,13 @@ import {
   StandardCheckoutClient,
   StandardCheckoutPayRequest,
 } from "pg-sdk-node";
-import { decryptData } from "../../../lib/utils";
 
 const razorpay = new Razorpay({
   key_id: RAZORPAY_KEY_ID,
   key_secret: RAZORPAY_KEY_SECRET,
 });
 
-const API =
+export const API =
   ENV === "production"
     ? "https://api.restobytes.in/api"
     : "http://localhost:8080/api";
@@ -40,103 +39,12 @@ const clientSecret = PHONE_PE_CLIENT_SECRET;
 const clientVersion = 1;
 const env = ENV === "development" ? Env.SANDBOX : Env.PRODUCTION;
 
-class PhonePeClientManager {
-  private static instance: PhonePeClientManager;
-  private mainClient: StandardCheckoutClient;
-  private outletClients: Map<string, StandardCheckoutClient>;
-
-  private constructor() {
-    this.mainClient = StandardCheckoutClient.getInstance(
-      clientId,
-      clientSecret,
-      clientVersion,
-      env
-    );
-    this.outletClients = new Map();
-  }
-
-  public static getInstance(): PhonePeClientManager {
-    if (!PhonePeClientManager.instance) {
-      PhonePeClientManager.instance = new PhonePeClientManager();
-    }
-    return PhonePeClientManager.instance;
-  }
-
-  public getMainClient(): StandardCheckoutClient {
-    return this.mainClient;
-  }
-
-  public async getOutletClient(
-    outletId: string
-  ): Promise<StandardCheckoutClient> {
-    if (this.outletClients.has(outletId)) {
-      return this.outletClients.get(outletId)!;
-    }
-
-    const getOutlet = await getOutletById(outletId);
-
-    if (!getOutlet?.id) {
-      throw new NotFoundException(
-        "Outlet Not found",
-        ErrorCode.OUTLET_NOT_FOUND
-      );
-    }
-
-    const phonePeIntegration = await prismaDB.integration.findFirst({
-      where: {
-        restaurantId: outletId,
-        name: "PHONEPE",
-      },
-      select: {
-        phonePeAPIId: true,
-        phonePeAPISecretKey: true,
-      },
-    });
-
-    if (!phonePeIntegration) {
-      throw new NotFoundException(
-        "PhonePe Connection Error, Contact Support",
-        ErrorCode.UNPROCESSABLE_ENTITY
-      );
-    }
-
-    const decryptedClientId = decryptData(
-      phonePeIntegration?.phonePeAPIId as string
-    );
-    const decryptedClientSecret = decryptData(
-      phonePeIntegration?.phonePeAPISecretKey as string
-    );
-
-    const client = StandardCheckoutClient.getInstance(
-      decryptedClientId,
-      decryptedClientSecret,
-      clientVersion,
-      env
-    );
-
-    this.outletClients.set(outletId, client);
-    return client;
-  }
-}
-
-// Initialize the PhonePe client manager
-const phonePeManager = PhonePeClientManager.getInstance();
-
-// Replace the old phonePeClient with the main client from manager
-const phonePeClient = phonePeManager.getMainClient();
-
-// Replace the old outletPhonePeClient function with the manager's method
-const outletPhonePeClient = async (outletId: string) => {
-  try {
-    return await phonePeManager.getOutletClient(outletId);
-  } catch (error) {
-    console.log(error);
-    throw new BadRequestsException(
-      "Something Went wrong in the server",
-      ErrorCode.INTERNAL_EXCEPTION
-    );
-  }
-};
+const phonePeClient = StandardCheckoutClient.getInstance(
+  clientId,
+  clientSecret,
+  clientVersion,
+  env
+);
 
 export async function CreateRazorPayOrder(req: Request, res: Response) {
   const { amount } = req.body;
@@ -172,123 +80,6 @@ export async function createPhonePeOrder(req: Request, res: Response) {
     .build();
 
   const response = await phonePeClient.pay(request);
-  return res.json({
-    success: true,
-    redirectUrl: response.redirectUrl,
-  });
-}
-
-export async function createDomainPhonePeOrder(req: Request, res: Response) {
-  const { outletId } = req.params;
-  const { amount, orderSessionId, from, domain } = req.body;
-  // @ts-ignore
-  const userId = req.user.id;
-
-  if (!amount) {
-    throw new NotFoundException(
-      "Amount is Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
-
-  if (!from) {
-    throw new NotFoundException(
-      "PhonePe Initiialization Failed",
-      ErrorCode.INTERNAL_EXCEPTION
-    );
-  }
-
-  if (from === "paybill" && !orderSessionId) {
-    throw new NotFoundException(
-      "Order is Missing",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
-
-  if (!domain) {
-    throw new NotFoundException("Domain Not found", ErrorCode.NOT_FOUND);
-  }
-
-  const getOutlet = await getOutletById(outletId);
-
-  if (!getOutlet?.id) {
-    throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
-  }
-
-  const ophonePeClient = await outletPhonePeClient(outletId);
-
-  const merchantOrderId = randomUUID();
-  if (from === "paybill") {
-    const getOrder = await getOrderSessionById(outletId, orderSessionId);
-    if (getOrder?.active === false && getOrder.isPaid) {
-      throw new BadRequestsException(
-        "Bill Already Cleared",
-        ErrorCode.INTERNAL_EXCEPTION
-      );
-    }
-
-    const redirectUrl = `${API}/outlet/${outletId}/check-phonepe-status?merchantOrderId=${merchantOrderId}&from=${from}&orderSessionId=${orderSessionId}&userId=${userId}&domain=${domain}`;
-
-    const request = StandardCheckoutPayRequest.builder()
-      .merchantOrderId(merchantOrderId)
-      .amount(amount)
-      .redirectUrl(redirectUrl)
-      .build();
-
-    const response = await ophonePeClient.pay(request);
-    return res.json({
-      success: true,
-      redirectUrl: response.redirectUrl,
-    });
-  } else {
-    const redirectUrl = `${API}/outlet/${outletId}/check-phonepe-status?merchantOrderId=${merchantOrderId}&from=${from}&userId=${userId}&domain=${domain}`;
-
-    const request = StandardCheckoutPayRequest.builder()
-      .merchantOrderId(merchantOrderId)
-      .amount(amount)
-      .redirectUrl(redirectUrl)
-      .build();
-
-    const response = await ophonePeClient.pay(request);
-    return res.json({
-      success: true,
-      redirectUrl: response.redirectUrl,
-    });
-  }
-}
-
-export async function posOutletPhonePeOrder(req: Request, res: Response) {
-  const { outletId } = req.params;
-  const { amount } = req.body;
-  // @ts-ignore
-  const userId = req.user.id;
-
-  if (!amount) {
-    throw new NotFoundException(
-      "Amount is Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
-
-  const getOutlet = await getOutletById(outletId);
-
-  if (!getOutlet?.id) {
-    throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
-  }
-
-  const ophonePeClient = await outletPhonePeClient(outletId);
-
-  const merchantOrderId = randomUUID();
-
-  const redirectUrl = `${API}/outlet/${outletId}/check-pos-phonepe-status?merchantOrderId=${merchantOrderId}&&userId=${userId}`;
-
-  const request = StandardCheckoutPayRequest.builder()
-    .merchantOrderId(merchantOrderId)
-    .amount(amount)
-    .redirectUrl(redirectUrl)
-    .build();
-
-  const response = await ophonePeClient.pay(request);
   return res.json({
     success: true,
     redirectUrl: response.redirectUrl,
@@ -373,109 +164,6 @@ export async function statusPhonePeCheck(req: Request, res: Response) {
     return res.redirect(`${FRONTEND}/thankyou?status=success`);
   } else {
     return res.redirect(`${FRONTEND}/thankyou?status=failure`);
-  }
-}
-
-export async function posAmountPhoneCheck(req: Request, res: Response) {
-  const { outletId } = req.params;
-
-  const { merchantOrderId } = req.query;
-
-  if (!merchantOrderId) {
-    throw new NotFoundException(
-      "Merchant OrderId is Missing",
-      ErrorCode.UNAUTHORIZED
-    );
-  }
-
-  const ophonePeClient = await outletPhonePeClient(outletId);
-  const response = await ophonePeClient.getOrderStatus(
-    merchantOrderId as string
-  );
-
-  const status = response.state;
-  let host =
-    ENV === "production"
-      ? `https://pos.restobytes.in/${outletId}/billing`
-      : `http://localhost:5173/${outletId}/billing`;
-
-  if (status === "COMPLETED") {
-    // Create subscription similar to buyPlan function
-    return res.redirect(
-      `${host}?payment=success&paymentId=${response?.orderId}&amount=${
-        response?.amount / 100
-      }`
-    );
-  } else {
-    return res.redirect(`${host}?payment=failure`);
-  }
-}
-
-export async function orderAmountPhoneCheck(req: Request, res: Response) {
-  const { outletId } = req.params;
-
-  const { merchantOrderId, orderSessionId, from, userId, domain } = req.query;
-
-  if (!merchantOrderId) {
-    throw new NotFoundException(
-      "Merchant OrderId is Missing",
-      ErrorCode.UNAUTHORIZED
-    );
-  }
-
-  if (!orderSessionId && from === "paybill") {
-    throw new NotFoundException(" OrderId is Missing", ErrorCode.UNAUTHORIZED);
-  }
-
-  const ophonePeClient = await outletPhonePeClient(outletId);
-  const response = await ophonePeClient.getOrderStatus(
-    merchantOrderId as string
-  );
-
-  const status = response.state;
-  const host =
-    ENV === "production"
-      ? `https://${domain}.restobytes.in/${outletId}`
-      : `http://${domain}.localhost:2000/${outletId}`;
-
-  const orderSession = await getOrderSessionById(
-    outletId,
-    orderSessionId as string
-  );
-
-  if (!orderSession) {
-    throw new NotFoundException("Order Not Found", ErrorCode.NOT_FOUND);
-  }
-
-  if (status === "COMPLETED") {
-    // Create subscription similar to buyPlan function
-    if (!userId) {
-      throw new BadRequestsException(
-        "User is Missing",
-        ErrorCode.UNPROCESSABLE_ENTITY
-      );
-    }
-    if (from === "paybill") {
-      return res.redirect(
-        `${host}/paybill/${orderSession?.tableId}?payment=success&paymentId=${
-          response?.orderId
-        }&amount=${response?.amount / 100}`
-      );
-    } else {
-      return res.redirect(
-        `${host}/cart?payment=success&paymentId=${response?.orderId}&amount=${
-          response?.amount / 100
-        }`
-      );
-    }
-  } else {
-    if (from === "paybill") {
-      return res.redirect(
-        `${host}/paybill/${orderSession?.tableId}?payment=failure`
-      );
-    } else {
-      return res.redirect(`${host}/cart?payment=failure`);
-    }
   }
 }
 

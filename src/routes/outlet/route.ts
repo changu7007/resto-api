@@ -170,12 +170,8 @@ import {
   searchCustomers,
 } from "../../controllers/outlet/customers/customerController";
 import {
-  createDomainPhonePeOrder,
   createVendorAccount,
   fetchBankAccountStatus,
-  orderAmountPhoneCheck,
-  posAmountPhoneCheck,
-  posOutletPhonePeOrder,
 } from "../../controllers/outlet/plans/planController";
 import {
   allStocks,
@@ -311,6 +307,12 @@ import {
   updateLoyaltyProgram,
 } from "../../controllers/outlet/loyalty/loyaltyController";
 import { phonePeDetails } from "../../controllers/outlet/integration/intergation-controller";
+import {
+  createDomainPhonePeOrder,
+  orderAmountPhoneCheck,
+  posAmountPhoneCheck,
+  posOutletPhonePeOrder,
+} from "../../controllers/outlet/plans/outletPhonePeController";
 const outletRoute: Router = Router();
 
 outletRoute.get("/get-all-outlets", errorHandler(getAllOutlets));

@@ -32,6 +32,7 @@ const staffController_2 = require("../../controllers/outlet/staffs/staffControll
 const aiMenuController_1 = require("../../controllers/outlet/items/aiMenuController");
 const loyaltyController_1 = require("../../controllers/outlet/loyalty/loyaltyController");
 const intergation_controller_1 = require("../../controllers/outlet/integration/intergation-controller");
+const outletPhonePeController_1 = require("../../controllers/outlet/plans/outletPhonePeController");
 const outletRoute = (0, express_1.Router)();
 outletRoute.get("/get-all-outlets", (0, error_handler_1.errorHandler)(outletController_1.getAllOutlets));
 outletRoute.get("/:outletId/get-admin-register-status", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(registerController_1.getAdminRegisterStatus));
@@ -342,10 +343,10 @@ outletRoute.post("/:restaurantId/loyalty/campaigns", auth_1.isAuthMiddelware, (0
 outletRoute.get("/:outletId/search-customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(customerController_1.searchCustomers));
 outletRoute.post("/:outletId/create-customers", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(customerController_1.createCustomer));
 outletRoute.patch("/:outletId/app-integration-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(intergation_controller_1.phonePeDetails));
-outletRoute.post("/:outletId/outlet-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.createDomainPhonePeOrder));
-outletRoute.get("/:outletId/check-phonepe-status", (0, error_handler_1.errorHandler)(planController_1.orderAmountPhoneCheck));
-outletRoute.post("/:outletId/pos-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(planController_1.posOutletPhonePeOrder));
-outletRoute.get("/:outletId/check-pos-phonepe-status", (0, error_handler_1.errorHandler)(planController_1.posAmountPhoneCheck));
+outletRoute.post("/:outletId/outlet-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletPhonePeController_1.createDomainPhonePeOrder));
+outletRoute.get("/:outletId/check-phonepe-status", (0, error_handler_1.errorHandler)(outletPhonePeController_1.orderAmountPhoneCheck));
+outletRoute.post("/:outletId/pos-phonepe", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(outletPhonePeController_1.posOutletPhonePeOrder));
+outletRoute.get("/:outletId/check-pos-phonepe-status", (0, error_handler_1.errorHandler)(outletPhonePeController_1.posAmountPhoneCheck));
 outletRoute.get("/:outletId/item-serves/:recipeId", (0, error_handler_1.errorHandler)(inventory_controller_1.calculateItemServes));
 outletRoute.patch("/:outletId/order-session/:orderSessionId/assign-customer", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderSessionController_1.assignCustomerToOrder));
 outletRoute.post("/:outletId/verify-franchise-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.verifyFranchiseCode));
