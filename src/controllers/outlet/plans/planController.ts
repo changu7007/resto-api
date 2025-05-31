@@ -40,6 +40,10 @@ const clientSecret = PHONE_PE_CLIENT_SECRET;
 const clientVersion = 1;
 const env = ENV === "development" ? Env.SANDBOX : Env.PRODUCTION;
 
+// Create a map to store outlet-specific clients
+const outletPhonePeClients = new Map<string, StandardCheckoutClient>();
+
+// Initialize the main PhonePe client
 const phonePeClient = StandardCheckoutClient.getInstance(
   clientId,
   clientSecret,
@@ -47,20 +51,65 @@ const phonePeClient = StandardCheckoutClient.getInstance(
   env
 );
 
-// const outletPhonePeClient = ({
-//   outletClientId,
-//   outletClientSecret,
-// }: {
-//   outletClientId: string;
-//   outletClientSecret: string;
-// }) => {
-//   return StandardCheckoutClient.getInstance(
-//     outletClientId,
-//     outletClientSecret,
-//     clientVersion,
-//     env
-//   );
-// };
+const outletPhonePeClient = async (outletId: string) => {
+  try {
+    // Check if we already have a client for this outlet
+    if (outletPhonePeClients.has(outletId)) {
+      return outletPhonePeClients.get(outletId)!;
+    }
+
+    const getOutlet = await getOutletById(outletId);
+
+    if (!getOutlet?.id) {
+      throw new NotFoundException(
+        "Outlet Not found",
+        ErrorCode.OUTLET_NOT_FOUND
+      );
+    }
+
+    const phonePeIntegration = await prismaDB.integration.findFirst({
+      where: {
+        restaurantId: outletId,
+        name: "PHONEPE",
+      },
+      select: {
+        phonePeAPIId: true,
+        phonePeAPISecretKey: true,
+      },
+    });
+
+    if (!phonePeIntegration) {
+      throw new NotFoundException(
+        "PhonePe Connection Error, Contact Support",
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    const decryptedClientId = decryptData(
+      phonePeIntegration?.phonePeAPIId as string
+    );
+    const decryptedClientSecret = decryptData(
+      phonePeIntegration?.phonePeAPISecretKey as string
+    );
+
+    // Create new client and store it in the map
+    const client = StandardCheckoutClient.getInstance(
+      decryptedClientId,
+      decryptedClientSecret,
+      clientVersion,
+      env
+    );
+
+    outletPhonePeClients.set(outletId, client);
+    return client;
+  } catch (error) {
+    console.log(error);
+    throw new BadRequestsException(
+      "Something Went wrong in the server",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+};
 
 export async function CreateRazorPayOrder(req: Request, res: Response) {
   const { amount } = req.body;
@@ -101,54 +150,6 @@ export async function createPhonePeOrder(req: Request, res: Response) {
     redirectUrl: response.redirectUrl,
   });
 }
-
-const outletPhonePeClient = async (outletId: string) => {
-  try {
-    const getOutlet = await getOutletById(outletId);
-
-    if (!getOutlet?.id) {
-      throw new NotFoundException(
-        "Outlet Not found",
-        ErrorCode.OUTLET_NOT_FOUND
-      );
-    }
-
-    const phonePeIntegration = await prismaDB.integration.findFirst({
-      where: {
-        restaurantId: outletId,
-        name: "PHONEPE",
-      },
-      select: {
-        phonePeAPIId: true,
-        phonePeAPISecretKey: true,
-      },
-    });
-
-    if (!phonePeIntegration) {
-      throw new NotFoundException(
-        "PhonePe Connection Error, Contact Support",
-        ErrorCode.UNPROCESSABLE_ENTITY
-      );
-    }
-
-    const clientId = decryptData(phonePeIntegration?.phonePeAPIId as string);
-    const clientSecret = decryptData(
-      phonePeIntegration?.phonePeAPISecretKey as string
-    );
-    return StandardCheckoutClient.getInstance(
-      clientId,
-      clientSecret,
-      clientVersion,
-      env
-    );
-  } catch (error) {
-    console.log(error);
-    throw new BadRequestsException(
-      "Something Went wrong in the server",
-      ErrorCode.INTERNAL_EXCEPTION
-    );
-  }
-};
 
 export async function createDomainPhonePeOrder(req: Request, res: Response) {
   const { outletId } = req.params;

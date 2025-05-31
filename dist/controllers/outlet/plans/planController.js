@@ -60,21 +60,45 @@ const clientId = secrets_1.PHONE_PE_CLIENT_ID;
 const clientSecret = secrets_1.PHONE_PE_CLIENT_SECRET;
 const clientVersion = 1;
 const env = secrets_1.ENV === "development" ? pg_sdk_node_1.Env.SANDBOX : pg_sdk_node_1.Env.PRODUCTION;
+// Create a map to store outlet-specific clients
+const outletPhonePeClients = new Map();
+// Initialize the main PhonePe client
 const phonePeClient = pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env);
-// const outletPhonePeClient = ({
-//   outletClientId,
-//   outletClientSecret,
-// }: {
-//   outletClientId: string;
-//   outletClientSecret: string;
-// }) => {
-//   return StandardCheckoutClient.getInstance(
-//     outletClientId,
-//     outletClientSecret,
-//     clientVersion,
-//     env
-//   );
-// };
+const outletPhonePeClient = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Check if we already have a client for this outlet
+        if (outletPhonePeClients.has(outletId)) {
+            return outletPhonePeClients.get(outletId);
+        }
+        const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
+        if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
+            throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+        }
+        const phonePeIntegration = yield __1.prismaDB.integration.findFirst({
+            where: {
+                restaurantId: outletId,
+                name: "PHONEPE",
+            },
+            select: {
+                phonePeAPIId: true,
+                phonePeAPISecretKey: true,
+            },
+        });
+        if (!phonePeIntegration) {
+            throw new not_found_1.NotFoundException("PhonePe Connection Error, Contact Support", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
+        const decryptedClientId = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPIId);
+        const decryptedClientSecret = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPISecretKey);
+        // Create new client and store it in the map
+        const client = pg_sdk_node_1.StandardCheckoutClient.getInstance(decryptedClientId, decryptedClientSecret, clientVersion, env);
+        outletPhonePeClients.set(outletId, client);
+        return client;
+    }
+    catch (error) {
+        console.log(error);
+        throw new bad_request_1.BadRequestsException("Something Went wrong in the server", root_1.ErrorCode.INTERNAL_EXCEPTION);
+    }
+});
 function CreateRazorPayOrder(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
         const { amount } = req.body;
@@ -113,34 +137,6 @@ function createPhonePeOrder(req, res) {
     });
 }
 exports.createPhonePeOrder = createPhonePeOrder;
-const outletPhonePeClient = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
-        if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
-            throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
-        }
-        const phonePeIntegration = yield __1.prismaDB.integration.findFirst({
-            where: {
-                restaurantId: outletId,
-                name: "PHONEPE",
-            },
-            select: {
-                phonePeAPIId: true,
-                phonePeAPISecretKey: true,
-            },
-        });
-        if (!phonePeIntegration) {
-            throw new not_found_1.NotFoundException("PhonePe Connection Error, Contact Support", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-        }
-        const clientId = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPIId);
-        const clientSecret = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPISecretKey);
-        return pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env);
-    }
-    catch (error) {
-        console.log(error);
-        throw new bad_request_1.BadRequestsException("Something Went wrong in the server", root_1.ErrorCode.INTERNAL_EXCEPTION);
-    }
-});
 function createDomainPhonePeOrder(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
         const { outletId } = req.params;
