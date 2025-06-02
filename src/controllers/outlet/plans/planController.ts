@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import Razorpay from "razorpay";
-import crypto, { randomUUID } from "crypto";
+import crypto from "crypto";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { ErrorCode } from "../../../exceptions/root";
 import { prismaDB } from "../../..";
@@ -72,11 +72,10 @@ export async function createPhonePeOrder(req: Request, res: Response) {
       userId,
     });
 
-    const merchantOrderId = randomUUID();
-    const redirectUrl = `${API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
-
     // Use global PhonePe client for subscription payments
     const phonePeClient = phonePeService.getGlobalClient();
+    const merchantOrderId = phonePeClient.generatePhonePeOrderId("SUB");
+    const redirectUrl = `${API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
 
     const paymentResponse = await phonePeClient.createPayment({
       merchantOrderId,

@@ -11,7 +11,6 @@ import { decryptData } from "../../../lib/utils";
 import { ENV } from "../../../secrets";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { Request, Response } from "express";
-import { randomUUID } from "crypto";
 import { API } from "./planController";
 import { PhonePeService } from "../../../services/phonepe/phonepe-service";
 
@@ -157,7 +156,7 @@ export async function createDomainPhonePeOrder(req: Request, res: Response) {
 
     // Get PhonePe client for outlet
     const phonePeClient = await phonePeService.getOutletClient(outletId);
-    const merchantOrderId = randomUUID();
+    const merchantOrderId = phonePeClient.generatePhonePeOrderId("OUTLET");
 
     let redirectUrl;
 
@@ -227,7 +226,7 @@ export async function posOutletPhonePeOrder(req: Request, res: Response) {
     }
 
     const phonePeClient = await phonePeService.getOutletClient(outletId);
-    const merchantOrderId = randomUUID();
+    const merchantOrderId = phonePeClient.generatePhonePeOrderId("POS");
 
     const redirectUrl = `${API}/outlet/${outletId}/check-pos-phonepe-status?merchantOrderId=${merchantOrderId}&userId=${userId}`;
 

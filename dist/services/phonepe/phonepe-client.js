@@ -24,6 +24,11 @@ class PhonePeClient {
             config.environment === "SANDBOX"
                 ? "https://api-preprod.phonepe.com/apis/pg-sandbox"
                 : "https://api.phonepe.com/apis/pg";
+        console.log("PhonePe Client Configuration:", {
+            environment: config.environment,
+            baseUrl: this.baseUrl,
+            merchantId: config.merchantId,
+        });
         this.httpClient = axios_1.default.create({
             baseURL: this.baseUrl,
             timeout: 30000,
@@ -105,12 +110,27 @@ class PhonePeClient {
             .update(endpoint + this.config.clientSecret)
             .digest("hex") + "###1");
     }
+    generatePhonePeOrderId(prefix = "PP") {
+        const timestamp = Date.now().toString();
+        const random = Math.floor(Math.random() * 10000)
+            .toString()
+            .padStart(4, "0");
+        return `${prefix}_${timestamp}_${random}`;
+    }
     createPayment(request) {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                // Validate required fields
+                if (!request.merchantOrderId || !request.amount) {
+                    throw new Error("merchantOrderId and amount are required fields");
+                }
+                // Generate a PhonePe-compliant order ID if not provided
+                const merchantOrderId = request.merchantOrderId.includes("-")
+                    ? this.generatePhonePeOrderId()
+                    : request.merchantOrderId;
                 const payload = {
-                    merchantOrderId: request.merchantOrderId,
+                    merchantOrderId,
                     amount: request.amount,
                     expireAfter: 1200, // 20 minutes default expiry
                     metaInfo: {
@@ -129,7 +149,12 @@ class PhonePeClient {
                     },
                 };
                 console.log("PhonePe Payment Request Payload:", JSON.stringify(payload, null, 2));
+                // Ensure amount is a number
+                if (typeof payload.amount !== "number") {
+                    payload.amount = Number(payload.amount);
+                }
                 const base64Payload = Buffer.from(JSON.stringify(payload)).toString("base64");
+                //DEV post /checkout/v2/pay POST
                 const signature = this.generateSignature(base64Payload, "/checkout/v2/pay");
                 console.log("PhonePe Request Headers:", {
                     "X-VERIFY": signature,
@@ -140,6 +165,7 @@ class PhonePeClient {
                 }, {
                     headers: {
                         "X-VERIFY": signature,
+                        "Content-Type": "application/json",
                     },
                 });
                 console.log("PhonePe API Response:", JSON.stringify(response.data, null, 2));

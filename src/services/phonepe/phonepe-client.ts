@@ -21,6 +21,12 @@ export class PhonePeClient {
         ? "https://api-preprod.phonepe.com/apis/pg-sandbox"
         : "https://api.phonepe.com/apis/pg";
 
+    console.log("PhonePe Client Configuration:", {
+      environment: config.environment,
+      baseUrl: this.baseUrl,
+      merchantId: config.merchantId,
+    });
+
     this.httpClient = axios.create({
       baseURL: this.baseUrl,
       timeout: 30000,
@@ -129,10 +135,28 @@ export class PhonePeClient {
     );
   }
 
+  public generatePhonePeOrderId(prefix: string = "PP"): string {
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, "0");
+    return `${prefix}_${timestamp}_${random}`;
+  }
+
   async createPayment(request: PaymentRequest): Promise<PaymentResponse> {
     try {
+      // Validate required fields
+      if (!request.merchantOrderId || !request.amount) {
+        throw new Error("merchantOrderId and amount are required fields");
+      }
+
+      // Generate a PhonePe-compliant order ID if not provided
+      const merchantOrderId = request.merchantOrderId.includes("-")
+        ? this.generatePhonePeOrderId()
+        : request.merchantOrderId;
+
       const payload = {
-        merchantOrderId: request.merchantOrderId,
+        merchantOrderId,
         amount: request.amount,
         expireAfter: 1200, // 20 minutes default expiry
         metaInfo: {
@@ -156,9 +180,16 @@ export class PhonePeClient {
         JSON.stringify(payload, null, 2)
       );
 
+      // Ensure amount is a number
+      if (typeof payload.amount !== "number") {
+        payload.amount = Number(payload.amount);
+      }
+
       const base64Payload = Buffer.from(JSON.stringify(payload)).toString(
         "base64"
       );
+
+      //DEV post /checkout/v2/pay POST
       const signature = this.generateSignature(
         base64Payload,
         "/checkout/v2/pay"
@@ -177,6 +208,7 @@ export class PhonePeClient {
         {
           headers: {
             "X-VERIFY": signature,
+            "Content-Type": "application/json",
           },
         }
       );

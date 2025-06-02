@@ -15,7 +15,6 @@ const root_1 = require("../../../exceptions/root");
 const outlet_1 = require("../../../lib/outlet");
 const secrets_1 = require("../../../secrets");
 const bad_request_1 = require("../../../exceptions/bad-request");
-const crypto_1 = require("crypto");
 const planController_1 = require("./planController");
 const phonepe_service_1 = require("../../../services/phonepe/phonepe-service");
 const phonePeService = phonepe_service_1.PhonePeService.getInstance();
@@ -131,7 +130,7 @@ function createDomainPhonePeOrder(req, res) {
             }
             // Get PhonePe client for outlet
             const phonePeClient = yield phonePeService.getOutletClient(outletId);
-            const merchantOrderId = (0, crypto_1.randomUUID)();
+            const merchantOrderId = phonePeClient.generatePhonePeOrderId("OUTLET");
             let redirectUrl;
             if (from === "paybill") {
                 redirectUrl = `${planController_1.API}/outlet/${outletId}/check-phonepe-status?merchantOrderId=${merchantOrderId}&from=${from}&orderSessionId=${orderSessionId}&userId=${userId}&domain=${domain}`;
@@ -181,7 +180,7 @@ function posOutletPhonePeOrder(req, res) {
                 throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
             }
             const phonePeClient = yield phonePeService.getOutletClient(outletId);
-            const merchantOrderId = (0, crypto_1.randomUUID)();
+            const merchantOrderId = phonePeClient.generatePhonePeOrderId("POS");
             const redirectUrl = `${planController_1.API}/outlet/${outletId}/check-pos-phonepe-status?merchantOrderId=${merchantOrderId}&userId=${userId}`;
             const paymentResponse = yield phonePeClient.createPayment({
                 merchantOrderId,
