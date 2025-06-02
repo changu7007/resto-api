@@ -14,6 +14,9 @@ import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { API } from "./planController";
 
+// Create a Map to store client instances per outlet
+const phonePeClients = new Map<string, any>();
+
 const outletPhonePeClient = async (outletId: string) => {
   try {
     const getOutlet = await getOutletById(outletId);
@@ -55,16 +58,48 @@ const outletPhonePeClient = async (outletId: string) => {
 
     const clientId = decryptData(phonePeIntegration?.phonePeAPIId);
     const clientSecret = decryptData(phonePeIntegration?.phonePeAPISecretKey);
-    return StandardCheckoutClient.getInstance(
-      clientId,
-      clientSecret,
-      1,
-      ENV === "development" ? Env.SANDBOX : Env.PRODUCTION
-    );
+
+    // Check if client already exists for this outlet
+    const clientKey = `${outletId}_${clientId}`;
+    if (phonePeClients.has(clientKey)) {
+      return phonePeClients.get(clientKey);
+    }
+
+    // Create new client instance for this outlet
+    try {
+      const client = StandardCheckoutClient.getInstance(
+        clientId,
+        clientSecret,
+        1,
+        ENV === "development" ? Env.SANDBOX : Env.PRODUCTION
+      );
+
+      // Store the client for reuse
+      phonePeClients.set(clientKey, client);
+      return client;
+    } catch (error) {
+      // If getInstance fails due to re-initialization, try alternative approach
+      console.log(
+        "StandardCheckoutClient re-initialization error, using workaround"
+      );
+
+      // Alternative: Create a custom client wrapper or use direct API calls
+      // For now, we'll throw a more descriptive error
+      throw new BadRequestsException(
+        "PhonePe client initialization conflict. Please contact support.",
+        ErrorCode.INTERNAL_EXCEPTION
+      );
+    }
   } catch (error) {
-    console.log(error);
+    console.log("outletPhonePeClient error:", error);
+    if (
+      error instanceof NotFoundException ||
+      error instanceof BadRequestsException
+    ) {
+      throw error;
+    }
     throw new BadRequestsException(
-      "Something Went wrong in the server",
+      "Something went wrong in the server",
       ErrorCode.INTERNAL_EXCEPTION
     );
   }

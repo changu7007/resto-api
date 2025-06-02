@@ -38,6 +38,7 @@ export type FUser = {
   isSubscribed: boolean;
   isTwoFA: boolean;
   toRenewal: number | null;
+  showAnnualPlan: boolean;
   plan: "FREETRIAL" | "STANDARD" | "PREMIUM" | "ENTERPRISE";
   outlets: {
     id: string;

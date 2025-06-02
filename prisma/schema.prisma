@@ -326,6 +326,7 @@ model User {
   phoneNo            String?
   role               UserRole               @default(ADMIN)
   emailVerified      DateTime?
+  showAnnualPlan     Boolean                @default(true)
   providerAccountId  String?
   image              String?
   pan                String?

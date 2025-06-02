@@ -20,6 +20,8 @@ const secrets_1 = require("../../../secrets");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const crypto_1 = require("crypto");
 const planController_1 = require("./planController");
+// Create a Map to store client instances per outlet
+const phonePeClients = new Map();
 const outletPhonePeClient = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
@@ -45,11 +47,33 @@ const outletPhonePeClient = (outletId) => __awaiter(void 0, void 0, void 0, func
         }
         const clientId = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPIId);
         const clientSecret = (0, utils_1.decryptData)(phonePeIntegration === null || phonePeIntegration === void 0 ? void 0 : phonePeIntegration.phonePeAPISecretKey);
-        return pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, 1, secrets_1.ENV === "development" ? pg_sdk_node_1.Env.SANDBOX : pg_sdk_node_1.Env.PRODUCTION);
+        // Check if client already exists for this outlet
+        const clientKey = `${outletId}_${clientId}`;
+        if (phonePeClients.has(clientKey)) {
+            return phonePeClients.get(clientKey);
+        }
+        // Create new client instance for this outlet
+        try {
+            const client = pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, 1, secrets_1.ENV === "development" ? pg_sdk_node_1.Env.SANDBOX : pg_sdk_node_1.Env.PRODUCTION);
+            // Store the client for reuse
+            phonePeClients.set(clientKey, client);
+            return client;
+        }
+        catch (error) {
+            // If getInstance fails due to re-initialization, try alternative approach
+            console.log("StandardCheckoutClient re-initialization error, using workaround");
+            // Alternative: Create a custom client wrapper or use direct API calls
+            // For now, we'll throw a more descriptive error
+            throw new bad_request_1.BadRequestsException("PhonePe client initialization conflict. Please contact support.", root_1.ErrorCode.INTERNAL_EXCEPTION);
+        }
     }
     catch (error) {
-        console.log(error);
-        throw new bad_request_1.BadRequestsException("Something Went wrong in the server", root_1.ErrorCode.INTERNAL_EXCEPTION);
+        console.log("outletPhonePeClient error:", error);
+        if (error instanceof not_found_1.NotFoundException ||
+            error instanceof bad_request_1.BadRequestsException) {
+            throw error;
+        }
+        throw new bad_request_1.BadRequestsException("Something went wrong in the server", root_1.ErrorCode.INTERNAL_EXCEPTION);
     }
 });
 function createDomainPhonePeOrder(req, res) {

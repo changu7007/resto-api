@@ -153,6 +153,7 @@ const getFormatUserAndSendToRedis = (userId) => __awaiter(void 0, void 0, void 0
         phoneNo: findOwner === null || findOwner === void 0 ? void 0 : findOwner.phoneNo,
         image: findOwner === null || findOwner === void 0 ? void 0 : findOwner.image,
         role: findOwner === null || findOwner === void 0 ? void 0 : findOwner.role,
+        showAnnualPlan: findOwner === null || findOwner === void 0 ? void 0 : findOwner.showAnnualPlan,
         onboardingStatus: findOwner === null || findOwner === void 0 ? void 0 : findOwner.onboardingStatus,
         isSubscribed: userSubscription.isSubscribed,
         favItems: findOwner === null || findOwner === void 0 ? void 0 : findOwner.favItems,

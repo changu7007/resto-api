@@ -161,6 +161,7 @@ export const getFormatUserAndSendToRedis = async (userId: string) => {
     phoneNo: findOwner?.phoneNo,
     image: findOwner?.image,
     role: findOwner?.role,
+    showAnnualPlan: findOwner?.showAnnualPlan,
     onboardingStatus: findOwner?.onboardingStatus,
     isSubscribed: userSubscription.isSubscribed,
     favItems: findOwner?.favItems,
