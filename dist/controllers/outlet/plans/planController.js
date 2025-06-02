@@ -46,7 +46,7 @@ const secrets_1 = require("../../../secrets");
 const outlet_1 = require("../../../lib/outlet");
 const unauthorized_1 = require("../../../exceptions/unauthorized");
 const get_users_1 = require("../../../lib/get-users");
-const pg_sdk_node_1 = require("pg-sdk-node");
+const phonepe_service_1 = require("../../../services/phonepe/phonepe-service");
 const razorpay = new razorpay_1.default({
     key_id: secrets_1.RAZORPAY_KEY_ID,
     key_secret: secrets_1.RAZORPAY_KEY_SECRET,
@@ -55,11 +55,7 @@ exports.API = secrets_1.ENV === "production"
     ? "https://api.restobytes.in/api"
     : "http://localhost:8080/api";
 const FRONTEND = secrets_1.ENV === "production" ? "https://app.restobytes.in" : "http://localhost:4000";
-const clientId = secrets_1.PHONE_PE_CLIENT_ID;
-const clientSecret = secrets_1.PHONE_PE_CLIENT_SECRET;
-const clientVersion = 1;
-const env = secrets_1.ENV === "development" ? pg_sdk_node_1.Env.SANDBOX : pg_sdk_node_1.Env.PRODUCTION;
-const phonePeClient = pg_sdk_node_1.StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env);
+const phonePeService = phonepe_service_1.PhonePeService.getInstance();
 function CreateRazorPayOrder(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
         const { amount } = req.body;
@@ -76,86 +72,127 @@ function CreateRazorPayOrder(req, res) {
 }
 exports.CreateRazorPayOrder = CreateRazorPayOrder;
 function createPhonePeOrder(req, res) {
+    var _a;
     return __awaiter(this, void 0, void 0, function* () {
-        const { amount, subscriptionId } = req.body;
-        // @ts-ignore
-        const userId = req.user.id;
-        if (!amount) {
-            throw new not_found_1.NotFoundException("Amount is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        try {
+            const { amount, subscriptionId } = req.body;
+            // @ts-ignore
+            const userId = req.user.id;
+            if (!amount) {
+                throw new not_found_1.NotFoundException("Amount is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+            }
+            if (!subscriptionId) {
+                throw new not_found_1.NotFoundException("Subscription ID is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+            }
+            console.log("Creating PhonePe order with params:", {
+                amount,
+                subscriptionId,
+                userId,
+            });
+            const merchantOrderId = (0, crypto_1.randomUUID)();
+            const redirectUrl = `${exports.API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
+            // Use global PhonePe client for subscription payments
+            const phonePeClient = phonePeService.getGlobalClient();
+            const paymentResponse = yield phonePeClient.createPayment({
+                merchantOrderId,
+                amount,
+                redirectUrl,
+                userId,
+                metadata: { subscriptionId, type: "subscription" },
+            });
+            console.log("PhonePe payment response:", paymentResponse);
+            if (!paymentResponse.success) {
+                console.error("PhonePe payment creation failed:", {
+                    error: paymentResponse.error,
+                    errorCode: paymentResponse.errorCode,
+                    merchantOrderId: paymentResponse.merchantOrderId,
+                    amount: paymentResponse.amount,
+                });
+                throw new bad_request_1.BadRequestsException(paymentResponse.error || "Payment creation failed", root_1.ErrorCode.INTERNAL_EXCEPTION);
+            }
+            return res.json({
+                success: true,
+                redirectUrl: paymentResponse.redirectUrl,
+                orderId: paymentResponse.orderId,
+                amount: paymentResponse.amount,
+                merchantOrderId: paymentResponse.merchantOrderId,
+                responseData: paymentResponse.responseData,
+            });
         }
-        const merchantOrderId = (0, crypto_1.randomUUID)();
-        const redirectUrl = `${exports.API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
-        const request = pg_sdk_node_1.StandardCheckoutPayRequest.builder()
-            .merchantOrderId(merchantOrderId)
-            .amount(amount)
-            .redirectUrl(redirectUrl)
-            .build();
-        const response = yield phonePeClient.pay(request);
-        return res.json({
-            success: true,
-            redirectUrl: response.redirectUrl,
-        });
+        catch (error) {
+            console.error("createPhonePeOrder error:", {
+                message: error.message,
+                code: error.code,
+                stack: error.stack,
+                response: (_a = error.response) === null || _a === void 0 ? void 0 : _a.data,
+            });
+            if (error instanceof not_found_1.NotFoundException ||
+                error instanceof bad_request_1.BadRequestsException) {
+                throw error;
+            }
+            throw new bad_request_1.BadRequestsException(error.message || "Something went wrong in payment processing", root_1.ErrorCode.INTERNAL_EXCEPTION);
+        }
     });
 }
 exports.createPhonePeOrder = createPhonePeOrder;
 function statusPhonePeCheck(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
-        const { merchantOrderId, subId, userId } = req.query;
-        if (!merchantOrderId) {
-            throw new not_found_1.NotFoundException("MerchantORderId is Missing", root_1.ErrorCode.UNAUTHORIZED);
+        try {
+            const { merchantOrderId, subId, userId } = req.query;
+            if (!merchantOrderId) {
+                throw new not_found_1.NotFoundException("MerchantOrderId is Missing", root_1.ErrorCode.UNAUTHORIZED);
+            }
+            const phonePeClient = phonePeService.getGlobalClient();
+            const statusResponse = yield phonePeClient.getOrderStatus(merchantOrderId);
+            if (statusResponse.state === "COMPLETED") {
+                if (!subId || !userId) {
+                    throw new bad_request_1.BadRequestsException("Subscription ID or User ID is missing", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+                }
+                const findOwner = yield __1.prismaDB.user.findFirst({
+                    where: { id: userId },
+                });
+                if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
+                    throw new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND);
+                }
+                const findSubscription = yield __1.prismaDB.subsciption.findFirst({
+                    where: { id: subId },
+                });
+                if (!findSubscription) {
+                    throw new bad_request_1.BadRequestsException("No Subscription Found", root_1.ErrorCode.NOT_FOUND);
+                }
+                let validDate = new Date();
+                const paidAmount = (statusResponse.amount || 0) / 100;
+                if (paidAmount === 0) {
+                    validDate.setDate(validDate.getDate() + 15); // 15 days free trial
+                }
+                else if (findSubscription.planType === "MONTHLY") {
+                    validDate.setMonth(validDate.getMonth() + 1);
+                }
+                else if (findSubscription.planType === "ANNUALLY") {
+                    validDate.setFullYear(validDate.getFullYear() + 1);
+                }
+                yield __1.prismaDB.subscriptionBilling.create({
+                    data: {
+                        userId: findOwner.id,
+                        isSubscription: true,
+                        paymentId: (statusResponse === null || statusResponse === void 0 ? void 0 : statusResponse.orderId) || merchantOrderId,
+                        paidAmount: paidAmount,
+                        subscribedDate: new Date(),
+                        planType: findSubscription.planType,
+                        subscriptionPlan: findSubscription.subscriptionPlan,
+                        validDate: validDate,
+                    },
+                });
+                yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id);
+                return res.redirect(`${FRONTEND}/thankyou?status=success`);
+            }
+            else {
+                return res.redirect(`${FRONTEND}/thankyou?status=failure`);
+            }
         }
-        const response = yield phonePeClient.getOrderStatus(merchantOrderId);
-        const status = response.state;
-        if (status === "COMPLETED") {
-            // Create subscription similar to buyPlan function
-            if (!subId || !userId) {
-                throw new bad_request_1.BadRequestsException("Subscription ID or User ID is missing", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-            }
-            const findOwner = yield __1.prismaDB.user.findFirst({
-                where: {
-                    id: userId,
-                },
-            });
-            if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
-                throw new not_found_1.NotFoundException("User Not Found", root_1.ErrorCode.NOT_FOUND);
-            }
-            const findSubscription = yield __1.prismaDB.subsciption.findFirst({
-                where: {
-                    id: subId,
-                },
-            });
-            if (!findSubscription) {
-                throw new bad_request_1.BadRequestsException("No Subscription Found", root_1.ErrorCode.NOT_FOUND);
-            }
-            let validDate = new Date();
-            const paidAmount = response.amount / 100 || 0;
-            if (paidAmount === 0) {
-                // Set validDate to 15 days from today for free trial
-                validDate.setDate(validDate.getDate() + 15);
-            }
-            else if (findSubscription.planType === "MONTHLY") {
-                validDate.setMonth(validDate.getMonth() + 1);
-            }
-            else if (findSubscription.planType === "ANNUALLY") {
-                validDate.setFullYear(validDate.getFullYear() + 1);
-            }
-            yield __1.prismaDB.subscriptionBilling.create({
-                data: {
-                    userId: findOwner.id,
-                    isSubscription: true,
-                    paymentId: (response === null || response === void 0 ? void 0 : response.orderId) || merchantOrderId,
-                    paidAmount: paidAmount,
-                    subscribedDate: new Date(),
-                    planType: findSubscription.planType,
-                    subscriptionPlan: findSubscription.subscriptionPlan,
-                    validDate: validDate,
-                },
-            });
-            yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id);
-            return res.redirect(`${FRONTEND}/thankyou?status=success`);
-        }
-        else {
-            return res.redirect(`${FRONTEND}/thankyou?status=failure`);
+        catch (error) {
+            console.error("statusPhonePeCheck error:", error);
+            return res.redirect(`${FRONTEND}/thankyou?status=error`);
         }
     });
 }

@@ -20,6 +20,9 @@ const bad_request_1 = require("../../../exceptions/bad-request");
 const phonePeSchema = zod_1.z.object({
     apiKey: zod_1.z.string().min(1, { message: "Api Key field is reuired" }),
     apiSecret: zod_1.z.string().min(1, { message: "Api Key field is required" }),
+    phonePeMerchantId: zod_1.z
+        .string()
+        .min(1, { message: "Merchant ID field is required" }),
 });
 const phonePeDetails = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
@@ -49,6 +52,7 @@ const phonePeDetails = (req, res) => __awaiter(void 0, void 0, void 0, function*
         data: {
             phonePeAPIId: (0, utils_1.encryptData)(data === null || data === void 0 ? void 0 : data.apiKey),
             phonePeAPISecretKey: (0, utils_1.encryptData)(data === null || data === void 0 ? void 0 : data.apiSecret),
+            phonePeMerchantId: (0, utils_1.encryptData)(data === null || data === void 0 ? void 0 : data.phonePeMerchantId),
             connected: true,
         },
     });

@@ -16,11 +16,7 @@ import {
 import { getOutletById } from "../../../lib/outlet";
 import { UnauthorizedException } from "../../../exceptions/unauthorized";
 import { getFormatUserAndSendToRedis } from "../../../lib/get-users";
-import {
-  Env,
-  StandardCheckoutClient,
-  StandardCheckoutPayRequest,
-} from "pg-sdk-node";
+import { PhonePeService } from "../../../services/phonepe/phonepe-service";
 
 const razorpay = new Razorpay({
   key_id: RAZORPAY_KEY_ID,
@@ -34,17 +30,7 @@ export const API =
 const FRONTEND =
   ENV === "production" ? "https://app.restobytes.in" : "http://localhost:4000";
 
-const clientId = PHONE_PE_CLIENT_ID;
-const clientSecret = PHONE_PE_CLIENT_SECRET;
-const clientVersion = 1;
-const env = ENV === "development" ? Env.SANDBOX : Env.PRODUCTION;
-
-const phonePeClient = StandardCheckoutClient.getInstance(
-  clientId,
-  clientSecret,
-  clientVersion,
-  env
-);
+const phonePeService = PhonePeService.getInstance();
 
 export async function CreateRazorPayOrder(req: Request, res: Response) {
   const { amount } = req.body;
@@ -61,109 +47,167 @@ export async function CreateRazorPayOrder(req: Request, res: Response) {
 }
 
 export async function createPhonePeOrder(req: Request, res: Response) {
-  const { amount, subscriptionId } = req.body;
-  // @ts-ignore
-  const userId = req.user.id;
+  try {
+    const { amount, subscriptionId } = req.body;
+    // @ts-ignore
+    const userId = req.user.id;
 
-  if (!amount) {
-    throw new NotFoundException(
-      "Amount is Required",
-      ErrorCode.UNPROCESSABLE_ENTITY
-    );
-  }
-  const merchantOrderId = randomUUID();
-  const redirectUrl = `${API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
-  const request = StandardCheckoutPayRequest.builder()
-    .merchantOrderId(merchantOrderId)
-    .amount(amount)
-    .redirectUrl(redirectUrl)
-    .build();
-
-  const response = await phonePeClient.pay(request);
-  return res.json({
-    success: true,
-    redirectUrl: response.redirectUrl,
-  });
-}
-
-export async function statusPhonePeCheck(req: Request, res: Response) {
-  const { merchantOrderId, subId, userId } = req.query;
-
-  if (!merchantOrderId) {
-    throw new NotFoundException(
-      "MerchantORderId is Missing",
-      ErrorCode.UNAUTHORIZED
-    );
-  }
-
-  const response = await phonePeClient.getOrderStatus(
-    merchantOrderId as string
-  );
-
-  const status = response.state;
-
-  if (status === "COMPLETED") {
-    // Create subscription similar to buyPlan function
-    if (!subId || !userId) {
-      throw new BadRequestsException(
-        "Subscription ID or User ID is missing",
+    if (!amount) {
+      throw new NotFoundException(
+        "Amount is Required",
         ErrorCode.UNPROCESSABLE_ENTITY
       );
     }
 
-    const findOwner = await prismaDB.user.findFirst({
-      where: {
-        id: userId as string,
-      },
-    });
-
-    if (!findOwner?.id) {
-      throw new NotFoundException("User Not Found", ErrorCode.NOT_FOUND);
-    }
-
-    const findSubscription = await prismaDB.subsciption.findFirst({
-      where: {
-        id: subId as string,
-      },
-    });
-
-    if (!findSubscription) {
-      throw new BadRequestsException(
-        "No Subscription Found",
-        ErrorCode.NOT_FOUND
+    if (!subscriptionId) {
+      throw new NotFoundException(
+        "Subscription ID is Required",
+        ErrorCode.UNPROCESSABLE_ENTITY
       );
     }
 
-    let validDate = new Date();
-    const paidAmount = response.amount / 100 || 0;
-
-    if (paidAmount === 0) {
-      // Set validDate to 15 days from today for free trial
-      validDate.setDate(validDate.getDate() + 15);
-    } else if (findSubscription.planType === "MONTHLY") {
-      validDate.setMonth(validDate.getMonth() + 1);
-    } else if (findSubscription.planType === "ANNUALLY") {
-      validDate.setFullYear(validDate.getFullYear() + 1);
-    }
-
-    await prismaDB.subscriptionBilling.create({
-      data: {
-        userId: findOwner.id,
-        isSubscription: true,
-        paymentId: response?.orderId || (merchantOrderId as string),
-        paidAmount: paidAmount,
-        subscribedDate: new Date(),
-        planType: findSubscription.planType,
-        subscriptionPlan: findSubscription.subscriptionPlan,
-        validDate: validDate,
-      },
+    console.log("Creating PhonePe order with params:", {
+      amount,
+      subscriptionId,
+      userId,
     });
 
-    await getFormatUserAndSendToRedis(findOwner?.id);
+    const merchantOrderId = randomUUID();
+    const redirectUrl = `${API}/onboarding/check-status?merchantOrderId=${merchantOrderId}&subId=${subscriptionId}&userId=${userId}`;
 
-    return res.redirect(`${FRONTEND}/thankyou?status=success`);
-  } else {
-    return res.redirect(`${FRONTEND}/thankyou?status=failure`);
+    // Use global PhonePe client for subscription payments
+    const phonePeClient = phonePeService.getGlobalClient();
+
+    const paymentResponse = await phonePeClient.createPayment({
+      merchantOrderId,
+      amount,
+      redirectUrl,
+      userId,
+      metadata: { subscriptionId, type: "subscription" },
+    });
+
+    console.log("PhonePe payment response:", paymentResponse);
+
+    if (!paymentResponse.success) {
+      console.error("PhonePe payment creation failed:", {
+        error: paymentResponse.error,
+        errorCode: paymentResponse.errorCode,
+        merchantOrderId: paymentResponse.merchantOrderId,
+        amount: paymentResponse.amount,
+      });
+
+      throw new BadRequestsException(
+        paymentResponse.error || "Payment creation failed",
+        ErrorCode.INTERNAL_EXCEPTION
+      );
+    }
+
+    return res.json({
+      success: true,
+      redirectUrl: paymentResponse.redirectUrl,
+      orderId: paymentResponse.orderId,
+      amount: paymentResponse.amount,
+      merchantOrderId: paymentResponse.merchantOrderId,
+      responseData: paymentResponse.responseData,
+    });
+  } catch (error: any) {
+    console.error("createPhonePeOrder error:", {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+      response: error.response?.data,
+    });
+
+    if (
+      error instanceof NotFoundException ||
+      error instanceof BadRequestsException
+    ) {
+      throw error;
+    }
+
+    throw new BadRequestsException(
+      error.message || "Something went wrong in payment processing",
+      ErrorCode.INTERNAL_EXCEPTION
+    );
+  }
+}
+
+export async function statusPhonePeCheck(req: Request, res: Response) {
+  try {
+    const { merchantOrderId, subId, userId } = req.query;
+
+    if (!merchantOrderId) {
+      throw new NotFoundException(
+        "MerchantOrderId is Missing",
+        ErrorCode.UNAUTHORIZED
+      );
+    }
+
+    const phonePeClient = phonePeService.getGlobalClient();
+    const statusResponse = await phonePeClient.getOrderStatus(
+      merchantOrderId as string
+    );
+
+    if (statusResponse.state === "COMPLETED") {
+      if (!subId || !userId) {
+        throw new BadRequestsException(
+          "Subscription ID or User ID is missing",
+          ErrorCode.UNPROCESSABLE_ENTITY
+        );
+      }
+
+      const findOwner = await prismaDB.user.findFirst({
+        where: { id: userId as string },
+      });
+
+      if (!findOwner?.id) {
+        throw new NotFoundException("User Not Found", ErrorCode.NOT_FOUND);
+      }
+
+      const findSubscription = await prismaDB.subsciption.findFirst({
+        where: { id: subId as string },
+      });
+
+      if (!findSubscription) {
+        throw new BadRequestsException(
+          "No Subscription Found",
+          ErrorCode.NOT_FOUND
+        );
+      }
+
+      let validDate = new Date();
+      const paidAmount = (statusResponse.amount || 0) / 100;
+
+      if (paidAmount === 0) {
+        validDate.setDate(validDate.getDate() + 15); // 15 days free trial
+      } else if (findSubscription.planType === "MONTHLY") {
+        validDate.setMonth(validDate.getMonth() + 1);
+      } else if (findSubscription.planType === "ANNUALLY") {
+        validDate.setFullYear(validDate.getFullYear() + 1);
+      }
+
+      await prismaDB.subscriptionBilling.create({
+        data: {
+          userId: findOwner.id,
+          isSubscription: true,
+          paymentId: statusResponse?.orderId || (merchantOrderId as string),
+          paidAmount: paidAmount,
+          subscribedDate: new Date(),
+          planType: findSubscription.planType,
+          subscriptionPlan: findSubscription.subscriptionPlan,
+          validDate: validDate,
+        },
+      });
+
+      await getFormatUserAndSendToRedis(findOwner?.id);
+
+      return res.redirect(`${FRONTEND}/thankyou?status=success`);
+    } else {
+      return res.redirect(`${FRONTEND}/thankyou?status=failure`);
+    }
+  } catch (error: any) {
+    console.error("statusPhonePeCheck error:", error);
+    return res.redirect(`${FRONTEND}/thankyou?status=error`);
   }
 }
 

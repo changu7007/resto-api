@@ -10,6 +10,9 @@ import { BadRequestsException } from "../../../exceptions/bad-request";
 const phonePeSchema = z.object({
   apiKey: z.string().min(1, { message: "Api Key field is reuired" }),
   apiSecret: z.string().min(1, { message: "Api Key field is required" }),
+  phonePeMerchantId: z
+    .string()
+    .min(1, { message: "Merchant ID field is required" }),
 });
 
 export const phonePeDetails = async (req: Request, res: Response) => {
@@ -53,6 +56,7 @@ export const phonePeDetails = async (req: Request, res: Response) => {
     data: {
       phonePeAPIId: encryptData(data?.apiKey),
       phonePeAPISecretKey: encryptData(data?.apiSecret),
+      phonePeMerchantId: encryptData(data?.phonePeMerchantId),
       connected: true,
     },
   });

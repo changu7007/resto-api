@@ -353,4 +353,7 @@ outletRoute.post("/:outletId/verify-franchise-domain", auth_1.isAuthMiddelware, 
 outletRoute.post("/:outletId/link-franchise-domain", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.linkFranchiseDomain));
 outletRoute.patch("/:outletId/unlink-franchise-domain/:siteId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(domainController_1.unlinkDomainForRestaurant));
 outletRoute.post("/:outletId/pos-generate-report", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(reports_controller_1.posGenerateReport));
+outletRoute.post("/:outletId/clear-phonepe-cache", 
+// isAuthMiddelware,
+(0, error_handler_1.errorHandler)(outletPhonePeController_1.clearPhonePeCache));
 exports.default = outletRoute;

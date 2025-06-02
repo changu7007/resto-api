@@ -308,6 +308,7 @@ import {
 } from "../../controllers/outlet/loyalty/loyaltyController";
 import { phonePeDetails } from "../../controllers/outlet/integration/intergation-controller";
 import {
+  clearPhonePeCache,
   createDomainPhonePeOrder,
   orderAmountPhoneCheck,
   posAmountPhoneCheck,
@@ -1701,6 +1702,12 @@ outletRoute.post(
   "/:outletId/pos-generate-report",
   isAuthMiddelware,
   errorHandler(posGenerateReport)
+);
+
+outletRoute.post(
+  "/:outletId/clear-phonepe-cache",
+  // isAuthMiddelware,
+  errorHandler(clearPhonePeCache)
 );
 
 export default outletRoute;

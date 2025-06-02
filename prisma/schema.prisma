@@ -167,6 +167,7 @@ model Integration {
   link                String?
   status              Boolean
   connected           Boolean
+  phonePeMerchantId   String?
   phonePeAPIId        String?
   phonePeAPISecretKey String?
   createdAt           DateTime     @default(now())

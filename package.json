@@ -45,6 +45,7 @@
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
     "kafkajs": "^2.2.4",
+    "lru-cache": "^11.1.0",
     "luxon": "^3.5.0",
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
