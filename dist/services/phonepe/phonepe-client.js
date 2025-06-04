@@ -224,10 +224,11 @@ class PhonePeClient {
         var _a, _b;
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const signature = this.generateStatusSignature(merchantOrderId);
+                const token = yield this.getAuthToken();
                 const response = yield this.httpClient.get(`/checkout/v2/order/${merchantOrderId}/status`, {
                     headers: {
-                        "X-VERIFY": signature,
+                        Authorization: `O-Bearer ${token}`,
+                        "Content-Type": "application/json",
                     },
                 });
                 console.log("PhonePe Status Response:", response.data);

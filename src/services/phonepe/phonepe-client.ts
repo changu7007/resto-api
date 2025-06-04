@@ -272,13 +272,13 @@ export class PhonePeClient {
 
   async getOrderStatus(merchantOrderId: string): Promise<StatusResponse> {
     try {
-      const signature = this.generateStatusSignature(merchantOrderId);
-
+      const token = await this.getAuthToken();
       const response = await this.httpClient.get(
         `/checkout/v2/order/${merchantOrderId}/status`,
         {
           headers: {
-            "X-VERIFY": signature,
+            Authorization: `O-Bearer ${token}`,
+            "Content-Type": "application/json",
           },
         }
       );
