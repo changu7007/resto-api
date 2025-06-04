@@ -76,6 +76,7 @@ export class PhonePeClient {
 
       this.authToken = accessToken;
       this.tokenExpiry = response.data.expires_at * 1000; // Convert to milliseconds
+      console.log("PhonePe Auth Token Generated");
       return accessToken;
     } catch (error) {
       console.error("Error getting PhonePe auth token:", error);
@@ -182,6 +183,8 @@ export class PhonePeClient {
 
       // Get auth token for the request
       const token = await this.getAuthToken();
+
+      console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
 
       const response = await this.httpClient.post(
         "/checkout/v2/pay",

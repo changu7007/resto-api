@@ -66,6 +66,7 @@ class PhonePeClient {
                 }
                 this.authToken = accessToken;
                 this.tokenExpiry = response.data.expires_at * 1000; // Convert to milliseconds
+                console.log("PhonePe Auth Token Generated");
                 return accessToken;
             }
             catch (error) {
@@ -149,6 +150,7 @@ class PhonePeClient {
                 const base64Payload = Buffer.from(JSON.stringify(payload)).toString("base64");
                 // Get auth token for the request
                 const token = yield this.getAuthToken();
+                console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
                 const response = yield this.httpClient.post("/checkout/v2/pay", {
                     request: base64Payload,
                 }, {
