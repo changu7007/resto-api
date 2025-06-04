@@ -115,7 +115,8 @@ class PhonePeClient {
         const random = Math.floor(Math.random() * 10000)
             .toString()
             .padStart(4, "0");
-        return `${prefix}_${timestamp}_${random}`;
+        // Remove any special characters and ensure it's alphanumeric with underscores only
+        return `${prefix}_${timestamp}_${random}`.replace(/[^a-zA-Z0-9_]/g, "");
     }
     createPayment(request) {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
@@ -125,12 +126,8 @@ class PhonePeClient {
                 if (!request.merchantOrderId || !request.amount) {
                     throw new Error("merchantOrderId and amount are required fields");
                 }
-                // Generate a PhonePe-compliant order ID if not provided
-                const merchantOrderId = request.merchantOrderId.includes("-")
-                    ? this.generatePhonePeOrderId()
-                    : request.merchantOrderId;
                 const payload = {
-                    merchantOrderId,
+                    merchantOrderId: request.merchantOrderId,
                     amount: request.amount,
                     expireAfter: 1200, // 20 minutes default expiry
                     metaInfo: {
@@ -149,22 +146,14 @@ class PhonePeClient {
                     },
                 };
                 console.log("PhonePe Payment Request Payload:", JSON.stringify(payload, null, 2));
-                // Ensure amount is a number
-                if (typeof payload.amount !== "number") {
-                    payload.amount = Number(payload.amount);
-                }
                 const base64Payload = Buffer.from(JSON.stringify(payload)).toString("base64");
-                //DEV post /checkout/v2/pay POST
-                const signature = this.generateSignature(base64Payload, "/checkout/v2/pay");
-                console.log("PhonePe Request Headers:", {
-                    "X-VERIFY": signature,
-                    "Content-Type": "application/json",
-                });
+                // Get auth token for the request
+                const token = yield this.getAuthToken();
                 const response = yield this.httpClient.post("/checkout/v2/pay", {
                     request: base64Payload,
                 }, {
                     headers: {
-                        "X-VERIFY": signature,
+                        Authorization: `O-Bearer ${token}`,
                         "Content-Type": "application/json",
                     },
                 });

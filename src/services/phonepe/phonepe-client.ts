@@ -140,7 +140,8 @@ export class PhonePeClient {
     const random = Math.floor(Math.random() * 10000)
       .toString()
       .padStart(4, "0");
-    return `${prefix}_${timestamp}_${random}`;
+    // Remove any special characters and ensure it's alphanumeric with underscores only
+    return `${prefix}_${timestamp}_${random}`.replace(/[^a-zA-Z0-9_]/g, "");
   }
 
   async createPayment(request: PaymentRequest): Promise<PaymentResponse> {
@@ -150,13 +151,8 @@ export class PhonePeClient {
         throw new Error("merchantOrderId and amount are required fields");
       }
 
-      // Generate a PhonePe-compliant order ID if not provided
-      const merchantOrderId = request.merchantOrderId.includes("-")
-        ? this.generatePhonePeOrderId()
-        : request.merchantOrderId;
-
       const payload = {
-        merchantOrderId,
+        merchantOrderId: request.merchantOrderId,
         amount: request.amount,
         expireAfter: 1200, // 20 minutes default expiry
         metaInfo: {
@@ -180,25 +176,12 @@ export class PhonePeClient {
         JSON.stringify(payload, null, 2)
       );
 
-      // Ensure amount is a number
-      if (typeof payload.amount !== "number") {
-        payload.amount = Number(payload.amount);
-      }
-
       const base64Payload = Buffer.from(JSON.stringify(payload)).toString(
         "base64"
       );
 
-      //DEV post /checkout/v2/pay POST
-      const signature = this.generateSignature(
-        base64Payload,
-        "/checkout/v2/pay"
-      );
-
-      console.log("PhonePe Request Headers:", {
-        "X-VERIFY": signature,
-        "Content-Type": "application/json",
-      });
+      // Get auth token for the request
+      const token = await this.getAuthToken();
 
       const response = await this.httpClient.post(
         "/checkout/v2/pay",
@@ -207,7 +190,7 @@ export class PhonePeClient {
         },
         {
           headers: {
-            "X-VERIFY": signature,
+            Authorization: `O-Bearer ${token}`,
             "Content-Type": "application/json",
           },
         }
