@@ -175,6 +175,8 @@ export async function createDomainPhonePeOrder(req: Request, res: Response) {
       metadata: { outletId, from, domain },
     });
 
+    console.log("Payment Creation Response:", paymentResponse);
+
     if (!paymentResponse.success) {
       throw new BadRequestsException(
         paymentResponse.error || "Payment creation failed",

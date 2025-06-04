@@ -146,6 +146,7 @@ function createDomainPhonePeOrder(req, res) {
                 userId,
                 metadata: { outletId, from, domain },
             });
+            console.log("Payment Creation Response:", paymentResponse);
             if (!paymentResponse.success) {
                 throw new bad_request_1.BadRequestsException(paymentResponse.error || "Payment creation failed", root_1.ErrorCode.INTERNAL_EXCEPTION);
             }
