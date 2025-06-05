@@ -137,7 +137,6 @@ class PhonePeClient {
                 console.log("PhonePe Payment Request Payload:", JSON.stringify(payload, null, 2));
                 // Get auth token for the request
                 const token = yield this.getAuthToken();
-                console.log("PhonePe Auth Token:", token);
                 console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
                 const response = yield this.httpClient.post("/checkout/v2/pay", {
                     merchantOrderId: request.merchantOrderId,

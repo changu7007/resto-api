@@ -162,7 +162,6 @@ export class PhonePeClient {
 
       // Get auth token for the request
       const token = await this.getAuthToken();
-      console.log("PhonePe Auth Token:", token);
 
       console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
 
