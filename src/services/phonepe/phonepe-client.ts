@@ -119,23 +119,6 @@ export class PhonePeClient {
     );
   }
 
-  private generateSignature(payload: string, endpoint: string): string {
-    const stringToHash = payload + endpoint + this.config.clientSecret;
-    return (
-      crypto.createHash("sha256").update(stringToHash).digest("hex") + "###1"
-    );
-  }
-
-  private generateStatusSignature(merchantOrderId: string): string {
-    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
-    return (
-      crypto
-        .createHash("sha256")
-        .update(endpoint + this.config.clientSecret)
-        .digest("hex") + "###1"
-    );
-  }
-
   public generatePhonePeOrderId(prefix: string = "PP"): string {
     const timestamp = Date.now().toString();
     const random = Math.floor(Math.random() * 10000)
@@ -177,19 +160,16 @@ export class PhonePeClient {
         JSON.stringify(payload, null, 2)
       );
 
-      const base64Payload = Buffer.from(JSON.stringify(payload)).toString(
-        "base64"
-      );
-
       // Get auth token for the request
       const token = await this.getAuthToken();
+      console.log("PhonePe Auth Token:", token);
 
       console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
 
       const response = await this.httpClient.post(
         "/checkout/v2/pay",
         {
-          request: base64Payload,
+          request: payload,
         },
         {
           headers: {

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchBankAccountStatus = exports.createVendorAccount = exports.getAllPlans = exports.buyPlan = exports.paymentWebhookVerification = exports.paymentRazorpayVerification = exports.CreateRazorPayOrderForOutlet = exports.statusPhonePeCheck = exports.createPhonePeOrder = exports.CreateRazorPayOrder = exports.API = void 0;
+exports.phonePeWebhookHandler = exports.fetchBankAccountStatus = exports.createVendorAccount = exports.getAllPlans = exports.buyPlan = exports.paymentWebhookVerification = exports.paymentRazorpayVerification = exports.CreateRazorPayOrderForOutlet = exports.statusPhonePeCheck = exports.createPhonePeOrder = exports.CreateRazorPayOrder = exports.API = void 0;
 const razorpay_1 = __importDefault(require("razorpay"));
 const crypto_1 = __importDefault(require("crypto"));
 const bad_request_1 = require("../../../exceptions/bad-request");
@@ -638,3 +638,129 @@ exports.fetchBankAccountStatus = fetchBankAccountStatus;
 //   };
 //   return axios.request(options);
 // }
+const phonePeWebhookHandler = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { event, payload } = req.body;
+        console.log("PhonePe Webhook Received:", { event, payload });
+        // Validate the webhook payload
+        if (!event || !payload) {
+            console.error("Invalid webhook payload:", req.body);
+            return res
+                .status(400)
+                .json({ success: false, message: "Invalid payload" });
+        }
+        // Extract authorization header
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            console.error("Missing authorization header");
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+        // TODO: Validate the authorization header with your configured username:password
+        // const expectedAuth = crypto.createHash('sha256').update('username:password').digest('hex');
+        // if (authHeader !== expectedAuth) {
+        //   return res.status(401).json({ success: false, message: "Invalid authorization" });
+        // }
+        // Handle different webhook events
+        switch (event) {
+            case "checkout.order.completed":
+                if (payload.state === "COMPLETED") {
+                    // Payment successful
+                    const { merchantOrderId, amount, metaInfo } = payload;
+                    // Extract subscription details from metaInfo
+                    const subscriptionId = metaInfo === null || metaInfo === void 0 ? void 0 : metaInfo.udf4; // Assuming subscriptionId is stored in udf4
+                    const userId = metaInfo === null || metaInfo === void 0 ? void 0 : metaInfo.udf5; // Assuming userId is stored in udf5
+                    if (!subscriptionId || !userId) {
+                        console.error("Missing subscription or user details:", {
+                            subscriptionId,
+                            userId,
+                        });
+                        return res
+                            .status(400)
+                            .json({ success: false, message: "Missing required details" });
+                    }
+                    // Find user and subscription
+                    const findOwner = yield __1.prismaDB.user.findFirst({
+                        where: { id: userId },
+                    });
+                    if (!(findOwner === null || findOwner === void 0 ? void 0 : findOwner.id)) {
+                        console.error("User not found:", userId);
+                        return res
+                            .status(404)
+                            .json({ success: false, message: "User not found" });
+                    }
+                    const findSubscription = yield __1.prismaDB.subsciption.findFirst({
+                        where: { id: subscriptionId },
+                    });
+                    if (!findSubscription) {
+                        console.error("Subscription not found:", subscriptionId);
+                        return res
+                            .status(404)
+                            .json({ success: false, message: "Subscription not found" });
+                    }
+                    // Calculate validity date
+                    let validDate = new Date();
+                    const paidAmount = (amount || 0) / 100;
+                    if (paidAmount === 0) {
+                        validDate.setDate(validDate.getDate() + 15); // 15 days free trial
+                    }
+                    else if (findSubscription.planType === "MONTHLY") {
+                        validDate.setMonth(validDate.getMonth() + 1);
+                    }
+                    else if (findSubscription.planType === "ANNUALLY") {
+                        validDate.setFullYear(validDate.getFullYear() + 1);
+                    }
+                    // Create subscription billing record
+                    yield __1.prismaDB.subscriptionBilling.create({
+                        data: {
+                            userId: findOwner.id,
+                            isSubscription: true,
+                            paymentId: payload.orderId || merchantOrderId,
+                            paidAmount: paidAmount,
+                            subscribedDate: new Date(),
+                            planType: findSubscription.planType,
+                            subscriptionPlan: findSubscription.subscriptionPlan,
+                            validDate: validDate,
+                        },
+                    });
+                    // Update user cache
+                    yield (0, get_users_1.getFormatUserAndSendToRedis)(findOwner.id);
+                    console.log("Subscription activated successfully:", {
+                        userId,
+                        subscriptionId,
+                        merchantOrderId,
+                        amount: paidAmount,
+                    });
+                }
+                break;
+            case "checkout.order.failed":
+                if (payload.state === "FAILED") {
+                    const { merchantOrderId, errorCode, detailedErrorCode } = payload;
+                    console.error("Payment failed:", {
+                        merchantOrderId,
+                        errorCode,
+                        detailedErrorCode,
+                    });
+                    // Handle failed payment - you might want to notify the user or update your records
+                }
+                break;
+            default:
+                console.log("Unhandled webhook event:", event);
+        }
+        // Always return 200 to acknowledge receipt of webhook
+        return res
+            .status(200)
+            .json({ success: true, message: "Webhook processed" });
+    }
+    catch (error) {
+        console.error("PhonePe webhook processing error:", {
+            message: error.message,
+            stack: error.stack,
+            body: req.body,
+        });
+        // Still return 200 to acknowledge receipt, but log the error
+        return res
+            .status(200)
+            .json({ success: false, message: "Error processing webhook" });
+    }
+});
+exports.phonePeWebhookHandler = phonePeWebhookHandler;

@@ -13,7 +13,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PhonePeClient = void 0;
-const crypto_1 = __importDefault(require("crypto"));
 const axios_1 = __importDefault(require("axios"));
 class PhonePeClient {
     constructor(config) {
@@ -100,17 +99,6 @@ class PhonePeClient {
             });
         });
     }
-    generateSignature(payload, endpoint) {
-        const stringToHash = payload + endpoint + this.config.clientSecret;
-        return (crypto_1.default.createHash("sha256").update(stringToHash).digest("hex") + "###1");
-    }
-    generateStatusSignature(merchantOrderId) {
-        const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
-        return (crypto_1.default
-            .createHash("sha256")
-            .update(endpoint + this.config.clientSecret)
-            .digest("hex") + "###1");
-    }
     generatePhonePeOrderId(prefix = "PP") {
         const timestamp = Date.now().toString();
         const random = Math.floor(Math.random() * 10000)
@@ -147,12 +135,12 @@ class PhonePeClient {
                     },
                 };
                 console.log("PhonePe Payment Request Payload:", JSON.stringify(payload, null, 2));
-                const base64Payload = Buffer.from(JSON.stringify(payload)).toString("base64");
                 // Get auth token for the request
                 const token = yield this.getAuthToken();
+                console.log("PhonePe Auth Token:", token);
                 console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
                 const response = yield this.httpClient.post("/checkout/v2/pay", {
-                    request: base64Payload,
+                    request: payload,
                 }, {
                     headers: {
                         Authorization: `O-Bearer ${token}`,
