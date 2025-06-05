@@ -140,7 +140,7 @@ class PhonePeClient {
                 console.log("PhonePe Auth Token:", token);
                 console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
                 const response = yield this.httpClient.post("/checkout/v2/pay", {
-                    request: payload,
+                    payload,
                 }, {
                     headers: {
                         Authorization: `O-Bearer ${token}`,

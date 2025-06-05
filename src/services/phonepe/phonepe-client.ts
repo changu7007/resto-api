@@ -169,7 +169,7 @@ export class PhonePeClient {
       const response = await this.httpClient.post(
         "/checkout/v2/pay",
         {
-          request: payload,
+          payload,
         },
         {
           headers: {
