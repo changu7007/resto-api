@@ -169,7 +169,23 @@ export class PhonePeClient {
       const response = await this.httpClient.post(
         "/checkout/v2/pay",
         {
-          payload,
+          merchantOrderId: request.merchantOrderId,
+          amount: request.amount,
+          expireAfter: 1200, // 20 minutes default expiry
+          metaInfo: {
+            udf1: request.metadata?.outletId || "",
+            udf2: request.metadata?.from || "",
+            udf3: request.metadata?.domain || "",
+            udf4: request.metadata?.type || "",
+            udf5: request.metadata?.userId || "",
+          },
+          paymentFlow: {
+            type: "PG_CHECKOUT",
+            message: "Payment for order",
+            merchantUrls: {
+              redirectUrl: request.redirectUrl,
+            },
+          },
         },
         {
           headers: {

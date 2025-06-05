@@ -108,7 +108,7 @@ class PhonePeClient {
         return `${prefix}_${timestamp}_${random}`.replace(/[^a-zA-Z0-9_]/g, "");
     }
     createPayment(request) {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0;
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 // Validate required fields
@@ -140,7 +140,23 @@ class PhonePeClient {
                 console.log("PhonePe Auth Token:", token);
                 console.log(`Request URL: ${this.baseUrl}/checkout/v2/pay`);
                 const response = yield this.httpClient.post("/checkout/v2/pay", {
-                    payload,
+                    merchantOrderId: request.merchantOrderId,
+                    amount: request.amount,
+                    expireAfter: 1200, // 20 minutes default expiry
+                    metaInfo: {
+                        udf1: ((_f = request.metadata) === null || _f === void 0 ? void 0 : _f.outletId) || "",
+                        udf2: ((_g = request.metadata) === null || _g === void 0 ? void 0 : _g.from) || "",
+                        udf3: ((_h = request.metadata) === null || _h === void 0 ? void 0 : _h.domain) || "",
+                        udf4: ((_j = request.metadata) === null || _j === void 0 ? void 0 : _j.type) || "",
+                        udf5: ((_k = request.metadata) === null || _k === void 0 ? void 0 : _k.userId) || "",
+                    },
+                    paymentFlow: {
+                        type: "PG_CHECKOUT",
+                        message: "Payment for order",
+                        merchantUrls: {
+                            redirectUrl: request.redirectUrl,
+                        },
+                    },
                 }, {
                     headers: {
                         Authorization: `O-Bearer ${token}`,
@@ -171,7 +187,7 @@ class PhonePeClient {
                 // Handle error case
                 const errorMessage = response.data.message ||
                     response.data.error ||
-                    ((_g = (_f = response.data.data) === null || _f === void 0 ? void 0 : _f.error) === null || _g === void 0 ? void 0 : _g.message) ||
+                    ((_m = (_l = response.data.data) === null || _l === void 0 ? void 0 : _l.error) === null || _m === void 0 ? void 0 : _m.message) ||
                     "Payment creation failed";
                 console.error("PhonePe Payment Error:", {
                     message: errorMessage,
@@ -190,20 +206,20 @@ class PhonePeClient {
             catch (error) {
                 console.error("PhonePe payment creation error:", {
                     message: error.message,
-                    response: (_h = error.response) === null || _h === void 0 ? void 0 : _h.data,
-                    status: (_j = error.response) === null || _j === void 0 ? void 0 : _j.status,
-                    headers: (_k = error.response) === null || _k === void 0 ? void 0 : _k.headers,
+                    response: (_o = error.response) === null || _o === void 0 ? void 0 : _o.data,
+                    status: (_p = error.response) === null || _p === void 0 ? void 0 : _p.status,
+                    headers: (_q = error.response) === null || _q === void 0 ? void 0 : _q.headers,
                     stack: error.stack,
                 });
-                const errorMessage = ((_m = (_l = error.response) === null || _l === void 0 ? void 0 : _l.data) === null || _m === void 0 ? void 0 : _m.message) ||
-                    ((_p = (_o = error.response) === null || _o === void 0 ? void 0 : _o.data) === null || _p === void 0 ? void 0 : _p.error) ||
-                    ((_t = (_s = (_r = (_q = error.response) === null || _q === void 0 ? void 0 : _q.data) === null || _r === void 0 ? void 0 : _r.data) === null || _s === void 0 ? void 0 : _s.error) === null || _t === void 0 ? void 0 : _t.message) ||
+                const errorMessage = ((_s = (_r = error.response) === null || _r === void 0 ? void 0 : _r.data) === null || _s === void 0 ? void 0 : _s.message) ||
+                    ((_u = (_t = error.response) === null || _t === void 0 ? void 0 : _t.data) === null || _u === void 0 ? void 0 : _u.error) ||
+                    ((_y = (_x = (_w = (_v = error.response) === null || _v === void 0 ? void 0 : _v.data) === null || _w === void 0 ? void 0 : _w.data) === null || _x === void 0 ? void 0 : _x.error) === null || _y === void 0 ? void 0 : _y.message) ||
                     error.message ||
                     "Payment creation failed";
                 return {
                     success: false,
                     error: errorMessage,
-                    errorCode: ((_v = (_u = error.response) === null || _u === void 0 ? void 0 : _u.data) === null || _v === void 0 ? void 0 : _v.code) || "UNKNOWN_ERROR",
+                    errorCode: ((_0 = (_z = error.response) === null || _z === void 0 ? void 0 : _z.data) === null || _0 === void 0 ? void 0 : _0.code) || "UNKNOWN_ERROR",
                     merchantOrderId: request.merchantOrderId,
                     amount: request.amount,
                 };
