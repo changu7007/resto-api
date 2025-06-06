@@ -51,6 +51,7 @@ model Restaurant {
   isDineIn              Boolean                    @default(false)
   onlinePortal          Boolean                    @default(false)
   businessModel         BusinessType               @default(INDIVIDUAL)
+  comission             Float                      @default(2)
   siteId                String?                    @db.ObjectId
   site                  Site?                      @relation("SiteToRestaurants", fields: [siteId], references: [id])
   users                 User                       @relation("RestaurantToUsers", fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -1174,6 +1175,7 @@ model Order {
   gstPrice         Float?
   totalAmount      Float
   isPaid           Boolean
+  preparationTime  Float?
   kotStatus        KOTStatus      @default(NEW)
   paymentMethod    PaymentMethod? // The payment method if not split
   createdBy        String?

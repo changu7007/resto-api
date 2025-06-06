@@ -30,6 +30,7 @@ import {
   getAllActiveSessionOrders,
   getAllActiveStaffSessionOrders,
   getAllOrderByStaff,
+  getLiveOnlineOrders,
   getLiveOrders,
   getParentOrder,
   getTableAllOrders,
@@ -41,6 +42,7 @@ import {
   orderessionNamePatch,
   orderessionPaymentModePatch,
   orderItemModification,
+  orderStatusOnlinePatch,
   orderStatusPatch,
   postOrderForOwner,
   postOrderForUser,
@@ -615,6 +617,12 @@ outletRoute.get(
   "/:outletId/active-session-orders",
   errorHandler(getAllActiveSessionOrders)
 );
+
+outletRoute.get(
+  "/:outletId/live-online-orders",
+  errorHandler(getLiveOnlineOrders)
+);
+
 outletRoute.get(
   "/:outletId/active-staff-session-orders",
   isAuthMiddelware,
@@ -658,6 +666,11 @@ outletRoute.patch(
   "/:outletId/bulk-pos-access-enable",
   isAuthMiddelware,
   errorHandler(bulkPosAccessEnable)
+);
+outletRoute.patch(
+  "/:outletId/online-accept-order",
+  isAuthMiddelware,
+  errorHandler(orderStatusOnlinePatch)
 );
 outletRoute.patch(
   "/:outletId/bulk-pos-access-disable",

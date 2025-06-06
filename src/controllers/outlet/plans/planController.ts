@@ -222,8 +222,11 @@ export async function CreateRazorPayOrderForOutlet(
     throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
+  const outletComission = outlet?.comission / 100;
+
   const { amount } = req.body;
-  const comission = amount * 0.02;
+  const comission = amount * outletComission;
+  console.log("Outlet Comission", outlet?.comission);
   console.log("Comission", comission);
 
   const order = await razorpay.orders.create({

@@ -433,7 +433,9 @@ const getCurrentOrderForCustomer = (req, res) => __awaiter(void 0, void 0, void 
                 id: order === null || order === void 0 ? void 0 : order.generatedOrderId,
                 orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus,
                 totalAmount: order === null || order === void 0 ? void 0 : order.totalAmount,
+                preparationTime: order === null || order === void 0 ? void 0 : order.preparationTime,
                 createdAt: order === null || order === void 0 ? void 0 : order.createdAt,
+                updatedAt: order === null || order === void 0 ? void 0 : order.updatedAt,
                 orderItems: order === null || order === void 0 ? void 0 : order.orderItems.map((item) => ({
                     id: item === null || item === void 0 ? void 0 : item.id,
                     name: item === null || item === void 0 ? void 0 : item.name,

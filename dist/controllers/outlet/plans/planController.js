@@ -182,8 +182,10 @@ function CreateRazorPayOrderForOutlet(req, res) {
         if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
             throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
         }
+        const outletComission = (outlet === null || outlet === void 0 ? void 0 : outlet.comission) / 100;
         const { amount } = req.body;
-        const comission = amount * 0.02;
+        const comission = amount * outletComission;
+        console.log("Outlet Comission", outlet === null || outlet === void 0 ? void 0 : outlet.comission);
         console.log("Comission", comission);
         const order = yield razorpay.orders.create({
             amount: amount * 100,

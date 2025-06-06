@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFetchAllStaffOrderSessionToRedis = exports.getFetchStaffActiveOrderSessionToRedis = exports.getFetchActiveOrderSessionToRedis = exports.getFetchLiveOrderByStaffToRedis = exports.getFetchAllOrderByStaffToRedis = exports.getFetchLiveOrderToRedis = void 0;
+exports.getFetchAllStaffOrderSessionToRedis = exports.getFetchStaffActiveOrderSessionToRedis = exports.getFetchActiveOrderSessionToRedis = exports.getFetchLiveOrderByStaffToRedis = exports.getFetchAllOrderByStaffToRedis = exports.getFetchLiveOnlineOrderToRedis = exports.getFetchLiveOrderToRedis = void 0;
 const date_fns_1 = require("date-fns");
 const __1 = require("../..");
 const redis_1 = require("../../services/redis");
@@ -145,6 +145,141 @@ const getFetchLiveOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0,
     return formattedOrderData;
 });
 exports.getFetchLiveOrderToRedis = getFetchLiveOrderToRedis;
+const getFetchLiveOnlineOrderToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const liveOrders = yield __1.prismaDB.order.findMany({
+        where: {
+            restaurantId: outletId,
+            orderSession: {
+                platform: "ONLINE",
+            },
+            orderStatus: {
+                in: ["ONHOLD"],
+            },
+            active: true,
+            orderItems: {
+                some: {
+                    strike: false,
+                },
+            },
+        },
+        include: {
+            orderSession: {
+                include: {
+                    table: true,
+                },
+            },
+            orderItems: {
+                include: {
+                    selectedVariant: true,
+                    addOnSelected: {
+                        include: {
+                            selectedAddOnVariantsId: true,
+                        },
+                    },
+                    menuItem: {
+                        include: {
+                            category: true,
+                            images: true,
+                            menuItemVariants: {
+                                include: {
+                                    variant: true,
+                                },
+                            },
+                            menuGroupAddOns: {
+                                include: {
+                                    addOnGroups: {
+                                        include: {
+                                            addOnVariants: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+    const formattedOrderData = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        return ({
+            id: order.id,
+            billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
+            generatedOrderId: order.generatedOrderId,
+            platform: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.platform,
+            name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
+            mode: order.orderType,
+            deliveryArea: (_d = order === null || order === void 0 ? void 0 : order.orderSession) === null || _d === void 0 ? void 0 : _d.deliveryArea,
+            deliveryAreaAddress: (_e = order === null || order === void 0 ? void 0 : order.orderSession) === null || _e === void 0 ? void 0 : _e.deliveryAreaAddress,
+            deliveryAreaLandmark: (_f = order === null || order === void 0 ? void 0 : order.orderSession) === null || _f === void 0 ? void 0 : _f.deliveryAreaLandmark,
+            deliveryAreaLat: (_g = order === null || order === void 0 ? void 0 : order.orderSession) === null || _g === void 0 ? void 0 : _g.deliveryAreaLat,
+            deliveryAreaLong: (_h = order === null || order === void 0 ? void 0 : order.orderSession) === null || _h === void 0 ? void 0 : _h.deliveryAreaLong,
+            table: (_j = order.orderSession.table) === null || _j === void 0 ? void 0 : _j.name,
+            orderItems: order.orderItems.map((item) => ({
+                id: item.id,
+                menuItem: {
+                    id: item.menuItem.id,
+                    name: item.menuItem.name,
+                    shortCode: item.menuItem.shortCode,
+                    categoryId: item.menuItem.category.id,
+                    categoryName: item.menuItem.category.name,
+                    type: item.menuItem.type,
+                    price: item.menuItem.price,
+                    isVariants: item.menuItem.isVariants,
+                    isAddOns: item.menuItem.isAddons,
+                    images: item.menuItem.images.map((image) => ({
+                        id: image.id,
+                        url: image.url,
+                    })),
+                    menuItemVariants: item.menuItem.menuItemVariants.map((variant) => ({
+                        id: variant.id,
+                        variantName: variant.variant.name,
+                        gst: variant === null || variant === void 0 ? void 0 : variant.gst,
+                        netPrice: variant === null || variant === void 0 ? void 0 : variant.netPrice,
+                        grossProfit: variant === null || variant === void 0 ? void 0 : variant.grossProfit,
+                        price: variant.price,
+                        type: variant.price,
+                    })),
+                    menuGroupAddOns: item.menuItem.menuGroupAddOns.map((groupAddOn) => ({
+                        id: groupAddOn.id,
+                        addOnGroupName: groupAddOn.addOnGroups.title,
+                        description: groupAddOn.addOnGroups.description,
+                        addonVariants: groupAddOn.addOnGroups.addOnVariants.map((addOnVariant) => ({
+                            id: addOnVariant.id,
+                            name: addOnVariant.name,
+                            price: addOnVariant.price,
+                            type: addOnVariant.type,
+                        })),
+                    })),
+                },
+                name: item.name,
+                quantity: item.quantity,
+                netPrice: item.netPrice,
+                gst: item.gst,
+                gstPrice: (Number(item.originalRate) - Number(item.netPrice)) *
+                    Number(item.quantity),
+                grossProfit: item.grossProfit,
+                originalRate: item.originalRate,
+                isVariants: item.isVariants,
+                totalPrice: item.totalPrice,
+                selectedVariant: item.selectedVariant,
+                addOnSelected: item.addOnSelected,
+            })),
+            createdBy: order === null || order === void 0 ? void 0 : order.createdBy,
+            orderStatus: order.orderStatus,
+            paid: order.isPaid,
+            total: order.totalAmount,
+            createdAt: order === null || order === void 0 ? void 0 : order.createdAt,
+            date: (0, date_fns_1.format)(order.createdAt, "PP"),
+        });
+    });
+    yield redis_1.redis.set(`liv-online-${outletId}`, JSON.stringify(formattedOrderData), "EX", 300);
+    return formattedOrderData;
+});
+exports.getFetchLiveOnlineOrderToRedis = getFetchLiveOnlineOrderToRedis;
 const getFetchAllOrderByStaffToRedis = (outletId, staffId) => __awaiter(void 0, void 0, void 0, function* () {
     const liveOrders = yield __1.prismaDB.order.findMany({
         where: {

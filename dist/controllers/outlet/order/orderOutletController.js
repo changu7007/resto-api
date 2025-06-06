@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getParentOrder = exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.menuCardSchema = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionCancelPatch = exports.orderessionNamePatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.postOrderForUser = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllActiveStaffSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOrders = void 0;
+exports.getParentOrder = exports.inviteCode = exports.deleteOrderItem = exports.orderItemModification = exports.menuCardSchema = exports.getAllOrderByStaff = exports.orderStatusPatch = exports.orderStatusOnlinePatch = exports.orderessionBatchDelete = exports.orderessionDeleteById = exports.orderessionCancelPatch = exports.orderessionNamePatch = exports.orderessionPaymentModePatch = exports.existingOrderPatchApp = exports.postOrderForUser = exports.postOrderForOwner = exports.getTodayOrdersCount = exports.getTableAllOrders = exports.getTableAllSessionOrders = exports.getAllActiveStaffSessionOrders = exports.getAllActiveSessionOrders = exports.getLiveOnlineOrders = exports.getLiveOrders = void 0;
 const client_1 = require("@prisma/client");
 const __1 = require("../../..");
 const not_found_1 = require("../../../exceptions/not-found");
@@ -47,6 +47,28 @@ const getLiveOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     });
 });
 exports.getLiveOrders = getLiveOrders;
+const getLiveOnlineOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const redisLiveOrder = yield redis_1.redis.get(`liv-online-${outletId}`);
+    if (redisLiveOrder) {
+        return res.json({
+            success: true,
+            liveOrders: JSON.parse(redisLiveOrder),
+            message: "FETCHED UP ⚡",
+        });
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const liveOrders = yield (0, get_order_1.getFetchLiveOnlineOrderToRedis)(outlet.id);
+    return res.json({
+        success: true,
+        liveOrders,
+        message: "Fetching ✅",
+    });
+});
+exports.getLiveOnlineOrders = getLiveOnlineOrders;
 const getAllActiveSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const redisOrderActiveSession = yield redis_1.redis.get(`active-os-${outletId}`);
@@ -605,6 +627,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
     const result = yield __1.prismaDB.$transaction((prisma) => __awaiter(void 0, void 0, void 0, function* () {
         var _e, _f, _g, _h;
         yield Promise.all([
+            redis_1.redis.del(`liv-online-${outletId}`),
             redis_1.redis.del(`active-os-${outletId}`),
             redis_1.redis.del(`liv-o-${outletId}`),
             redis_1.redis.del(`tables-${outletId}`),
@@ -1018,7 +1041,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     where: { id: checkTable.currentOrderSessionId },
                     data: {
                         orders: {
-                            create: Object.assign(Object.assign({}, baseOrderData), { staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id, orderStatus: "INCOMMING" }),
+                            create: Object.assign(Object.assign({}, baseOrderData), { staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id, orderStatus: "ONHOLD" }),
                         },
                     },
                     include: {
@@ -1044,7 +1067,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                         restaurantId: getOutlet.id,
                         orderType,
                         orders: {
-                            create: Object.assign(Object.assign({}, baseOrderData), { staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id, orderStatus: "INCOMMING" }),
+                            create: Object.assign(Object.assign({}, baseOrderData), { staffId: staffTables === null || staffTables === void 0 ? void 0 : staffTables.id, orderStatus: "ONHOLD" }),
                         },
                     },
                     include: {
@@ -1097,7 +1120,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     deliveryAreaLandmark,
                     deliveryAreaLat,
                     deliveryAreaLong,
-                    orders: { create: Object.assign(Object.assign({}, baseOrderData), { orderStatus: "INCOMMING" }) },
+                    orders: { create: Object.assign(Object.assign({}, baseOrderData), { orderStatus: "ONHOLD" }) },
                 },
                 include: {
                     orders: {
@@ -1244,6 +1267,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         },
     });
     yield Promise.all([
+        redis_1.redis.del(`liv-online-${outletId}`),
         redis_1.redis.del(`active-os-${outletId}`),
         redis_1.redis.del(`liv-o-${outletId}`),
         redis_1.redis.del(`tables-${outletId}`),
@@ -1255,7 +1279,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
     ]);
     yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
     // Notify clients and update Redis
-    ws_1.websocketManager.notifyClients(getOutlet.id, "NEW_ORDER_FROM_PRIME");
+    ws_1.websocketManager.notifyClients(getOutlet.id, "CUSTOMER_ONLINE");
     return res.json({
         success: true,
         sessionId: result.id,
@@ -1991,6 +2015,57 @@ const orderessionBatchDelete = (req, res) => __awaiter(void 0, void 0, void 0, f
     });
 });
 exports.orderessionBatchDelete = orderessionBatchDelete;
+const orderStatusOnlinePatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const validTypes = Object.values(client_1.OrderStatus);
+    const { orderId, preparationTime, orderStatus } = req.body;
+    if (!validTypes.includes(orderStatus)) {
+        throw new bad_request_1.BadRequestsException("OrderStatus is Invalid", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getOrderById = yield (0, outlet_1.getOrderByOutketId)(outlet.id, orderId);
+    if (!(getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.id)) {
+        throw new not_found_1.NotFoundException("No Order Found to Update", root_1.ErrorCode.NOT_FOUND);
+    }
+    yield __1.prismaDB.order.updateMany({
+        where: {
+            id: getOrderById.id,
+            restaurantId: outlet.id,
+        },
+        data: {
+            preparationTime,
+            orderStatus: "PREPARING",
+        },
+    });
+    // Update related alerts to resolved
+    yield __1.prismaDB.alert.deleteMany({
+        where: {
+            restaurantId: outlet.id,
+            orderId: orderId,
+            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+        },
+    });
+    yield Promise.all([
+        redis_1.redis.del(`liv-online-${outletId}`),
+        redis_1.redis.del(`active-os-${outletId}`),
+        redis_1.redis.del(`liv-o-${outletId}`),
+        redis_1.redis.del(`tables-${outletId}`),
+        redis_1.redis.del(`a-${outletId}`),
+        redis_1.redis.del(`o-n-${outletId}`),
+        redis_1.redis.del(`${outletId}-stocks`),
+        redis_1.redis.del(`alerts-${outletId}`),
+    ]);
+    ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
+    ws_1.websocketManager.notifyClients(outlet === null || outlet === void 0 ? void 0 : outlet.id, "ORDER_UPDATED");
+    return res.json({
+        success: true,
+        message: "Order Accepted ✅",
+    });
+});
+exports.orderStatusOnlinePatch = orderStatusOnlinePatch;
 const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { orderId, outletId } = req.params;
     const validTypes = Object.values(client_1.OrderStatus);

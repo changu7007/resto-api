@@ -365,15 +365,32 @@ const getIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function*
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    const getINtegrations = yield __1.prismaDB.integration.findMany({
+    let getIntegrations = yield __1.prismaDB.integration.findMany({
         where: {
             restaurantId: outlet.id,
         },
     });
+    // Check if PhonePe integration doesn't exist, then create it
+    const phonePeExists = getIntegrations.find((integration) => (integration === null || integration === void 0 ? void 0 : integration.name) === "PHONEPE");
+    if (!phonePeExists) {
+        const newPhonePeIntegration = yield __1.prismaDB.integration.create({
+            data: {
+                name: "PHONEPE",
+                description: "Integrate phonePe for taking payment from customers",
+                logo: "https://app-restobytes.s3.ap-south-1.amazonaws.com/66710f2af99f1affa13031a5/menu/e9aecb204a19b3ff05a920ecc002e9a9a9d385dfe676a8ef5ff85dcf083165af",
+                link: "https://business.phonepe.com/register?referral-code=RF2505191803179405044688",
+                connected: false,
+                status: true,
+                restaurantId: outlet.id,
+            },
+        });
+        // Add the newly created integration to the array
+        getIntegrations.push(newPhonePeIntegration);
+    }
     yield (0, outlet_1.fetchOutletByIdToRedis)(outlet === null || outlet === void 0 ? void 0 : outlet.id);
     return res.json({
         success: true,
-        integrations: getINtegrations,
+        integrations: getIntegrations,
     });
 });
 exports.getIntegration = getIntegration;

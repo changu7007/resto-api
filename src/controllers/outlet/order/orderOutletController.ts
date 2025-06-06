@@ -22,6 +22,7 @@ import { websocketManager } from "../../../services/ws";
 import {
   getFetchActiveOrderSessionToRedis,
   getFetchAllStaffOrderSessionToRedis,
+  getFetchLiveOnlineOrderToRedis,
   getFetchLiveOrderToRedis,
   getFetchStaffActiveOrderSessionToRedis,
 } from "../../../lib/outlet/get-order";
@@ -57,6 +58,34 @@ export const getLiveOrders = async (req: Request, res: Response) => {
   }
 
   const liveOrders = await getFetchLiveOrderToRedis(outlet.id);
+
+  return res.json({
+    success: true,
+    liveOrders,
+    message: "Fetching ✅",
+  });
+};
+
+export const getLiveOnlineOrders = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+
+  const redisLiveOrder = await redis.get(`liv-online-${outletId}`);
+
+  if (redisLiveOrder) {
+    return res.json({
+      success: true,
+      liveOrders: JSON.parse(redisLiveOrder),
+      message: "FETCHED UP ⚡",
+    });
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const liveOrders = await getFetchLiveOnlineOrderToRedis(outlet.id);
 
   return res.json({
     success: true,
@@ -776,6 +805,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
 
   const result = await prismaDB.$transaction(async (prisma) => {
     await Promise.all([
+      redis.del(`liv-online-${outletId}`),
       redis.del(`active-os-${outletId}`),
       redis.del(`liv-o-${outletId}`),
       redis.del(`tables-${outletId}`),
@@ -1334,7 +1364,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
                 create: {
                   ...baseOrderData,
                   staffId: staffTables?.id,
-                  orderStatus: "INCOMMING",
+                  orderStatus: "ONHOLD",
                 },
               },
             },
@@ -1367,7 +1397,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
                 create: {
                   ...baseOrderData,
                   staffId: staffTables?.id,
-                  orderStatus: "INCOMMING",
+                  orderStatus: "ONHOLD",
                 },
               },
             },
@@ -1423,7 +1453,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
           deliveryAreaLandmark,
           deliveryAreaLat,
           deliveryAreaLong,
-          orders: { create: { ...baseOrderData, orderStatus: "INCOMMING" } },
+          orders: { create: { ...baseOrderData, orderStatus: "ONHOLD" } },
         },
         include: {
           orders: {
@@ -1591,6 +1621,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     },
   });
   await Promise.all([
+    redis.del(`liv-online-${outletId}`),
     redis.del(`active-os-${outletId}`),
     redis.del(`liv-o-${outletId}`),
     redis.del(`tables-${outletId}`),
@@ -1602,7 +1633,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
   ]);
   await redis.publish("orderUpdated", JSON.stringify({ outletId }));
   // Notify clients and update Redis
-  websocketManager.notifyClients(getOutlet.id, "NEW_ORDER_FROM_PRIME");
+  websocketManager.notifyClients(getOutlet.id, "CUSTOMER_ONLINE");
   return res.json({
     success: true,
     sessionId: result.id,
@@ -2493,6 +2524,72 @@ export const orderessionBatchDelete = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: "Select Order Transaction Deleted ✅",
+  });
+};
+
+export const orderStatusOnlinePatch = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const validTypes = Object.values(OrderStatus);
+  const { orderId, preparationTime, orderStatus } = req.body;
+
+  if (!validTypes.includes(orderStatus)) {
+    throw new BadRequestsException(
+      "OrderStatus is Invalid",
+      ErrorCode.UNPROCESSABLE_ENTITY
+    );
+  }
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getOrderById = await getOrderByOutketId(outlet.id, orderId);
+
+  if (!getOrderById?.id) {
+    throw new NotFoundException(
+      "No Order Found to Update",
+      ErrorCode.NOT_FOUND
+    );
+  }
+
+  await prismaDB.order.updateMany({
+    where: {
+      id: getOrderById.id,
+      restaurantId: outlet.id,
+    },
+    data: {
+      preparationTime,
+      orderStatus: "PREPARING",
+    },
+  });
+
+  // Update related alerts to resolved
+  await prismaDB.alert.deleteMany({
+    where: {
+      restaurantId: outlet.id,
+      orderId: orderId,
+      status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+    },
+  });
+
+  await Promise.all([
+    redis.del(`liv-online-${outletId}`),
+    redis.del(`active-os-${outletId}`),
+    redis.del(`liv-o-${outletId}`),
+    redis.del(`tables-${outletId}`),
+    redis.del(`a-${outletId}`),
+    redis.del(`o-n-${outletId}`),
+    redis.del(`${outletId}-stocks`),
+    redis.del(`alerts-${outletId}`),
+  ]);
+
+  websocketManager.notifyClients(outletId, "NEW_ALERT");
+  websocketManager.notifyClients(outlet?.id, "ORDER_UPDATED");
+
+  return res.json({
+    success: true,
+    message: "Order Accepted ✅",
   });
 };
 

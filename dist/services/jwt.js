@@ -61,7 +61,7 @@ const sendToken = (user, statusCode, res) => __awaiter(void 0, void 0, void 0, f
         yield redis_1.redis.set(`pos-${user.id}`, JSON.stringify(user), "EX", 3 * 60 * 60);
     }
     else {
-        yield redis_1.redis.set(user.id, JSON.stringify(user));
+        yield redis_1.redis.set(user.id, JSON.stringify(user), "EX", 3 * 60 * 60);
     }
     if (process.env.NODE_ENV === "production") {
         exports.accessTokenOptions.secure = true;

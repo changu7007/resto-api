@@ -53,7 +53,7 @@ export const sendToken = async (
   if (user as FormattedPOSStaff) {
     await redis.set(`pos-${user.id}`, JSON.stringify(user), "EX", 3 * 60 * 60);
   } else {
-    await redis.set(user.id, JSON.stringify(user));
+    await redis.set(user.id, JSON.stringify(user), "EX", 3 * 60 * 60);
   }
 
   if (process.env.NODE_ENV === "production") {

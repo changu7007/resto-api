@@ -473,7 +473,9 @@ export const getCurrentOrderForCustomer = async (
         id: order?.generatedOrderId,
         orderStatus: order?.orderStatus,
         totalAmount: order?.totalAmount,
+        preparationTime: order?.preparationTime,
         createdAt: order?.createdAt,
+        updatedAt: order?.updatedAt,
         orderItems: order?.orderItems.map((item) => ({
           id: item?.id,
           name: item?.name,

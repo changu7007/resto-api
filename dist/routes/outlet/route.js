@@ -108,6 +108,7 @@ outletRoute.patch("/:outletId/order-session-bulk-delete", auth_1.isAuthMiddelwar
 outletRoute.get("/:outletId/today-order-count", (0, error_handler_1.errorHandler)(orderOutletController_1.getTodayOrdersCount));
 outletRoute.get("/:outletId/live-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getLiveOrders));
 outletRoute.get("/:outletId/active-session-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getAllActiveSessionOrders));
+outletRoute.get("/:outletId/live-online-orders", (0, error_handler_1.errorHandler)(orderOutletController_1.getLiveOnlineOrders));
 outletRoute.get("/:outletId/active-staff-session-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getAllActiveStaffSessionOrders));
 outletRoute.post("/:outletId/all-table-session-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllSessionOrders));
 outletRoute.post("/:outletId/all-table-orders", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.getTableAllOrders));
@@ -116,6 +117,7 @@ outletRoute.get("/:outletId/table/:tableId/customer/:customerId", auth_1.isAuthM
 outletRoute.post("/:outletId/assign-tables-to-staff", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_2.assignTablesForWaiters));
 outletRoute.get("/:outletId/get-tables-assigned-to-waiters/:staffId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.getTablesAssignedToWaiters));
 outletRoute.patch("/:outletId/bulk-pos-access-enable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessEnable));
+outletRoute.patch("/:outletId/online-accept-order", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(orderOutletController_1.orderStatusOnlinePatch));
 outletRoute.patch("/:outletId/bulk-pos-access-disable", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(staffController_1.bulkPosAccessDisable));
 //Items Route
 outletRoute.post("/:outletId/create-item", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.postItem));
