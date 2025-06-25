@@ -149,9 +149,9 @@ const getFetchLiveOnlineOrderToRedis = (outletId) => __awaiter(void 0, void 0, v
     const liveOrders = yield __1.prismaDB.order.findMany({
         where: {
             restaurantId: outletId,
-            orderSession: {
-                platform: "ONLINE",
-            },
+            // orderSession: {
+            //   platform: "ONLINE",
+            // },
             orderStatus: {
                 in: ["ONHOLD"],
             },
@@ -204,20 +204,22 @@ const getFetchLiveOnlineOrderToRedis = (outletId) => __awaiter(void 0, void 0, v
         },
     });
     const formattedOrderData = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
             generatedOrderId: order.generatedOrderId,
             platform: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.platform,
             name: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.username,
-            mode: order.orderType,
-            deliveryArea: (_d = order === null || order === void 0 ? void 0 : order.orderSession) === null || _d === void 0 ? void 0 : _d.deliveryArea,
-            deliveryAreaAddress: (_e = order === null || order === void 0 ? void 0 : order.orderSession) === null || _e === void 0 ? void 0 : _e.deliveryAreaAddress,
-            deliveryAreaLandmark: (_f = order === null || order === void 0 ? void 0 : order.orderSession) === null || _f === void 0 ? void 0 : _f.deliveryAreaLandmark,
-            deliveryAreaLat: (_g = order === null || order === void 0 ? void 0 : order.orderSession) === null || _g === void 0 ? void 0 : _g.deliveryAreaLat,
-            deliveryAreaLong: (_h = order === null || order === void 0 ? void 0 : order.orderSession) === null || _h === void 0 ? void 0 : _h.deliveryAreaLong,
-            table: (_j = order.orderSession.table) === null || _j === void 0 ? void 0 : _j.name,
+            mode: order.orderType === "DINEIN"
+                ? (_e = (_d = order === null || order === void 0 ? void 0 : order.orderSession) === null || _d === void 0 ? void 0 : _d.table) === null || _e === void 0 ? void 0 : _e.name
+                : order === null || order === void 0 ? void 0 : order.orderType,
+            deliveryArea: (_f = order === null || order === void 0 ? void 0 : order.orderSession) === null || _f === void 0 ? void 0 : _f.deliveryArea,
+            deliveryAreaAddress: (_g = order === null || order === void 0 ? void 0 : order.orderSession) === null || _g === void 0 ? void 0 : _g.deliveryAreaAddress,
+            deliveryAreaLandmark: (_h = order === null || order === void 0 ? void 0 : order.orderSession) === null || _h === void 0 ? void 0 : _h.deliveryAreaLandmark,
+            deliveryAreaLat: (_j = order === null || order === void 0 ? void 0 : order.orderSession) === null || _j === void 0 ? void 0 : _j.deliveryAreaLat,
+            deliveryAreaLong: (_k = order === null || order === void 0 ? void 0 : order.orderSession) === null || _k === void 0 ? void 0 : _k.deliveryAreaLong,
+            table: (_l = order.orderSession.table) === null || _l === void 0 ? void 0 : _l.name,
             orderItems: order.orderItems.map((item) => ({
                 id: item.id,
                 menuItem: {

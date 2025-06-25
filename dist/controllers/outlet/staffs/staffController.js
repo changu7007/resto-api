@@ -531,23 +531,18 @@ const bulkPosAccessDisable = (req, res) => __awaiter(void 0, void 0, void 0, fun
 exports.bulkPosAccessDisable = bulkPosAccessDisable;
 const assignTablesForWaiters = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
-    const { staffAssignments } = req.body;
+    const { staffId, assignedTables } = req.body;
     const getOutlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
-    // Validate staffAssignments format
-    if (!Array.isArray(staffAssignments)) {
-        throw new bad_request_1.BadRequestsException("Staff assignments must be an array", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    // Validate input format
+    if (!staffId || !Array.isArray(assignedTables)) {
+        throw new bad_request_1.BadRequestsException("Invalid staff assignment format. Expecting { staffId: string, assignedTables: string[] }", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
-    // Validate each staff assignment
-    for (const assignment of staffAssignments) {
-        const { staffId, assignedTables } = assignment;
-        if (!staffId || !Array.isArray(assignedTables)) {
-            throw new bad_request_1.BadRequestsException("Invalid staff assignment format", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-        }
-        // Verify staff exists
-        const staff = yield __1.prismaDB.staff.findFirst({
+    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        // Verify staff exists and is a waiter
+        const staff = yield tx.staff.findFirst({
             where: {
                 id: staffId,
                 restaurantId: getOutlet.id,
@@ -556,84 +551,50 @@ const assignTablesForWaiters = (req, res) => __awaiter(void 0, void 0, void 0, f
         if (!staff) {
             throw new not_found_1.NotFoundException(`Staff with ID ${staffId} not found`, root_1.ErrorCode.NOT_FOUND);
         }
+        if (staff.role !== "WAITER") {
+            throw new bad_request_1.BadRequestsException(`Staff ${staff.name} is not a WAITER`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+        }
         // Verify all tables exist
         if (assignedTables.length > 0) {
-            const tables = yield __1.prismaDB.table.findMany({
+            const tables = yield tx.table.findMany({
                 where: {
-                    id: {
-                        in: assignedTables,
-                    },
+                    id: { in: assignedTables },
                     restaurantId: getOutlet.id,
                 },
+                select: { id: true },
             });
             if (tables.length !== assignedTables.length) {
                 throw new bad_request_1.BadRequestsException(`Some tables assigned to staff ${staff.name} were not found`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
             }
         }
-    }
-    // Process all table assignments in a transaction
-    yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        // First, create a map of which tables are assigned to which staff
-        const tableAssignments = new Map();
-        // Then create a map to track current staff assignments
-        const currentStaffAssignments = new Map();
-        // Get all staff with their assigned tables
-        const allStaff = yield tx.staff.findMany({
+        // Unassign tables from other waiters if they are in the new assignment
+        const otherWaiters = yield tx.staff.findMany({
             where: {
                 restaurantId: getOutlet.id,
                 role: "WAITER",
+                id: { not: staffId },
+                assignedTables: {
+                    hasSome: assignedTables,
+                },
             },
-            select: {
-                id: true,
-                assignedTables: true,
+        });
+        for (const waiter of otherWaiters) {
+            const newAssignedTables = waiter.assignedTables.filter((tableId) => !assignedTables.includes(tableId));
+            yield tx.staff.update({
+                where: { id: waiter.id },
+                data: { assignedTables: newAssignedTables },
+            });
+        }
+        // Assign the new set of tables to the target waiter
+        yield tx.staff.update({
+            where: {
+                id: staffId,
+                restaurantId: getOutlet.id,
+            },
+            data: {
+                assignedTables: assignedTables,
             },
         });
-        // Initialize current staff assignments
-        allStaff.forEach((staff) => {
-            currentStaffAssignments.set(staff.id, staff.assignedTables || []);
-        });
-        // Process each assignment to build a complete table-to-staff mapping
-        for (const assignment of staffAssignments) {
-            const { staffId, assignedTables } = assignment;
-            // For each table assigned to this staff, record the assignment
-            for (const tableId of assignedTables) {
-                tableAssignments.set(tableId, staffId);
-            }
-        }
-        // Create the final staff-to-tables mapping
-        const finalStaffAssignments = new Map();
-        // Initialize with empty arrays for each staff
-        allStaff.forEach((staff) => {
-            finalStaffAssignments.set(staff.id, []);
-        });
-        // For each table assignment, add to the appropriate staff's list
-        for (const [tableId, staffId] of tableAssignments.entries()) {
-            const staffTables = finalStaffAssignments.get(staffId) || [];
-            staffTables.push(tableId);
-            finalStaffAssignments.set(staffId, staffTables);
-        }
-        // Update each staff's assigned tables
-        for (const [staffId, tablesToAssign] of finalStaffAssignments.entries()) {
-            // Only update if there's a change in assignments
-            const currentAssignments = currentStaffAssignments.get(staffId) || [];
-            // Sort arrays to compare them efficiently
-            const sortedCurrent = [...currentAssignments].sort();
-            const sortedNew = [...tablesToAssign].sort();
-            // Check if assignments have changed
-            const assignmentsChanged = sortedCurrent.length !== sortedNew.length ||
-                sortedCurrent.some((tableId, index) => tableId !== sortedNew[index]);
-            if (assignmentsChanged) {
-                yield tx.staff.update({
-                    where: {
-                        id: staffId,
-                        restaurantId: getOutlet.id,
-                    },
-                    data: {
-                        assignedTables: tablesToAssign,
-                    },
-                });
-            }
-        }
     }));
     // Invalidate cache for staff data
     yield redis_1.redis.del(`staffs-${getOutlet.id}`);

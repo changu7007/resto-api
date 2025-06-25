@@ -58,7 +58,7 @@ const expenseSchema = zod_1.z.object({
         required_error: " Payment Method Required.",
     }),
     cashRegisterId: zod_1.z
-        .string()
+        .string({ message: "Cash Register is Not Open" })
         .min(1, { message: "Cash Register ID is Required" }),
 });
 const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {

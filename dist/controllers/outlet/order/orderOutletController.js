@@ -2019,6 +2019,7 @@ const orderStatusOnlinePatch = (req, res) => __awaiter(void 0, void 0, void 0, f
     const { outletId } = req.params;
     const validTypes = Object.values(client_1.OrderStatus);
     const { orderId, preparationTime, orderStatus } = req.body;
+    console.log(req.body);
     if (!validTypes.includes(orderStatus)) {
         throw new bad_request_1.BadRequestsException("OrderStatus is Invalid", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }

@@ -377,8 +377,8 @@ exports.getLoyaltyPrograms = getLoyaltyPrograms;
 // Get loyalty customers
 const getLoyaltyCustomers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { restaurantId } = req.params;
-    const { programId, tier, search, page = 1, limit = 10 } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
+    const { programId, tier, search, page = 0, limit = 10 } = req.query;
+    const skip = Number(page) * Number(limit);
     let whereClause = {
         restaurantId,
     };
