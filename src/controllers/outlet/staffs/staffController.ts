@@ -631,7 +631,7 @@ export const bulkPosAccessDisable = async (req: Request, res: Response) => {
 
 export const assignTablesForWaiters = async (req: Request, res: Response) => {
   const { outletId } = req.params;
-  const { staffAssignments } = req.body;
+  const { staffId, assignedTables } = req.body;
 
   const getOutlet = await getOutletById(outletId);
 
@@ -639,27 +639,17 @@ export const assignTablesForWaiters = async (req: Request, res: Response) => {
     throw new NotFoundException("Outlet Not found", ErrorCode.OUTLET_NOT_FOUND);
   }
 
-  // Validate staffAssignments format
-  if (!Array.isArray(staffAssignments)) {
+  // Validate input format
+  if (!staffId || !Array.isArray(assignedTables)) {
     throw new BadRequestsException(
-      "Staff assignments must be an array",
+      "Invalid staff assignment format. Expecting { staffId: string, assignedTables: string[] }",
       ErrorCode.UNPROCESSABLE_ENTITY
     );
   }
 
-  // Validate each staff assignment
-  for (const assignment of staffAssignments) {
-    const { staffId, assignedTables } = assignment;
-
-    if (!staffId || !Array.isArray(assignedTables)) {
-      throw new BadRequestsException(
-        "Invalid staff assignment format",
-        ErrorCode.UNPROCESSABLE_ENTITY
-      );
-    }
-
-    // Verify staff exists
-    const staff = await prismaDB.staff.findFirst({
+  await prismaDB.$transaction(async (tx) => {
+    // Verify staff exists and is a waiter
+    const staff = await tx.staff.findFirst({
       where: {
         id: staffId,
         restaurantId: getOutlet.id,
@@ -673,15 +663,21 @@ export const assignTablesForWaiters = async (req: Request, res: Response) => {
       );
     }
 
+    if (staff.role !== "WAITER") {
+      throw new BadRequestsException(
+        `Staff ${staff.name} is not a WAITER`,
+        ErrorCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
     // Verify all tables exist
     if (assignedTables.length > 0) {
-      const tables = await prismaDB.table.findMany({
+      const tables = await tx.table.findMany({
         where: {
-          id: {
-            in: assignedTables,
-          },
+          id: { in: assignedTables },
           restaurantId: getOutlet.id,
         },
+        select: { id: true },
       });
 
       if (tables.length !== assignedTables.length) {
@@ -691,84 +687,39 @@ export const assignTablesForWaiters = async (req: Request, res: Response) => {
         );
       }
     }
-  }
 
-  // Process all table assignments in a transaction
-  await prismaDB.$transaction(async (tx) => {
-    // First, create a map of which tables are assigned to which staff
-    const tableAssignments = new Map<string, string>();
-
-    // Then create a map to track current staff assignments
-    const currentStaffAssignments = new Map<string, string[]>();
-
-    // Get all staff with their assigned tables
-    const allStaff = await tx.staff.findMany({
+    // Unassign tables from other waiters if they are in the new assignment
+    const otherWaiters = await tx.staff.findMany({
       where: {
         restaurantId: getOutlet.id,
         role: "WAITER",
+        id: { not: staffId },
+        assignedTables: {
+          hasSome: assignedTables,
+        },
       },
-      select: {
-        id: true,
-        assignedTables: true,
+    });
+
+    for (const waiter of otherWaiters) {
+      const newAssignedTables = waiter.assignedTables.filter(
+        (tableId) => !assignedTables.includes(tableId)
+      );
+      await tx.staff.update({
+        where: { id: waiter.id },
+        data: { assignedTables: newAssignedTables },
+      });
+    }
+
+    // Assign the new set of tables to the target waiter
+    await tx.staff.update({
+      where: {
+        id: staffId,
+        restaurantId: getOutlet.id,
+      },
+      data: {
+        assignedTables: assignedTables,
       },
     });
-
-    // Initialize current staff assignments
-    allStaff.forEach((staff) => {
-      currentStaffAssignments.set(staff.id, staff.assignedTables || []);
-    });
-
-    // Process each assignment to build a complete table-to-staff mapping
-    for (const assignment of staffAssignments) {
-      const { staffId, assignedTables } = assignment;
-
-      // For each table assigned to this staff, record the assignment
-      for (const tableId of assignedTables) {
-        tableAssignments.set(tableId, staffId);
-      }
-    }
-
-    // Create the final staff-to-tables mapping
-    const finalStaffAssignments = new Map<string, string[]>();
-
-    // Initialize with empty arrays for each staff
-    allStaff.forEach((staff) => {
-      finalStaffAssignments.set(staff.id, []);
-    });
-
-    // For each table assignment, add to the appropriate staff's list
-    for (const [tableId, staffId] of tableAssignments.entries()) {
-      const staffTables = finalStaffAssignments.get(staffId) || [];
-      staffTables.push(tableId);
-      finalStaffAssignments.set(staffId, staffTables);
-    }
-
-    // Update each staff's assigned tables
-    for (const [staffId, tablesToAssign] of finalStaffAssignments.entries()) {
-      // Only update if there's a change in assignments
-      const currentAssignments = currentStaffAssignments.get(staffId) || [];
-
-      // Sort arrays to compare them efficiently
-      const sortedCurrent = [...currentAssignments].sort();
-      const sortedNew = [...tablesToAssign].sort();
-
-      // Check if assignments have changed
-      const assignmentsChanged =
-        sortedCurrent.length !== sortedNew.length ||
-        sortedCurrent.some((tableId, index) => tableId !== sortedNew[index]);
-
-      if (assignmentsChanged) {
-        await tx.staff.update({
-          where: {
-            id: staffId,
-            restaurantId: getOutlet.id,
-          },
-          data: {
-            assignedTables: tablesToAssign,
-          },
-        });
-      }
-    }
   });
 
   // Invalidate cache for staff data

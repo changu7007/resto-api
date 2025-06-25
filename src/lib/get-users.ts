@@ -381,6 +381,7 @@ export interface FormattedPOSStaff {
     email: string;
     outletType: string;
     restaurantName: string;
+    createdAt: Date;
   };
 }
 
@@ -542,6 +543,7 @@ export const getFormatStaffPOSAndSendToRedis = async (staffId: string) => {
       email: getOutlet?.email,
       outletType: getOutlet?.outletType,
       restaurantName: getOutlet?.restaurantName,
+      createdAt: getOutlet?.createdAt,
     },
   };
 

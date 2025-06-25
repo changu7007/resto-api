@@ -146,9 +146,9 @@ export const getFetchLiveOnlineOrderToRedis = async (outletId: string) => {
   const liveOrders = await prismaDB.order.findMany({
     where: {
       restaurantId: outletId,
-      orderSession: {
-        platform: "ONLINE",
-      },
+      // orderSession: {
+      //   platform: "ONLINE",
+      // },
       orderStatus: {
         in: ["ONHOLD"],
       },
@@ -207,7 +207,10 @@ export const getFetchLiveOnlineOrderToRedis = async (outletId: string) => {
     generatedOrderId: order.generatedOrderId,
     platform: order?.orderSession?.platform,
     name: order?.orderSession?.username,
-    mode: order.orderType,
+    mode:
+      order.orderType === "DINEIN"
+        ? order?.orderSession?.table?.name
+        : order?.orderType,
     deliveryArea: order?.orderSession?.deliveryArea,
     deliveryAreaAddress: order?.orderSession?.deliveryAreaAddress,
     deliveryAreaLandmark: order?.orderSession?.deliveryAreaLandmark,

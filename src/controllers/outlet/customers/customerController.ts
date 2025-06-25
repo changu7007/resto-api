@@ -323,7 +323,9 @@ export const createCustomer = async (req: Request, res: Response) => {
   const { outletId } = req.params;
 
   // Validate request body
+
   const { data, error } = customerForm.safeParse(req.body);
+
   if (error) {
     throw new NotFoundException(
       error.errors[0].message,

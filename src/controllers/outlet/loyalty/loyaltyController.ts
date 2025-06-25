@@ -439,8 +439,8 @@ export const getLoyaltyPrograms = async (req: Request, res: Response) => {
 // Get loyalty customers
 export const getLoyaltyCustomers = async (req: Request, res: Response) => {
   const { restaurantId } = req.params;
-  const { programId, tier, search, page = 1, limit = 10 } = req.query;
-  const skip = (Number(page) - 1) * Number(limit);
+  const { programId, tier, search, page = 0, limit = 10 } = req.query;
+  const skip = Number(page) * Number(limit);
 
   let whereClause: any = {
     restaurantId,

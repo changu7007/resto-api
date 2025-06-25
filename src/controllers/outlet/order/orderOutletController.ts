@@ -2531,7 +2531,7 @@ export const orderStatusOnlinePatch = async (req: Request, res: Response) => {
   const { outletId } = req.params;
   const validTypes = Object.values(OrderStatus);
   const { orderId, preparationTime, orderStatus } = req.body;
-
+  console.log(req.body);
   if (!validTypes.includes(orderStatus)) {
     throw new BadRequestsException(
       "OrderStatus is Invalid",

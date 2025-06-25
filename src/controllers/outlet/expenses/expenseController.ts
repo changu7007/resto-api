@@ -58,7 +58,7 @@ const expenseSchema = z.object({
     required_error: " Payment Method Required.",
   }),
   cashRegisterId: z
-    .string()
+    .string({ message: "Cash Register is Not Open" })
     .min(1, { message: "Cash Register ID is Required" }),
 });
 

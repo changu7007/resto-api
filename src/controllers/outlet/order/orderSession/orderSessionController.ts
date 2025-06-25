@@ -45,7 +45,11 @@ const splitPaymentSchema = z
       required_error: "Subtotal is required",
     }),
     paymentMethod: z.nativeEnum(PaymentMethod).optional(),
-    cashRegisterId: z.string().optional(),
+    cashRegisterId: z
+      .string({
+        message: "Cash Register not opened, please open to complete the bill",
+      })
+      .optional(),
     paymentId: z.string().optional(),
     isSplitPayment: z.boolean().optional(),
     splitPayments: z
@@ -220,13 +224,6 @@ export const billingOrderSession = async (req: Request, res: Response) => {
         status: "OPEN",
       },
     });
-  } else {
-    cashRegister = await prismaDB.cashRegister.findFirst({
-      where: {
-        restaurantId: outlet.id,
-        status: "OPEN",
-      },
-    });
   }
 
   const result = await prismaDB?.$transaction(async (prisma) => {
@@ -236,7 +233,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
         restaurantId: outlet.id,
       },
       data: {
-        active: false,
+        active: platform == "ONLINE" ? true : false,
         isPaid: true,
         paymentMethod: isSplitPayment ? "SPLIT" : paymentMethod,
         paymentMode: paymentMode,
