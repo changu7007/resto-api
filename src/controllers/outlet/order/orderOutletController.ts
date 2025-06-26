@@ -317,6 +317,9 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
       discountAmount: true,
       gstAmount: true,
       amountReceived: true,
+      paymentMode: true,
+      packingFee: true,
+      deliveryFee: true,
       customer: {
         select: {
           customer: {
@@ -394,6 +397,9 @@ export const getTableAllSessionOrders = async (req: Request, res: Response) => {
       gstAmount: order?.gstAmount,
       loyaltyDiscount: order?.loyaltRedeemPoints,
       amountReceived: order?.amountReceived,
+      deliveryFee: order?.deliveryFee,
+      packingFee: order?.packingFee,
+      paymentMode: order?.paymentMode,
       viewOrders: order?.orders?.map((o) => ({
         id: o?.id,
         generatedOrderId: o?.generatedOrderId,
@@ -617,6 +623,9 @@ export const getTableAllOrders = async (req: Request, res: Response) => {
         selectedVariant: item.selectedVariant,
         addOnSelected: item.addOnSelected,
       })),
+      deliveryFee: order?.orderSession?.deliveryFee,
+      packingFee: order?.orderSession?.packingFee,
+      paymentMode: order?.orderSession?.paymentMode,
       orderStatus: order.orderStatus,
       paid: order.isPaid,
       total: Number(order.totalAmount),
@@ -1239,7 +1248,12 @@ export const postOrderForUser = async (req: Request, res: Response) => {
   }
 
   // Calculate totals for takeaway/delivery
-  const calculate = calculateTotalsForTakewayAndDelivery(orderItems);
+  const calculate = calculateTotalsForTakewayAndDelivery(
+    orderItems,
+    Number(getOutlet?.deliveryFee || 0),
+    Number(getOutlet?.packagingFee || 0),
+    orderType
+  );
 
   const result = await prismaDB.$transaction(async (tx) => {
     // Create base order data
@@ -1448,6 +1462,8 @@ export const postOrderForUser = async (req: Request, res: Response) => {
           isPaid: true,
           paymentMethod: paymentId ? "UPI" : "CASH",
           subTotal: calculate.roundedTotal,
+          deliveryFee: calculate?.deliveryFee,
+          packingFee: calculate?.packingFee,
           deliveryArea,
           deliveryAreaAddress,
           deliveryAreaLandmark,

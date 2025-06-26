@@ -204,7 +204,7 @@ const getFetchLiveOnlineOrderToRedis = (outletId) => __awaiter(void 0, void 0, v
         },
     });
     const formattedOrderData = liveOrders === null || liveOrders === void 0 ? void 0 : liveOrders.map((order) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
         return ({
             id: order.id,
             billNo: (_a = order === null || order === void 0 ? void 0 : order.orderSession) === null || _a === void 0 ? void 0 : _a.billId,
@@ -273,6 +273,9 @@ const getFetchLiveOnlineOrderToRedis = (outletId) => __awaiter(void 0, void 0, v
             createdBy: order === null || order === void 0 ? void 0 : order.createdBy,
             orderStatus: order.orderStatus,
             paid: order.isPaid,
+            deliveryFee: (_m = order === null || order === void 0 ? void 0 : order.orderSession) === null || _m === void 0 ? void 0 : _m.deliveryFee,
+            packingFee: (_o = order === null || order === void 0 ? void 0 : order.orderSession) === null || _o === void 0 ? void 0 : _o.packingFee,
+            paymentMode: (_p = order === null || order === void 0 ? void 0 : order.orderSession) === null || _p === void 0 ? void 0 : _p.paymentMode,
             total: order.totalAmount,
             createdAt: order === null || order === void 0 ? void 0 : order.createdAt,
             date: (0, date_fns_1.format)(order.createdAt, "PP"),
@@ -617,6 +620,9 @@ const getFetchActiveOrderSessionToRedis = (outletId) => __awaiter(void 0, void 0
             deliveryAreaLat: order === null || order === void 0 ? void 0 : order.deliveryAreaLat,
             deliveryAreaLong: order === null || order === void 0 ? void 0 : order.deliveryAreaLong,
             table: (_a = order.table) === null || _a === void 0 ? void 0 : _a.name,
+            paymentMode: order === null || order === void 0 ? void 0 : order.paymentMode,
+            deliveryFee: order === null || order === void 0 ? void 0 : order.deliveryFee,
+            packingFee: order === null || order === void 0 ? void 0 : order.packingFee,
             subTotal: order.subTotal,
             orders: order.orders.map((order) => ({
                 id: order.id,
@@ -753,6 +759,8 @@ const getFetchStaffActiveOrderSessionToRedis = (outletId, staffId) => __awaiter(
             deliveryAreaLong: order === null || order === void 0 ? void 0 : order.deliveryAreaLong,
             table: (_a = order.table) === null || _a === void 0 ? void 0 : _a.name,
             subTotal: order.subTotal,
+            deliveryFee: order === null || order === void 0 ? void 0 : order.deliveryFee,
+            packingFee: order === null || order === void 0 ? void 0 : order.packingFee,
             orders: order.orders.map((order) => ({
                 id: order.id,
                 generatedOrderId: order.generatedOrderId,

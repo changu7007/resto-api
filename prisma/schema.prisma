@@ -1078,6 +1078,8 @@ model OrderSession {
   deliveryAreaLandmark String?
   transactionId        String?
   paymentMode          PaymentMode?
+  packingFee           Float?
+  deliveryFee          Float?
   discountAmount       Float?
   loyaltRedeemPoints   Float?
   subTotal             Float?

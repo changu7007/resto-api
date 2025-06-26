@@ -574,7 +574,7 @@ const completebillingOrderSession = (req, res) => __awaiter(void 0, void 0, void
                     updateMany: {
                         where: {
                             orderStatus: {
-                                in: ["SERVED", "INCOMMING", "PREPARING", "FOODREADY"],
+                                in: ["SERVED", "INCOMMING", "PREPARING", "FOODREADY", "ONHOLD"],
                             },
                         },
                         data: {
@@ -864,6 +864,7 @@ const completebillingOrderSession = (req, res) => __awaiter(void 0, void 0, void
     }, `bill-${result.id}`);
     yield Promise.all([
         redis_1.redis.del(`active-os-${outletId}`),
+        redis_1.redis.del(`liv-online-${outletId}`),
         redis_1.redis.del(`liv-o-${outletId}`),
         redis_1.redis.del(`tables-${outletId}`),
         redis_1.redis.del(`a-${outletId}`),
@@ -1029,14 +1030,29 @@ const calculateTotals = (orders) => {
     return { subtotal, sgst, cgst, total, roundedTotal, roundedDifference };
 };
 exports.calculateTotals = calculateTotals;
-const calculateTotalsForTakewayAndDelivery = (orders) => {
+const calculateTotalsForTakewayAndDelivery = (orders, deliveryFee, packingFee, orderType) => {
     const subtotal = orders === null || orders === void 0 ? void 0 : orders.reduce((acc, order) => acc + (order === null || order === void 0 ? void 0 : order.price), 0);
     const sgst = subtotal * (orders === null || orders === void 0 ? void 0 : orders.reduce((acc, order) => acc + (order === null || order === void 0 ? void 0 : order.gst), 0));
     const cgst = subtotal * (orders === null || orders === void 0 ? void 0 : orders.reduce((acc, order) => acc + (order === null || order === void 0 ? void 0 : order.gst), 0));
     const total = subtotal + sgst + cgst;
     const tax = cgst + sgst;
-    const roundedTotal = Math.floor(total); // Rounded down total
+    const restaurantCharges = orderType === "DELIVERY"
+        ? deliveryFee + packingFee
+        : orderType === "TAKEAWAY"
+            ? packingFee
+            : 0;
+    const roundedTotal = Math.floor(total + restaurantCharges); // Rounded down total
     const roundedDifference = parseFloat((total - roundedTotal).toFixed(2)); // Difference between total and roundedTotal
-    return { subtotal, sgst, cgst, total, tax, roundedTotal, roundedDifference };
+    return {
+        subtotal,
+        sgst,
+        cgst,
+        total,
+        tax,
+        deliveryFee,
+        packingFee,
+        roundedTotal,
+        roundedDifference,
+    };
 };
 exports.calculateTotalsForTakewayAndDelivery = calculateTotalsForTakewayAndDelivery;

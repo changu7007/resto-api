@@ -273,6 +273,9 @@ export const getFetchLiveOnlineOrderToRedis = async (outletId: string) => {
     createdBy: order?.createdBy,
     orderStatus: order.orderStatus,
     paid: order.isPaid,
+    deliveryFee: order?.orderSession?.deliveryFee,
+    packingFee: order?.orderSession?.packingFee,
+    paymentMode: order?.orderSession?.paymentMode,
     total: order.totalAmount,
     createdAt: order?.createdAt,
     date: format(order.createdAt, "PP"),
@@ -654,6 +657,9 @@ export const getFetchActiveOrderSessionToRedis = async (outletId: string) => {
       deliveryAreaLat: order?.deliveryAreaLat,
       deliveryAreaLong: order?.deliveryAreaLong,
       table: order.table?.name,
+      paymentMode: order?.paymentMode,
+      deliveryFee: order?.deliveryFee,
+      packingFee: order?.packingFee,
       subTotal: order.subTotal,
       orders: order.orders.map((order) => ({
         id: order.id,
@@ -803,6 +809,8 @@ export const getFetchStaffActiveOrderSessionToRedis = async (
     deliveryAreaLong: order?.deliveryAreaLong,
     table: order.table?.name,
     subTotal: order.subTotal,
+    deliveryFee: order?.deliveryFee,
+    packingFee: order?.packingFee,
     orders: order.orders.map((order) => ({
       id: order.id,
       generatedOrderId: order.generatedOrderId,

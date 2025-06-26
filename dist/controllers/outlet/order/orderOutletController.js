@@ -232,6 +232,9 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
             discountAmount: true,
             gstAmount: true,
             amountReceived: true,
+            paymentMode: true,
+            packingFee: true,
+            deliveryFee: true,
             customer: {
                 select: {
                     customer: {
@@ -309,6 +312,9 @@ const getTableAllSessionOrders = (req, res) => __awaiter(void 0, void 0, void 0,
                 gstAmount: order === null || order === void 0 ? void 0 : order.gstAmount,
                 loyaltyDiscount: order === null || order === void 0 ? void 0 : order.loyaltRedeemPoints,
                 amountReceived: order === null || order === void 0 ? void 0 : order.amountReceived,
+                deliveryFee: order === null || order === void 0 ? void 0 : order.deliveryFee,
+                packingFee: order === null || order === void 0 ? void 0 : order.packingFee,
+                paymentMode: order === null || order === void 0 ? void 0 : order.paymentMode,
                 viewOrders: (_f = order === null || order === void 0 ? void 0 : order.orders) === null || _f === void 0 ? void 0 : _f.map((o) => {
                     var _a;
                     return ({
@@ -459,7 +465,7 @@ const getTableAllOrders = (req, res) => __awaiter(void 0, void 0, void 0, functi
         //   count: item._count.orderType,
         // })),
         orders: tableOrders === null || tableOrders === void 0 ? void 0 : tableOrders.map((order) => {
-            var _a;
+            var _a, _b, _c, _d;
             return ({
                 id: order.id,
                 generatedOrderId: order.generatedOrderId,
@@ -515,6 +521,9 @@ const getTableAllOrders = (req, res) => __awaiter(void 0, void 0, void 0, functi
                         addOnSelected: item.addOnSelected,
                     });
                 }),
+                deliveryFee: (_b = order === null || order === void 0 ? void 0 : order.orderSession) === null || _b === void 0 ? void 0 : _b.deliveryFee,
+                packingFee: (_c = order === null || order === void 0 ? void 0 : order.orderSession) === null || _c === void 0 ? void 0 : _c.packingFee,
+                paymentMode: (_d = order === null || order === void 0 ? void 0 : order.orderSession) === null || _d === void 0 ? void 0 : _d.paymentMode,
                 orderStatus: order.orderStatus,
                 paid: order.isPaid,
                 total: Number(order.totalAmount),
@@ -947,7 +956,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         throw new bad_request_1.BadRequestsException("You Need to logout & login again to place the order", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     // Calculate totals for takeaway/delivery
-    const calculate = (0, orderSessionController_1.calculateTotalsForTakewayAndDelivery)(orderItems);
+    const calculate = (0, orderSessionController_1.calculateTotalsForTakewayAndDelivery)(orderItems, Number((getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.deliveryFee) || 0), Number((getOutlet === null || getOutlet === void 0 ? void 0 : getOutlet.packagingFee) || 0), orderType);
     const result = yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
         var _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
         // Create base order data
@@ -1115,6 +1124,8 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     isPaid: true,
                     paymentMethod: paymentId ? "UPI" : "CASH",
                     subTotal: calculate.roundedTotal,
+                    deliveryFee: calculate === null || calculate === void 0 ? void 0 : calculate.deliveryFee,
+                    packingFee: calculate === null || calculate === void 0 ? void 0 : calculate.packingFee,
                     deliveryArea,
                     deliveryAreaAddress,
                     deliveryAreaLandmark,

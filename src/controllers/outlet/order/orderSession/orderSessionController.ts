@@ -720,7 +720,7 @@ export const completebillingOrderSession = async (
           updateMany: {
             where: {
               orderStatus: {
-                in: ["SERVED", "INCOMMING", "PREPARING", "FOODREADY"],
+                in: ["SERVED", "INCOMMING", "PREPARING", "FOODREADY", "ONHOLD"],
               },
             },
             data: {
@@ -1058,6 +1058,7 @@ export const completebillingOrderSession = async (
 
   await Promise.all([
     redis.del(`active-os-${outletId}`),
+    redis.del(`liv-online-${outletId}`),
     redis.del(`liv-o-${outletId}`),
     redis.del(`tables-${outletId}`),
     redis.del(`a-${outletId}`),
@@ -1297,14 +1298,35 @@ export interface CartItems {
   }[];
 }
 
-export const calculateTotalsForTakewayAndDelivery = (orders: CartItems[]) => {
+export const calculateTotalsForTakewayAndDelivery = (
+  orders: CartItems[],
+  deliveryFee: number,
+  packingFee: number,
+  orderType: string
+) => {
   const subtotal = orders?.reduce((acc, order) => acc + order?.price, 0);
   const sgst = subtotal * orders?.reduce((acc, order) => acc + order?.gst, 0);
   const cgst = subtotal * orders?.reduce((acc, order) => acc + order?.gst, 0);
   const total = subtotal + sgst + cgst;
   const tax = cgst + sgst;
-  const roundedTotal = Math.floor(total); // Rounded down total
+  const restaurantCharges =
+    orderType === "DELIVERY"
+      ? deliveryFee + packingFee
+      : orderType === "TAKEAWAY"
+      ? packingFee
+      : 0;
+  const roundedTotal = Math.floor(total + restaurantCharges); // Rounded down total
   const roundedDifference = parseFloat((total - roundedTotal).toFixed(2)); // Difference between total and roundedTotal
 
-  return { subtotal, sgst, cgst, total, tax, roundedTotal, roundedDifference };
+  return {
+    subtotal,
+    sgst,
+    cgst,
+    total,
+    tax,
+    deliveryFee,
+    packingFee,
+    roundedTotal,
+    roundedDifference,
+  };
 };
