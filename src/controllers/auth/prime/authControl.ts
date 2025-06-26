@@ -418,6 +418,9 @@ export const getCustomerOrdersById = async (req: Request, res: Response) => {
       isPaid: session?.isPaid,
       subTotal: session?.subTotal,
       paymentMethod: session?.paymentMethod,
+      deliveryFee: session?.deliveryFee,
+      packingFee: session?.packingFee,
+      paymentMode: session?.paymentMode,
       orders: session?.orders?.map((order) => ({
         id: order?.generatedOrderId,
         status: order?.orderStatus,
@@ -469,6 +472,9 @@ export const getCurrentOrderForCustomer = async (
       isPaid: session?.isPaid,
       subTotal: session?.subTotal,
       paymentMethod: session?.paymentMethod,
+      deliveryFee: session?.deliveryFee,
+      packingFee: session?.packingFee,
+      paymentMode: session?.paymentMode,
       orders: session?.orders?.map((order) => ({
         id: order?.generatedOrderId,
         orderStatus: order?.orderStatus,

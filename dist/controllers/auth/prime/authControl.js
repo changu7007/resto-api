@@ -386,6 +386,9 @@ const getCustomerOrdersById = (req, res) => __awaiter(void 0, void 0, void 0, fu
             isPaid: session === null || session === void 0 ? void 0 : session.isPaid,
             subTotal: session === null || session === void 0 ? void 0 : session.subTotal,
             paymentMethod: session === null || session === void 0 ? void 0 : session.paymentMethod,
+            deliveryFee: session === null || session === void 0 ? void 0 : session.deliveryFee,
+            packingFee: session === null || session === void 0 ? void 0 : session.packingFee,
+            paymentMode: session === null || session === void 0 ? void 0 : session.paymentMode,
             orders: (_a = session === null || session === void 0 ? void 0 : session.orders) === null || _a === void 0 ? void 0 : _a.map((order) => ({
                 id: order === null || order === void 0 ? void 0 : order.generatedOrderId,
                 status: order === null || order === void 0 ? void 0 : order.orderStatus,
@@ -429,6 +432,9 @@ const getCurrentOrderForCustomer = (req, res) => __awaiter(void 0, void 0, void 
             isPaid: session === null || session === void 0 ? void 0 : session.isPaid,
             subTotal: session === null || session === void 0 ? void 0 : session.subTotal,
             paymentMethod: session === null || session === void 0 ? void 0 : session.paymentMethod,
+            deliveryFee: session === null || session === void 0 ? void 0 : session.deliveryFee,
+            packingFee: session === null || session === void 0 ? void 0 : session.packingFee,
+            paymentMode: session === null || session === void 0 ? void 0 : session.paymentMode,
             orders: (_b = session === null || session === void 0 ? void 0 : session.orders) === null || _b === void 0 ? void 0 : _b.map((order) => ({
                 id: order === null || order === void 0 ? void 0 : order.generatedOrderId,
                 orderStatus: order === null || order === void 0 ? void 0 : order.orderStatus,
