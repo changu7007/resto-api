@@ -1278,6 +1278,7 @@ export const updateItembyId = async (req: Request, res: Response) => {
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
+    redis.del(`${outletId}-categories`),
     redis.del(`o-d-${outletId}-categories`),
   ]);
 
@@ -1461,6 +1462,7 @@ export const postItem = async (req: Request, res: Response) => {
     redis.del(`${outletId}-all-items`),
     redis.del(`${outletId}-all-items-online-and-delivery`),
     redis.del(`o-${outletId}-categories`),
+    redis.del(`${outletId}-categories`),
     redis.del(`o-d-${outletId}-categories`),
   ]);
 

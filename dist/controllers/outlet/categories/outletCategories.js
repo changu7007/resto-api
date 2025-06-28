@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteCategory = exports.updateCategory = exports.createCategory = exports.getAllDomainCategories = exports.getAllCategories = void 0;
+exports.deleteCategory = exports.updateCategory = exports.createCategory = exports.getAllDomainCategories = exports.getAllCategories = exports.getCategories = void 0;
 const outlet_1 = require("../../../lib/outlet");
 const not_found_1 = require("../../../exceptions/not-found");
 const root_1 = require("../../../exceptions/root");
@@ -18,6 +18,28 @@ const bad_request_1 = require("../../../exceptions/bad-request");
 const redis_1 = require("../../../services/redis");
 const get_items_1 = require("../../../lib/outlet/get-items");
 const utils_1 = require("../../../lib/utils");
+const getCategories = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { outletId } = req.params;
+    const categories = yield redis_1.redis.get(`${outletId}-categories`);
+    if (categories) {
+        return res.json({
+            success: true,
+            categories: JSON.parse(categories),
+            message: "POWEREDUP ⚡",
+        });
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    const getCategories = yield (0, get_items_1.getOAllCategoriesToRedis)(outlet.id);
+    return res.json({
+        success: true,
+        categories: getCategories,
+        message: "POWERINGUP.. ✅",
+    });
+});
+exports.getCategories = getCategories;
 const getAllCategories = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { outletId } = req.params;
     const categories = yield redis_1.redis.get(`o-${outletId}-categories`);
@@ -102,6 +124,7 @@ const createCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
     });
     yield Promise.all([
         redis_1.redis.del(`o-${outlet.id}-categories`),
+        redis_1.redis.del(`${outlet.id}-categories`),
         redis_1.redis.del(`o-d-${outletId}-categories`),
     ]);
     return res.json({
@@ -157,6 +180,7 @@ const updateCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
     });
     yield Promise.all([
         redis_1.redis.del(`o-${outlet.id}-categories`),
+        redis_1.redis.del(`${outlet.id}-categories`),
         redis_1.redis.del(`o-d-${outletId}-categories`),
     ]);
     return res.json({
@@ -184,6 +208,7 @@ const deleteCategory = (req, res) => __awaiter(void 0, void 0, void 0, function*
     yield Promise.all([
         redis_1.redis.del(`o-${outlet.id}-categories`),
         redis_1.redis.del(`o-d-${outletId}-categories`),
+        redis_1.redis.del(`${outlet.id}-categories`),
     ]);
     return res.json({
         success: true,

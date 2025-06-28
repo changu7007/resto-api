@@ -132,6 +132,7 @@ outletRoute.post("/:outletId/get-table-variants", auth_1.isAuthMiddelware, (0, e
 outletRoute.post("/:outletId/get-table-addons", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getAddonsForTable));
 outletRoute.post("/:outletId/add-to-fav", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.addItemToUserFav));
 outletRoute.get("/:outletId/get-categories", (0, error_handler_1.errorHandler)(outletCategories_1.getAllCategories));
+outletRoute.get("/:outletId/categories", (0, error_handler_1.errorHandler)(outletCategories_1.getCategories));
 outletRoute.get("/:outletId/get-menu-variants", (0, error_handler_1.errorHandler)(itemsController_1.getMenuVariants));
 outletRoute.get("/:outletId/get-addons-items", (0, error_handler_1.errorHandler)(itemsController_1.getSingleAddons));
 outletRoute.get("/:outletId/items/:itemId", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(itemsController_1.getItemById));

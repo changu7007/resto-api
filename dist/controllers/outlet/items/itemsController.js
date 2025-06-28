@@ -1024,6 +1024,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
+        redis_1.redis.del(`${outletId}-categories`),
         redis_1.redis.del(`o-d-${outletId}-categories`),
     ]);
     categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {
@@ -1161,6 +1162,7 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         redis_1.redis.del(`${outletId}-all-items`),
         redis_1.redis.del(`${outletId}-all-items-online-and-delivery`),
         redis_1.redis.del(`o-${outletId}-categories`),
+        redis_1.redis.del(`${outletId}-categories`),
         redis_1.redis.del(`o-d-${outletId}-categories`),
     ]);
     categories === null || categories === void 0 ? void 0 : categories.map((c) => __awaiter(void 0, void 0, void 0, function* () {

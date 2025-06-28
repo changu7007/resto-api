@@ -384,6 +384,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
     return res.json({
         success: true,
         orderSessionId: result.id,
+        billId: result === null || result === void 0 ? void 0 : result.billId,
         kotNumber: orderId,
         message: "Order Created from Captain ✅",
     });

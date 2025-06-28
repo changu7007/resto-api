@@ -9,10 +9,48 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFetchAllNotificationToRedis = exports.getOAllCategories = exports.getOAllItems = exports.getOAllItemsForOnlineAndDelivery = exports.getOAllMenuCategoriesForOnlineAndDeliveryToRedis = exports.getOAllMenuCategoriesToRedis = void 0;
+exports.getFetchAllNotificationToRedis = exports.getOAllCategories = exports.getOAllItems = exports.getOAllItemsForOnlineAndDelivery = exports.getOAllMenuCategoriesForOnlineAndDeliveryToRedis = exports.getOAllMenuCategoriesToRedis = exports.getOAllCategoriesToRedis = void 0;
 const __1 = require("../..");
 const redis_1 = require("../../services/redis");
 const get_inventory_1 = require("./get-inventory");
+const getOAllCategoriesToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
+    const getCategories = yield __1.prismaDB.category.findMany({
+        where: {
+            restaurantId: outletId,
+        },
+        select: {
+            id: true,
+            name: true,
+            description: true,
+            createdAt: true,
+            updatedAt: true,
+            menuItems: {
+                select: {
+                    _count: true,
+                },
+            },
+            printLocationId: true,
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+    const formattedCategories = getCategories.map((category) => {
+        var _a;
+        return ({
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            createdAt: category.createdAt,
+            updatedAt: category.updatedAt,
+            menuItems: (_a = category === null || category === void 0 ? void 0 : category.menuItems) === null || _a === void 0 ? void 0 : _a.length,
+            printLocationId: category === null || category === void 0 ? void 0 : category.printLocationId,
+        });
+    });
+    yield redis_1.redis.set(`${outletId}-categories`, JSON.stringify(formattedCategories), "EX", 300);
+    return formattedCategories;
+});
+exports.getOAllCategoriesToRedis = getOAllCategoriesToRedis;
 const getOAllMenuCategoriesToRedis = (outletId) => __awaiter(void 0, void 0, void 0, function* () {
     const getCategories = yield __1.prismaDB.category.findMany({
         where: {

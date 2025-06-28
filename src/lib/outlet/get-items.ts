@@ -3,6 +3,48 @@ import { FoodMenu } from "../../controllers/outlet/items/itemsController";
 import { redis } from "../../services/redis";
 import { calculateFoodServerForItemRecipe } from "./get-inventory";
 
+export const getOAllCategoriesToRedis = async (outletId: string) => {
+  const getCategories = await prismaDB.category.findMany({
+    where: {
+      restaurantId: outletId,
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      createdAt: true,
+      updatedAt: true,
+      menuItems: {
+        select: {
+          _count: true,
+        },
+      },
+      printLocationId: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  const formattedCategories = getCategories.map((category) => ({
+    id: category.id,
+    name: category.name,
+    description: category.description,
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
+    menuItems: category?.menuItems?.length,
+    printLocationId: category?.printLocationId,
+  }));
+
+  await redis.set(
+    `${outletId}-categories`,
+    JSON.stringify(formattedCategories),
+    "EX",
+    300
+  );
+  return formattedCategories;
+};
+
 export const getOAllMenuCategoriesToRedis = async (outletId: string) => {
   const getCategories = await prismaDB.category.findMany({
     where: {

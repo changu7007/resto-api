@@ -6,10 +6,38 @@ import { prismaDB } from "../../..";
 import { BadRequestsException } from "../../../exceptions/bad-request";
 import { redis } from "../../../services/redis";
 import {
+  getOAllCategoriesToRedis,
   getOAllMenuCategoriesForOnlineAndDeliveryToRedis,
   getOAllMenuCategoriesToRedis,
 } from "../../../lib/outlet/get-items";
 import { generateSlug } from "../../../lib/utils";
+
+export const getCategories = async (req: Request, res: Response) => {
+  const { outletId } = req.params;
+  const categories = await redis.get(`${outletId}-categories`);
+
+  if (categories) {
+    return res.json({
+      success: true,
+      categories: JSON.parse(categories),
+      message: "POWEREDUP ⚡",
+    });
+  }
+
+  const outlet = await getOutletById(outletId);
+
+  if (!outlet?.id) {
+    throw new NotFoundException("Outlet Not Found", ErrorCode.OUTLET_NOT_FOUND);
+  }
+
+  const getCategories = await getOAllCategoriesToRedis(outlet.id);
+
+  return res.json({
+    success: true,
+    categories: getCategories,
+    message: "POWERINGUP.. ✅",
+  });
+};
 
 export const getAllCategories = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -22,6 +50,7 @@ export const getAllCategories = async (req: Request, res: Response) => {
       message: "POWEREDUP ⚡",
     });
   }
+
   const outlet = await getOutletById(outletId);
 
   if (!outlet?.id) {
@@ -125,6 +154,7 @@ export const createCategory = async (req: Request, res: Response) => {
 
   await Promise.all([
     redis.del(`o-${outlet.id}-categories`),
+    redis.del(`${outlet.id}-categories`),
     redis.del(`o-d-${outletId}-categories`),
   ]);
 
@@ -202,6 +232,8 @@ export const updateCategory = async (req: Request, res: Response) => {
 
   await Promise.all([
     redis.del(`o-${outlet.id}-categories`),
+    redis.del(`${outlet.id}-categories`),
+
     redis.del(`o-d-${outletId}-categories`),
   ]);
 
@@ -236,6 +268,7 @@ export const deleteCategory = async (req: Request, res: Response) => {
   await Promise.all([
     redis.del(`o-${outlet.id}-categories`),
     redis.del(`o-d-${outletId}-categories`),
+    redis.del(`${outlet.id}-categories`),
   ]);
 
   return res.json({

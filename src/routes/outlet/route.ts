@@ -84,6 +84,7 @@ import {
   deleteCategory,
   getAllCategories,
   getAllDomainCategories,
+  getCategories,
   updateCategory,
 } from "../../controllers/outlet/categories/outletCategories";
 import {
@@ -735,6 +736,7 @@ outletRoute.post(
   errorHandler(addItemToUserFav)
 );
 outletRoute.get("/:outletId/get-categories", errorHandler(getAllCategories));
+outletRoute.get("/:outletId/categories", errorHandler(getCategories));
 outletRoute.get("/:outletId/get-menu-variants", errorHandler(getMenuVariants));
 outletRoute.get("/:outletId/get-addons-items", errorHandler(getSingleAddons));
 outletRoute.get(

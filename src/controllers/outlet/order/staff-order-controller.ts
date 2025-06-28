@@ -521,6 +521,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     orderSessionId: result.id,
+    billId: result?.billId,
     kotNumber: orderId,
     message: "Order Created from Captain ✅",
   });
