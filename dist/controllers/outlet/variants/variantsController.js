@@ -26,6 +26,9 @@ const getVariants = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         where: {
             restaurantId: outlet.id,
         },
+        orderBy: {
+            createdAt: "desc",
+        },
     });
     return res.json({
         success: true,

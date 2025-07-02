@@ -164,7 +164,7 @@ export const getOAllItemsForOnlineAndDelivery = async (outletId: string) => {
 
   const formattedItems: FoodMenu[] = await Promise.all(
     getItems
-      ?.filter((i) => i?.isDineIn === true)
+      ?.filter((i) => i?.isOnline === true && i?.isDelivery === true)
       ?.map(async (menuItem) => {
         const servings = menuItem?.itemRecipeId
           ? await calculateFoodServerForItemRecipe(

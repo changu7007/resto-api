@@ -835,6 +835,8 @@ model MenuItem {
   type             FoodRole
   sku              Float?
   images           Image[]
+  createdBy        String?
+  lastUpdatedBy    String?
   orderItem        OrderItem[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt

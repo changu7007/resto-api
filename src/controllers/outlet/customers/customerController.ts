@@ -279,11 +279,7 @@ const customerForm = z.object({
     .string({ required_error: "Phone number is required" })
     .regex(/^[0-9]{10}$/, "Phone number must be 10 digits"),
   email: z.string().email("Invalid email format").optional().or(z.literal("")),
-  dob: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
-    .optional()
-    .or(z.literal("")),
+  dob: z.string().optional().or(z.literal("")),
   programId: z.string().optional(),
 });
 

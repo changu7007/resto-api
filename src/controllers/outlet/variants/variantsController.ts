@@ -19,6 +19,9 @@ export const getVariants = async (req: Request, res: Response) => {
     where: {
       restaurantId: outlet.id,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
   return res.json({

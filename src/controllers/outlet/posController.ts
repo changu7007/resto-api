@@ -186,7 +186,28 @@ export const posGetRegisterStatus = async (req: Request, res: Response) => {
     include: {
       transactions: {
         include: {
-          order: true,
+          order: {
+            select: {
+              id: true,
+              billId: true,
+              orderType: true,
+              subTotal: true,
+              paymentMethod: true,
+              orders: {
+                select: {
+                  orderItems: {
+                    select: {
+                      name: true,
+                      quantity: true,
+                      isVariants: true,
+                      selectedVariant: true,
+                    },
+                  },
+                },
+              },
+              createdAt: true,
+            },
+          },
           expense: true,
         },
         orderBy: {

@@ -355,6 +355,7 @@ const getItemsBySearch = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.getItemsBySearch = getItemsBySearch;
 const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
@@ -433,9 +434,9 @@ const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function
         },
         orderBy,
     });
-    console.log(`Get Items: ${getItems.length}`);
+    console.log(`Get Items: ${getItems.length} ${(_a = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _a === void 0 ? void 0 : _a.name}`);
     const formattedMenuItems = getItems === null || getItems === void 0 ? void 0 : getItems.map((item) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e;
         return ({
             id: item === null || item === void 0 ? void 0 : item.id,
             name: item === null || item === void 0 ? void 0 : item.name,
@@ -455,7 +456,11 @@ const getItemForTable = (req, res) => __awaiter(void 0, void 0, void 0, function
                 });
             }),
             createdAt: item === null || item === void 0 ? void 0 : item.createdAt,
-            createdBy: "Admin",
+            updatedAt: item === null || item === void 0 ? void 0 : item.updatedAt,
+            createdBy: (item === null || item === void 0 ? void 0 : item.createdBy) ? item === null || item === void 0 ? void 0 : item.createdBy : (_d = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _d === void 0 ? void 0 : _d.name,
+            lastUpdatedBy: (item === null || item === void 0 ? void 0 : item.lastUpdatedBy)
+                ? item === null || item === void 0 ? void 0 : item.lastUpdatedBy
+                : (_e = outlet === null || outlet === void 0 ? void 0 : outlet.users) === null || _e === void 0 ? void 0 : _e.name,
             type: item === null || item === void 0 ? void 0 : item.type,
             price: item === null || item === void 0 ? void 0 : item.price,
         });
@@ -811,10 +816,12 @@ const menuSchema = zod_1.z.object({
     isOnline: zod_1.z.boolean().optional(),
 });
 const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _b, _c, _d;
     const { itemId, outletId } = req.params;
     const validateFields = menuSchema.parse(req.body);
     const validFoodTypes = Object.values(client_1.FoodRole);
+    // @ts-ignore
+    const updatedBy = `${(_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.name}-${(_c = req === null || req === void 0 ? void 0 : req.user) === null || _c === void 0 ? void 0 : _c.role}`;
     if (!validateFields.name) {
         throw new bad_request_1.BadRequestsException("Name is Required", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
@@ -930,7 +937,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
         : [];
     const addonsToDelete = menuItem.menuGroupAddOns.filter((ea) => !addonIdsToKeep.includes(ea.id));
     // Prepare updates for images
-    const imageUpdates = (_a = validateFields === null || validateFields === void 0 ? void 0 : validateFields.images) === null || _a === void 0 ? void 0 : _a.map((image) => {
+    const imageUpdates = (_d = validateFields === null || validateFields === void 0 ? void 0 : validateFields.images) === null || _d === void 0 ? void 0 : _d.map((image) => {
         const existingImage = menuItem.images.find((ei) => ei.url === (image === null || image === void 0 ? void 0 : image.url));
         if (existingImage) {
             return __1.prismaDB.image.update({
@@ -988,6 +995,7 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 grossProfit: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.isVariants)
                     ? null
                     : validateFields === null || validateFields === void 0 ? void 0 : validateFields.grossProfit,
+                lastUpdatedBy: updatedBy,
             },
         });
         // Handle variants
@@ -1037,7 +1045,10 @@ const updateItembyId = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.updateItembyId = updateItembyId;
 const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _e, _f;
     const { outletId } = req.params;
+    // @ts-ignore
+    const createdBy = `${(_e = req === null || req === void 0 ? void 0 : req.user) === null || _e === void 0 ? void 0 : _e.name}-${(_f = req === null || req === void 0 ? void 0 : req.user) === null || _f === void 0 ? void 0 : _f.role}`;
     const validateFields = menuSchema.parse(req.body);
     const validFoodTypes = Object.values(client_1.FoodRole);
     if (!validateFields.name) {
@@ -1148,6 +1159,8 @@ const postItem = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     : undefined,
             },
             restaurantId: outlet.id,
+            createdBy: createdBy,
+            lastUpdatedBy: createdBy,
         },
     });
     const categories = yield __1.prismaDB.category.findMany({
@@ -1422,11 +1435,11 @@ const getMenuVariants = (req, res) => __awaiter(void 0, void 0, void 0, function
 });
 exports.getMenuVariants = getMenuVariants;
 const addItemToUserFav = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b;
+    var _g;
     const { id } = req.body;
     const { outletId } = req.params;
     // @ts-ignore
-    const userId = (_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id;
+    const userId = (_g = req === null || req === void 0 ? void 0 : req.user) === null || _g === void 0 ? void 0 : _g.id;
     yield redis_1.redis.del(`user-favitems-${userId}`);
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
@@ -1673,6 +1686,7 @@ const enableOnline = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         },
         data: {
             isOnline: true,
+            isDelivery: true,
         },
     });
     const categories = yield __1.prismaDB.category.findMany({
@@ -1715,6 +1729,7 @@ const disableOnline = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         },
         data: {
             isOnline: false,
+            isDelivery: false,
         },
     });
     const categories = yield __1.prismaDB.category.findMany({

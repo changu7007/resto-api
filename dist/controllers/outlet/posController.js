@@ -149,7 +149,28 @@ const posGetRegisterStatus = (req, res) => __awaiter(void 0, void 0, void 0, fun
         include: {
             transactions: {
                 include: {
-                    order: true,
+                    order: {
+                        select: {
+                            id: true,
+                            billId: true,
+                            orderType: true,
+                            subTotal: true,
+                            paymentMethod: true,
+                            orders: {
+                                select: {
+                                    orderItems: {
+                                        select: {
+                                            name: true,
+                                            quantity: true,
+                                            isVariants: true,
+                                            selectedVariant: true,
+                                        },
+                                    },
+                                },
+                            },
+                            createdAt: true,
+                        },
+                    },
                     expense: true,
                 },
                 orderBy: {

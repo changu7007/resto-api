@@ -565,7 +565,7 @@ export const getItemForTable = async (req: Request, res: Response) => {
     orderBy,
   });
 
-  console.log(`Get Items: ${getItems.length}`);
+  console.log(`Get Items: ${getItems.length} ${outlet?.users?.name}`);
 
   const formattedMenuItems = getItems?.map((item) => ({
     id: item?.id,
@@ -583,7 +583,11 @@ export const getItemForTable = async (req: Request, res: Response) => {
       price: variant?.price,
     })),
     createdAt: item?.createdAt,
-    createdBy: "Admin",
+    updatedAt: item?.updatedAt,
+    createdBy: item?.createdBy ? item?.createdBy : outlet?.users?.name,
+    lastUpdatedBy: item?.lastUpdatedBy
+      ? item?.lastUpdatedBy
+      : outlet?.users?.name,
     type: item?.type,
     price: item?.price,
   }));
@@ -1011,6 +1015,9 @@ export const updateItembyId = async (req: Request, res: Response) => {
 
   const validFoodTypes = Object.values(FoodRole);
 
+  // @ts-ignore
+  const updatedBy = `${req?.user?.name}-${req?.user?.role}`;
+
   if (!validateFields.name) {
     throw new BadRequestsException(
       "Name is Required",
@@ -1237,6 +1244,7 @@ export const updateItembyId = async (req: Request, res: Response) => {
         grossProfit: validateFields?.isVariants
           ? null
           : validateFields?.grossProfit,
+        lastUpdatedBy: updatedBy,
       },
     });
 
@@ -1294,6 +1302,9 @@ export const updateItembyId = async (req: Request, res: Response) => {
 
 export const postItem = async (req: Request, res: Response) => {
   const { outletId } = req.params;
+
+  // @ts-ignore
+  const createdBy = `${req?.user?.name}-${req?.user?.role}`;
 
   const validateFields = menuSchema.parse(req.body);
 
@@ -1446,6 +1457,8 @@ export const postItem = async (req: Request, res: Response) => {
             : undefined,
       },
       restaurantId: outlet.id,
+      createdBy: createdBy,
+      lastUpdatedBy: createdBy,
     },
   });
 
@@ -2063,6 +2076,7 @@ export const enableOnline = async (req: Request, res: Response) => {
     },
     data: {
       isOnline: true,
+      isDelivery: true,
     },
   });
 
@@ -2114,6 +2128,7 @@ export const disableOnline = async (req: Request, res: Response) => {
     },
     data: {
       isOnline: false,
+      isDelivery: false,
     },
   });
 

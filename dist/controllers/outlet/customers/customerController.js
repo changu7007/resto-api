@@ -220,11 +220,7 @@ const customerForm = zod_1.z.object({
         .string({ required_error: "Phone number is required" })
         .regex(/^[0-9]{10}$/, "Phone number must be 10 digits"),
     email: zod_1.z.string().email("Invalid email format").optional().or(zod_1.z.literal("")),
-    dob: zod_1.z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
-        .optional()
-        .or(zod_1.z.literal("")),
+    dob: zod_1.z.string().optional().or(zod_1.z.literal("")),
     programId: zod_1.z.string().optional(),
 });
 const createLoyaltyProgram = (restaurantCustomerId, programId, existingPoints) => __awaiter(void 0, void 0, void 0, function* () {

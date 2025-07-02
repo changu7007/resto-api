@@ -158,7 +158,7 @@ const getOAllItemsForOnlineAndDelivery = (outletId) => __awaiter(void 0, void 0,
             },
         },
     });
-    const formattedItems = yield Promise.all((_a = getItems === null || getItems === void 0 ? void 0 : getItems.filter((i) => (i === null || i === void 0 ? void 0 : i.isDineIn) === true)) === null || _a === void 0 ? void 0 : _a.map((menuItem) => __awaiter(void 0, void 0, void 0, function* () {
+    const formattedItems = yield Promise.all((_a = getItems === null || getItems === void 0 ? void 0 : getItems.filter((i) => (i === null || i === void 0 ? void 0 : i.isOnline) === true && (i === null || i === void 0 ? void 0 : i.isDelivery) === true)) === null || _a === void 0 ? void 0 : _a.map((menuItem) => __awaiter(void 0, void 0, void 0, function* () {
         var _b, _c, _d, _e, _f, _g, _h, _j;
         const servings = (menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipeId)
             ? yield (0, get_inventory_1.calculateFoodServerForItemRecipe)(menuItem === null || menuItem === void 0 ? void 0 : menuItem.itemRecipeId, outletId)
