@@ -282,6 +282,7 @@ outletRoute.get("/:outletId/get-financial", auth_1.isAuthMiddelware, (0, error_h
 outletRoute.post("/:outletId/expenses/get-all-table-expenses", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.getAllExpensesForTable));
 outletRoute.get("/:outletId/expenses/get-category-stats-expenses", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.getCategoryExpensesStats));
 outletRoute.post("/:outletId/expenses/create-expense", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.createExpenses));
+outletRoute.post("/:outletId/expenses/app-create-expense", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.createAppExpenses));
 outletRoute.patch("/:outletId/expenses/update-expense/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.updateExpenses));
 outletRoute.delete("/:outletId/expenses/delete-expense/:id", auth_1.isAuthMiddelware, (0, error_handler_1.errorHandler)(expenseController_1.deleteExpenses));
 //EXPENSES GET,CREATE END

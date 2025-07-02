@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCategoryExpensesStats = exports.getAllExpensesForTable = exports.deleteExpenses = exports.updateExpenses = exports.createExpenses = void 0;
+exports.getCategoryExpensesStats = exports.getAllExpensesForTable = exports.deleteExpenses = exports.updateExpenses = exports.createAppExpenses = exports.createExpenses = void 0;
 const zod_1 = require("zod");
 const bad_request_1 = require("../../../exceptions/bad-request");
 const root_1 = require("../../../exceptions/root");
@@ -60,6 +60,44 @@ const expenseSchema = zod_1.z.object({
     cashRegisterId: zod_1.z
         .string({ message: "Cash Register is Not Open" })
         .min(1, { message: "Cash Register ID is Required" }),
+});
+const appExpenseSchema = zod_1.z.object({
+    category: zod_1.z.enum([
+        "Ingredients",
+        "Utilities",
+        "Salaries",
+        "Equipment",
+        "Marketing",
+        "Rent",
+        "Miscellaneous",
+    ], { required_error: "Please select a category." }),
+    restock: zod_1.z.boolean().optional(),
+    purchaseId: zod_1.z.string().optional(),
+    vendorId: zod_1.z.string().optional(),
+    rawMaterials: zod_1.z.array(zod_1.z.object({
+        id: zod_1.z.string().optional(),
+        rawMaterialId: zod_1.z.string().min(1, { message: "Raw Material Is Required" }),
+        rawMaterialName: zod_1.z.string().min(1, { message: "Raw Material Name" }),
+        unitName: zod_1.z.string().min(1, { message: "Unit Name is required" }),
+        requestUnitId: zod_1.z.string().min(0, { message: "Request Unit is Required" }),
+        requestQuantity: zod_1.z.coerce
+            .number()
+            .min(0, { message: "Request Quantity is Required" }),
+        netRate: zod_1.z.number().optional(),
+        gstType: zod_1.z.nativeEnum(client_1.GstType),
+        taxAmount: zod_1.z.number().optional(),
+        totalAmount: zod_1.z.number().optional(),
+    })),
+    amount: zod_1.z.coerce
+        .number()
+        .min(1, { message: "Amount should be greater than 0" }),
+    description: zod_1.z.string().min(3, {
+        message: "Description must be at least 3 characters.",
+    }),
+    attachments: zod_1.z.string().optional(),
+    paymentMethod: zod_1.z.enum(["CASH", "UPI", "DEBIT", "CREDIT"], {
+        required_error: " Payment Method Required.",
+    }),
 });
 const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
@@ -314,8 +352,239 @@ const createExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.createExpenses = createExpenses;
-const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const createAppExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _l, _m;
+    const { outletId } = req.params;
+    const { data: validateFields, error } = appExpenseSchema.safeParse(req.body);
+    if (error) {
+        throw new bad_request_1.BadRequestsException(error.errors[0].message, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.category) === "Ingredients" && !(validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId)) {
+        throw new bad_request_1.BadRequestsException("Vendor is required for Ingredients Expenses", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    if ((validateFields === null || validateFields === void 0 ? void 0 : validateFields.restock) &&
+        (!(validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) ||
+            (validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials.length) === 0 ||
+            ((_l = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _l === void 0 ? void 0 : _l.some((r) => !r.rawMaterialId)))) {
+        throw new bad_request_1.BadRequestsException("Raw Materials are required for Restocking", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
+    }
+    const outlet = yield (0, outlet_1.getOutletById)(outletId);
+    // @ts-ignore
+    let userId = (_m = req.user) === null || _m === void 0 ? void 0 : _m.id;
+    if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
+        throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
+    }
+    // if (userId !== outlet.adminId) {
+    //   throw new UnauthorizedException(
+    //     "Unauthorized Access",
+    //     ErrorCode.UNAUTHORIZED
+    //   );
+    // }
+    const result = yield __1.prismaDB.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        var _o, _p, _q, _r, _s, _t;
+        let purchaseId;
+        if (validateFields.category === "Ingredients" &&
+            (validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId) &&
+            (validateFields === null || validateFields === void 0 ? void 0 : validateFields.restock)) {
+            const invoiceNo = yield (0, outlet_1.generatePurchaseNo)(outlet.id);
+            const create = yield tx.purchase.create({
+                data: {
+                    restaurantId: outletId,
+                    // @ts-ignore
+                    createdBy: `${(_o = req === null || req === void 0 ? void 0 : req.user) === null || _o === void 0 ? void 0 : _o.name}-${(_p = req === null || req === void 0 ? void 0 : req.user) === null || _p === void 0 ? void 0 : _p.role}`,
+                    vendorId: validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId,
+                    invoiceNo: invoiceNo,
+                    purchaseStatus: "COMPLETED",
+                    purchaseItems: {
+                        create: validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials.map((item) => ({
+                            rawMaterialId: item === null || item === void 0 ? void 0 : item.rawMaterialId,
+                            rawMaterialName: item === null || item === void 0 ? void 0 : item.rawMaterialName,
+                            purchaseQuantity: item === null || item === void 0 ? void 0 : item.requestQuantity,
+                            purchaseUnitId: item === null || item === void 0 ? void 0 : item.requestUnitId,
+                            purchaseUnitName: item === null || item === void 0 ? void 0 : item.unitName,
+                            gstType: item === null || item === void 0 ? void 0 : item.gstType,
+                            netRate: item === null || item === void 0 ? void 0 : item.netRate,
+                            taxAmount: item === null || item === void 0 ? void 0 : item.taxAmount,
+                            purchasePrice: item === null || item === void 0 ? void 0 : item.totalAmount,
+                        })),
+                    },
+                    generatedAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amount,
+                    isPaid: true,
+                    paymentMethod: validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod,
+                    totalAmount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amount,
+                },
+            });
+            purchaseId = create === null || create === void 0 ? void 0 : create.id;
+            // Step 1: Restock raw materials and update `RecipeIngredient` costs
+            yield Promise.all((_q = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _q === void 0 ? void 0 : _q.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+                var _u, _v;
+                const rawMaterial = yield tx.rawMaterial.findFirst({
+                    where: {
+                        id: item.rawMaterialId,
+                        restaurantId: outlet === null || outlet === void 0 ? void 0 : outlet.id,
+                    },
+                    include: {
+                        RecipeIngredient: true,
+                    },
+                });
+                if (rawMaterial) {
+                    const newStock = Number((_u = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.currentStock) !== null && _u !== void 0 ? _u : 0) + (item === null || item === void 0 ? void 0 : item.requestQuantity);
+                    const newPricePerItem = Number(item.totalAmount) / Number(item.requestQuantity);
+                    yield tx.rawMaterial.update({
+                        where: {
+                            id: rawMaterial.id,
+                        },
+                        data: {
+                            currentStock: newStock,
+                            purchasedPrice: item.totalAmount,
+                            purchasedPricePerItem: newPricePerItem,
+                            purchasedUnit: item.unitName,
+                            lastPurchasedPrice: (_v = rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.purchasedPrice) !== null && _v !== void 0 ? _v : 0,
+                            purchasedStock: newStock,
+                        },
+                    });
+                    // Update related alerts to resolved
+                    yield tx.alert.deleteMany({
+                        where: {
+                            restaurantId: outlet.id,
+                            itemId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
+                            status: { in: ["PENDING", "ACKNOWLEDGED"] }, // Only resolve pending alerts
+                        },
+                    });
+                    const findRecipeIngredients = yield tx.recipeIngredient.findFirst({
+                        where: {
+                            rawMaterialId: rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.id,
+                        },
+                    });
+                    if (findRecipeIngredients) {
+                        const recipeCostWithQuantity = Number(findRecipeIngredients === null || findRecipeIngredients === void 0 ? void 0 : findRecipeIngredients.quantity) /
+                            Number(rawMaterial === null || rawMaterial === void 0 ? void 0 : rawMaterial.conversionFactor);
+                        const ingredientCost = recipeCostWithQuantity * newPricePerItem;
+                        // Update linked `RecipeIngredient` cost
+                        yield tx.recipeIngredient.updateMany({
+                            where: {
+                                rawMaterialId: rawMaterial.id,
+                            },
+                            data: {
+                                cost: ingredientCost,
+                            },
+                        });
+                    }
+                }
+            })));
+            // Step 2: Recalculate `ItemRecipe` gross margin and related fields
+            const recipesToUpdate = yield tx.itemRecipe.findMany({
+                where: {
+                    restaurantId: outlet.id,
+                    ingredients: {
+                        some: {
+                            rawMaterial: {
+                                restaurantId: outlet.id,
+                                id: {
+                                    in: (_r = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _r === void 0 ? void 0 : _r.map((item) => item.rawMaterialId),
+                                },
+                            },
+                        },
+                    },
+                },
+                include: {
+                    ingredients: {
+                        include: {
+                            rawMaterial: true,
+                        },
+                    },
+                },
+            });
+            yield Promise.all(recipesToUpdate.map((recipe) => __awaiter(void 0, void 0, void 0, function* () {
+                const totalCost = recipe.ingredients.reduce((sum, ingredient) => {
+                    var _a, _b;
+                    return sum +
+                        (Number(ingredient.quantity) /
+                            Number((_a = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _a === void 0 ? void 0 : _a.conversionFactor)) *
+                            Number((_b = ingredient === null || ingredient === void 0 ? void 0 : ingredient.rawMaterial) === null || _b === void 0 ? void 0 : _b.purchasedPricePerItem);
+                }, 0);
+                const grossMargin = Number(recipe.itemPrice) - totalCost;
+                yield tx.itemRecipe.update({
+                    where: {
+                        id: recipe.id,
+                    },
+                    data: {
+                        itemCost: totalCost,
+                        grossMargin,
+                    },
+                });
+                // Update linked entities
+                if (recipe.menuId) {
+                    yield tx.menuItem.update({
+                        where: {
+                            id: recipe.menuId,
+                            restaurantId: outlet.id,
+                        },
+                        data: {
+                            grossProfit: grossMargin,
+                        },
+                    });
+                }
+                if (recipe.menuVariantId) {
+                    yield tx.menuItemVariant.update({
+                        where: {
+                            id: recipe.menuVariantId,
+                            restaurantId: outlet.id,
+                        },
+                        data: {
+                            grossProfit: grossMargin,
+                        },
+                    });
+                }
+                if (recipe.addonItemVariantId) {
+                    yield tx.addOnVariants.update({
+                        where: {
+                            id: recipe.addonItemVariantId,
+                            restaurantId: outlet.id,
+                        },
+                        data: {
+                            grossProfit: grossMargin,
+                        },
+                    });
+                }
+            })));
+        }
+        const createExpense = yield tx.expenses.create({
+            data: {
+                restaurantId: outlet.id,
+                date: new Date(),
+                // @ts-ignore
+                createdBy: `${(_s = req === null || req === void 0 ? void 0 : req.user) === null || _s === void 0 ? void 0 : _s.name} (${(_t = req === null || req === void 0 ? void 0 : req.user) === null || _t === void 0 ? void 0 : _t.role})`,
+                vendorId: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId) ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId : null,
+                restock: (validateFields === null || validateFields === void 0 ? void 0 : validateFields.restock) ? validateFields === null || validateFields === void 0 ? void 0 : validateFields.restock : false,
+                attachments: validateFields === null || validateFields === void 0 ? void 0 : validateFields.attachments,
+                category: validateFields === null || validateFields === void 0 ? void 0 : validateFields.category,
+                amount: validateFields === null || validateFields === void 0 ? void 0 : validateFields.amount,
+                description: validateFields === null || validateFields === void 0 ? void 0 : validateFields.description,
+                purchaseId: purchaseId,
+                paymentMethod: validateFields === null || validateFields === void 0 ? void 0 : validateFields.paymentMethod,
+            },
+        });
+        return createExpense;
+    }), {
+        maxWait: 10000, // 10s maximum wait time
+        timeout: 30000, // 30s timeout
+    });
+    if (result === null || result === void 0 ? void 0 : result.id) {
+        yield redis_1.redis.publish("orderUpdated", JSON.stringify({ outletId }));
+        yield redis_1.redis.del(`alerts-${outletId}`);
+        yield redis_1.redis.del(`${outletId}-all-items`);
+        yield redis_1.redis.del(`${outletId}-all-items-online-and-delivery`);
+        ws_1.websocketManager.notifyClients(outletId, "NEW_ALERT");
+        return res.json({
+            success: true,
+            message: "Expense Created ✅",
+        });
+    }
+});
+exports.createAppExpenses = createAppExpenses;
+const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _w, _x;
     const { outletId, id } = req.params;
     const { data: validateFields, error } = expenseSchema.safeParse(req.body);
     if (error) {
@@ -325,12 +594,12 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
         (!(validateFields === null || validateFields === void 0 ? void 0 : validateFields.vendorId) ||
             !(validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) ||
             (validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials.length) === 0 ||
-            ((_l = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _l === void 0 ? void 0 : _l.some((r) => !r.rawMaterialId)))) {
+            ((_w = validateFields === null || validateFields === void 0 ? void 0 : validateFields.rawMaterials) === null || _w === void 0 ? void 0 : _w.some((r) => !r.rawMaterialId)))) {
         throw new bad_request_1.BadRequestsException("Vendor & Raw Materials Required for Expenses", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_m = req.user) === null || _m === void 0 ? void 0 : _m.id;
+    let userId = (_x = req.user) === null || _x === void 0 ? void 0 : _x.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -442,11 +711,11 @@ const updateExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.updateExpenses = updateExpenses;
 const deleteExpenses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _o;
+    var _y;
     const { outletId, id } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_o = req.user) === null || _o === void 0 ? void 0 : _o.id;
+    let userId = (_y = req.user) === null || _y === void 0 ? void 0 : _y.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }
@@ -600,11 +869,11 @@ const expenseCategoryColors = {
     Miscellaneous: "#64748b", // Gray
 };
 const getCategoryExpensesStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _p;
+    var _z;
     const { outletId } = req.params;
     const outlet = yield (0, outlet_1.getOutletById)(outletId);
     // @ts-ignore
-    let userId = (_p = req.user) === null || _p === void 0 ? void 0 : _p.id;
+    let userId = (_z = req.user) === null || _z === void 0 ? void 0 : _z.id;
     if (!(outlet === null || outlet === void 0 ? void 0 : outlet.id)) {
         throw new not_found_1.NotFoundException("Outlet Not Found", root_1.ErrorCode.OUTLET_NOT_FOUND);
     }

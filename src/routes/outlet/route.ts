@@ -233,6 +233,7 @@ import {
   verifyInvite,
 } from "../../controllers/auth/owner/appAuthController";
 import {
+  createAppExpenses,
   createExpenses,
   deleteExpenses,
   getAllExpensesForTable,
@@ -1380,6 +1381,11 @@ outletRoute.post(
   "/:outletId/expenses/create-expense",
   isAuthMiddelware,
   errorHandler(createExpenses)
+);
+outletRoute.post(
+  "/:outletId/expenses/app-create-expense",
+  isAuthMiddelware,
+  errorHandler(createAppExpenses)
 );
 outletRoute.patch(
   "/:outletId/expenses/update-expense/:id",
