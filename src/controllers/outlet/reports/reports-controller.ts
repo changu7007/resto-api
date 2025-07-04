@@ -297,6 +297,7 @@ async function formatDayReport(
               isPaid: true,
               splitPayments: true,
               sessionStatus: true,
+              subTotal: true,
             },
           },
         },
@@ -325,6 +326,7 @@ async function formatDayReport(
       prismaDB.order.groupBy({
         by: ["createdBy"],
         where: {
+          orderStatus: "COMPLETED",
           restaurantId,
           updatedAt: {
             gte: new Date(dateRange.from),
@@ -354,32 +356,69 @@ async function formatDayReport(
     NOTPAID: 0,
   };
 
+  // Group orders by session (billId), only include non-cancelled orders
+  const ordersBySession = new Map();
   for (const order of orders) {
-    if (
-      order.orderSession.sessionStatus === "COMPLETED" ||
-      order.orderSession.sessionStatus === "ONPROGRESS"
-    ) {
-      const method = order.orderSession?.paymentMethod || "NOTPAID";
-      if (method === "SPLIT") {
-        order.orderSession.splitPayments?.forEach((sp) => {
-          paymentTotals[sp.method] =
-            (paymentTotals[sp.method] || 0) + sp.amount;
-        });
-      } else {
+    if (order?.orderStatus === "CANCELLED") continue;
+    const billId = order.orderSession?.billId || order.id;
+    if (!ordersBySession.has(billId)) ordersBySession.set(billId, []);
+    ordersBySession.get(billId).push(order);
+  }
+
+  // Calculate paymentTotals
+  for (const [billId, sessionOrders] of ordersBySession.entries()) {
+    const session = sessionOrders[0].orderSession;
+    const method = session?.paymentMethod || "NOTPAID";
+    if (method === "SPLIT") {
+      // Only add split payments ONCE per session
+      session.splitPayments?.forEach((sp: any) => {
+        paymentTotals[sp.method] = (paymentTotals[sp.method] || 0) + sp.amount;
+      });
+      // Optionally, validate that sum of splitPayments == sum of order.totalAmount for this session
+      const totalOrderAmount = sessionOrders.reduce(
+        (sum: number, o: any) => sum + Number(o.totalAmount),
+        0
+      );
+      const splitTotal =
+        session.splitPayments?.reduce(
+          (sum: number, sp: any) => sum + sp.amount,
+          0
+        ) || 0;
+      if (totalOrderAmount !== splitTotal) {
+        console.warn(
+          `Split payment mismatch for bill ${billId}: orders total ${totalOrderAmount}, split total ${splitTotal}`
+        );
+      }
+    } else {
+      // For non-split, add each order's totalAmount to the payment method
+      for (const order of sessionOrders) {
         paymentTotals[method] =
           (paymentTotals[method] || 0) + Number(order.totalAmount);
       }
     }
   }
 
+  // Update revenue calculations to only consider non-cancelled orders
   const totalRevenue = orders
-    .filter((o) => o.orderSession?.sessionStatus === "COMPLETED")
+    .filter(
+      (o) =>
+        o.orderStatus !== "CANCELLED" &&
+        o.orderSession?.sessionStatus === "COMPLETED"
+    )
     .reduce((sum, o) => sum + Number(o.totalAmount), 0);
   const unpaidRevenue = orders
-    .filter((o) => o.orderSession?.sessionStatus === "ONPROGRESS")
+    .filter(
+      (o) =>
+        o.orderStatus !== "CANCELLED" &&
+        o.orderSession?.sessionStatus === "ONPROGRESS"
+    )
     .reduce((sum, o) => sum + Number(o.totalAmount), 0);
   const cancelledRevenue = orders
-    .filter((o) => o.orderSession?.sessionStatus === "CANCELLED")
+    .filter(
+      (o) =>
+        o.orderStatus === "CANCELLED" &&
+        o.orderSession?.sessionStatus === "CANCELLED"
+    )
     .reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
   const topItems = await prismaDB.orderItem.groupBy({
@@ -646,31 +685,59 @@ async function formatSalesData(
 
   // Fetch all required data in parallel
   const [orders, outlet] = await Promise.all([
-    prismaDB.order.findMany({
+    prismaDB.orderSession.findMany({
       where: {
         restaurantId: outletId,
-        orderSession: {
-          sessionStatus: {
-            in: ["COMPLETED", "ONPROGRESS"],
-          },
+        sessionStatus: {
+          in: ["COMPLETED", "ONPROGRESS"],
         },
         updatedAt: {
           gt: new Date(dateRange.from),
           lt: new Date(dateRange.to),
         },
       },
-      include: {
-        orderSession: {
+      select: {
+        billId: true,
+        orderType: true,
+        paymentMethod: true,
+        isPaid: true,
+        splitPayments: true,
+        sessionStatus: true,
+        subTotal: true,
+        createdAt: true,
+        createdBy: true,
+        orders: {
           select: {
-            billId: true,
-            paymentMethod: true,
-            isPaid: true,
-            splitPayments: true,
-            sessionStatus: true,
+            totalAmount: true,
           },
         },
       },
     }),
+    // prismaDB.order.findMany({
+    //   where: {
+    //     restaurantId: outletId,
+    //     orderSession: {
+    //       sessionStatus: {
+    //         in: ["COMPLETED", "ONPROGRESS"],
+    //       },
+    //     },
+    //     createdAt: {
+    //       gt: new Date(dateRange.from),
+    //       lt: new Date(dateRange.to),
+    //     },
+    //   },
+    //   include: {
+    //     orderSession: {
+    //       select: {
+    //         billId: true,
+    //         paymentMethod: true,
+    //         isPaid: true,
+    //         splitPayments: true,
+    //         sessionStatus: true,
+    //       },
+    //     },
+    //   },
+    // }),
     prismaDB.restaurant.findUnique({
       where: { id: outletId },
       select: {
@@ -686,66 +753,47 @@ async function formatSalesData(
   // Format the orders for table display
   const formattedOrders = orders.map((order) => {
     return {
-      billId: order.orderSession.billId || order.id,
+      billId: order?.billId,
       orderType: order.orderType,
-      paidStatus: order.orderSession.isPaid ? "Paid" : "Unpaid",
-      totalAmount: Number(order.totalAmount),
-      paymentMethod: order.orderSession.paymentMethod,
-      status: order?.orderSession?.sessionStatus,
-      createdAt: order?.updatedAt,
+      paidStatus: order?.isPaid ? "Paid" : "Unpaid",
+      totalAmount: Number(order?.subTotal),
+      paymentMethod: order.paymentMethod,
+      status: order?.sessionStatus,
+      createdAt: order?.createdAt,
       createdBy: order.createdBy,
     };
   });
 
-  const standardizedPayments: Record<StandardizedPaymentMethod, number> = {
+  const paymentTotals: Record<string, number> = {
     CASH: 0,
     UPI: 0,
     CARD: 0,
     NOTPAID: 0,
   };
 
-  // Process all orders to calculate payment method distribution
-  orders.forEach((order) => {
-    const paymentMethod = order.orderSession.paymentMethod as PaymentMethod;
-    const orderAmount = Number(order.totalAmount);
-
-    // Handle regular (non-split) payments
-    if (paymentMethod !== "SPLIT") {
-      const standardMethod = mapPaymentMethod(paymentMethod);
-      standardizedPayments[standardMethod] += orderAmount;
-    }
-    // Handle split payments by distributing amounts across standardized categories
-    else if (
-      order.paymentMethod === "SPLIT" &&
-      order.orderSession.splitPayments &&
-      order.orderSession.splitPayments.length > 0
+  for (const order of orders) {
+    if (
+      order.sessionStatus === "COMPLETED" ||
+      order.sessionStatus === "ONPROGRESS"
     ) {
-      order.orderSession.splitPayments.forEach((splitPayment) => {
-        const standardMethod = mapPaymentMethod(
-          splitPayment.method as PaymentMethod
-        );
-        standardizedPayments[standardMethod] += splitPayment.amount;
-      });
+      const method = order.paymentMethod || "NOTPAID";
+      if (method === "SPLIT") {
+        order.splitPayments?.forEach((sp) => {
+          paymentTotals[sp.method] =
+            (paymentTotals[sp.method] || 0) + sp.amount;
+        });
+      } else {
+        paymentTotals[method] =
+          (paymentTotals[method] || 0) +
+          Number(order.orders.reduce((acc, or) => acc + or.totalAmount, 0));
+      }
     }
-    // If it's marked as SPLIT but no split details available, put it in OTHER
-    else {
-      standardizedPayments["NOTPAID"] += orderAmount;
-    }
-  });
-
-  // Remove any payment methods with zero amounts
-  const paymentMethods = Object.fromEntries(
-    Object.entries(standardizedPayments).filter(([_, amount]) => amount > 0)
-  );
+  }
 
   // Calculate total revenue
   const totalRevenue = orders
-    .filter((o) => o.orderSession.sessionStatus === "COMPLETED")
-    .reduce((acc, order) => acc + Number(order.totalAmount), 0);
-
-  const unpaidRevenue = orders
-    .filter((o) => o.orderSession.sessionStatus === "ONPROGRESS")
-    .reduce((acc, order) => acc + Number(order.totalAmount), 0);
+    .filter((o) => o?.sessionStatus === "COMPLETED")
+    .reduce((acc, order) => acc + Number(order.subTotal), 0);
 
   return {
     restaurant: {
@@ -774,7 +822,7 @@ async function formatSalesData(
     ordersData: {
       formattedOrders,
       totalRevenue,
-      paymentMethods,
+      paymentMethods: paymentTotals,
     },
   };
 }

@@ -854,7 +854,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         tableId: tableId,
         isPaid: isPaid,
         restaurantId: getOutlet.id,
-        createdBy: `${findUser?.name} (${findUser?.role})`,
+        createdBy: `${findUser?.name}-(${findUser?.role})`,
         subTotal: isPaid ? totalAmount : null,
         amountReceived:
           isPaid && !isSplitPayment && receivedAmount ? receivedAmount : null,
@@ -874,7 +874,7 @@ export const postOrderForOwner = async (req: Request, res: Response) => {
         orders: {
           create: {
             restaurantId: getOutlet.id,
-            createdBy: `${findUser?.name} (${findUser?.role})`,
+            createdBy: `${findUser?.name}-(${findUser?.role})`,
             isPaid: isPaid,
             active: true,
             orderStatus:
@@ -1260,7 +1260,7 @@ export const postOrderForUser = async (req: Request, res: Response) => {
     const baseOrderData = {
       active: true,
       restaurantId: getOutlet.id,
-      createdBy: `${validCustomer.customer.name} (${validCustomer.customer.role})`,
+      createdBy: `${validCustomer.customer.name}-(${validCustomer.customer.role})`,
       isPaid: paymentId ? true : false,
       generatedOrderId: orderId,
       orderType,

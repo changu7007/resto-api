@@ -215,7 +215,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
         tableId: tableId,
         isPaid: isPaid,
         restaurantId: getOutlet.id,
-        createdBy: `${findStaff?.name} (${findStaff?.role})`,
+        createdBy: `${findStaff?.name}-(${findStaff?.role})`,
         subTotal: isPaid ? totalAmount : null,
         amountReceived:
           isPaid && !isSplitPayment && receivedAmount ? receivedAmount : null,
@@ -236,7 +236,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
           create: {
             restaurantId: getOutlet.id,
             staffId: staffId,
-            createdBy: `${findStaff?.name} (${findStaff?.role})`,
+            createdBy: `${findStaff?.name}-(${findStaff?.role})`,
             isPaid: isPaid,
             active: true,
             orderStatus:
@@ -1279,6 +1279,7 @@ export const existingOrderPatchForStaff = async (
   return res.json({
     success: true,
     orderSessionId: orderId,
+    billNo: getOrder?.billId,
     kotNumber: generatedId,
     message: "Order Added from Captain ✅",
   });

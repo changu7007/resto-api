@@ -143,7 +143,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 tableId: tableId,
                 isPaid: isPaid,
                 restaurantId: getOutlet.id,
-                createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name} (${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
+                createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name}-(${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
                 subTotal: isPaid ? totalAmount : null,
                 amountReceived: isPaid && !isSplitPayment && receivedAmount ? receivedAmount : null,
                 change: isPaid && !isSplitPayment && changeAmount ? changeAmount : null,
@@ -162,7 +162,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                     create: {
                         restaurantId: getOutlet.id,
                         staffId: staffId,
-                        createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name} (${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
+                        createdBy: `${findStaff === null || findStaff === void 0 ? void 0 : findStaff.name}-(${findStaff === null || findStaff === void 0 ? void 0 : findStaff.role})`,
                         isPaid: isPaid,
                         active: true,
                         orderStatus: isPaid === true && orderStatus === "COMPLETED"
@@ -934,6 +934,7 @@ const existingOrderPatchForStaff = (req, res) => __awaiter(void 0, void 0, void 
     return res.json({
         success: true,
         orderSessionId: orderId,
+        billNo: getOrder === null || getOrder === void 0 ? void 0 : getOrder.billId,
         kotNumber: generatedId,
         message: "Order Added from Captain ✅",
     });

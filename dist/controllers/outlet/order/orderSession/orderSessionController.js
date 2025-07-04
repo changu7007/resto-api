@@ -191,6 +191,7 @@ const billingOrderSession = (req, res) => __awaiter(void 0, void 0, void 0, func
                         data: {
                             active: false,
                             isPaid: true,
+                            paymentMethod: !isSplitPayment ? paymentMethod : null,
                             orderStatus: "COMPLETED",
                         },
                     },

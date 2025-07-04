@@ -673,7 +673,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 tableId: tableId,
                 isPaid: isPaid,
                 restaurantId: getOutlet.id,
-                createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
+                createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name}-(${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
                 subTotal: isPaid ? totalAmount : null,
                 amountReceived: isPaid && !isSplitPayment && receivedAmount ? receivedAmount : null,
                 change: isPaid && !isSplitPayment && changeAmount ? changeAmount : null,
@@ -691,7 +691,7 @@ const postOrderForOwner = (req, res) => __awaiter(void 0, void 0, void 0, functi
                 orders: {
                     create: {
                         restaurantId: getOutlet.id,
-                        createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name} (${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
+                        createdBy: `${findUser === null || findUser === void 0 ? void 0 : findUser.name}-(${findUser === null || findUser === void 0 ? void 0 : findUser.role})`,
                         isPaid: isPaid,
                         active: true,
                         orderStatus: isPaid === true && orderStatus === "COMPLETED"
@@ -963,7 +963,7 @@ const postOrderForUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         const baseOrderData = {
             active: true,
             restaurantId: getOutlet.id,
-            createdBy: `${validCustomer.customer.name} (${validCustomer.customer.role})`,
+            createdBy: `${validCustomer.customer.name}-(${validCustomer.customer.role})`,
             isPaid: paymentId ? true : false,
             generatedOrderId: orderId,
             orderType,

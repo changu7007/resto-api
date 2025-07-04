@@ -264,6 +264,7 @@ export const billingOrderSession = async (req: Request, res: Response) => {
             data: {
               active: false,
               isPaid: true,
+              paymentMethod: !isSplitPayment ? paymentMethod : null,
               orderStatus: "COMPLETED",
             },
           },
