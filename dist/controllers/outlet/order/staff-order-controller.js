@@ -55,6 +55,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
     if (isValid === true && !phoneNo) {
         throw new bad_request_1.BadRequestsException("please provide Phone No", root_1.ErrorCode.UNPROCESSABLE_ENTITY);
     }
+    console.log(`Payment Method: ${paymentMethod}`);
     // Authorization and basic validation
     // @ts-ignore
     if (staffId !== ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id)) {
@@ -139,7 +140,11 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                 phoneNo: phoneNo !== null && phoneNo !== void 0 ? phoneNo : null,
                 staffId: findStaff.id,
                 customerId: isValid === true ? customer === null || customer === void 0 ? void 0 : customer.id : null,
-                paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
+                paymentMethod: isPaid
+                    ? isSplitPayment
+                        ? "SPLIT"
+                        : paymentMethod
+                    : null,
                 tableId: tableId,
                 isPaid: isPaid,
                 restaurantId: getOutlet.id,
@@ -174,7 +179,11 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                         totalGrossProfit: totalGrossProfit,
                         generatedOrderId: orderId,
                         orderType: orderType,
-                        paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
+                        paymentMethod: isPaid
+                            ? isSplitPayment
+                                ? "SPLIT"
+                                : paymentMethod
+                            : null,
                         orderItems: {
                             create: orderItems === null || orderItems === void 0 ? void 0 : orderItems.map((item) => {
                                 var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;

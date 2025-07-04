@@ -87,6 +87,8 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     );
   }
 
+  console.log(`Payment Method: ${paymentMethod}`);
+
   // Authorization and basic validation
   // @ts-ignore
   if (staffId !== req.user?.id) {
@@ -211,7 +213,11 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
         phoneNo: phoneNo ?? null,
         staffId: findStaff.id,
         customerId: isValid === true ? customer?.id : null,
-        paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
+        paymentMethod: isPaid
+          ? isSplitPayment
+            ? "SPLIT"
+            : paymentMethod
+          : null,
         tableId: tableId,
         isPaid: isPaid,
         restaurantId: getOutlet.id,
@@ -249,7 +255,11 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
             totalGrossProfit: totalGrossProfit,
             generatedOrderId: orderId,
             orderType: orderType,
-            paymentMethod: isPaid && !isSplitPayment ? paymentMethod : null,
+            paymentMethod: isPaid
+              ? isSplitPayment
+                ? "SPLIT"
+                : paymentMethod
+              : null,
             orderItems: {
               create: orderItems?.map((item: any) => ({
                 menuId: item?.menuId,
