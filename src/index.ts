@@ -67,6 +67,7 @@ app.use(errorMiddelware);
 setupCacheInvalidation();
 initializeAlertCrons();
 initializeEodScheduler();
+// connectToKafka();
 
 export const prismaDB = new PrismaClient();
 

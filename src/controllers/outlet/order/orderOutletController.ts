@@ -1958,6 +1958,7 @@ export const orderessionPaymentModePatch = async (
     },
     data: {
       paymentMethod: paymentMethod,
+      updatedAt: getOrderById?.updatedAt,
     },
   });
 
@@ -1976,6 +1977,7 @@ export const orderessionPaymentModePatch = async (
     },
     data: {
       paymentMethod: paymentMethod,
+      updatedAt: transaction?.updatedAt,
     },
   });
 
@@ -2188,6 +2190,7 @@ export const orderessionCancelPatch = async (req: Request, res: Response) => {
       data: {
         sessionStatus: "CANCELLED",
         active: false,
+        updatedAt: getOrderById?.updatedAt,
       },
     });
 
@@ -2199,6 +2202,7 @@ export const orderessionCancelPatch = async (req: Request, res: Response) => {
       },
       data: {
         orderStatus: "CANCELLED",
+        updatedAt: getOrderById?.updatedAt,
       },
     });
 
@@ -2577,6 +2581,7 @@ export const orderStatusOnlinePatch = async (req: Request, res: Response) => {
     data: {
       preparationTime,
       orderStatus: "PREPARING",
+      updatedAt: getOrderById?.updatedAt,
     },
   });
 
@@ -2642,6 +2647,7 @@ export const orderStatusPatch = async (req: Request, res: Response) => {
     },
     data: {
       orderStatus: orderStatus,
+      updatedAt: getOrderById?.updatedAt,
     },
   });
 

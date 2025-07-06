@@ -72,6 +72,7 @@ app.use(errors_1.errorMiddelware);
 (0, statsController_1.setupCacheInvalidation)();
 (0, alert_service_1.initializeAlertCrons)();
 (0, eod_scheduler_1.initializeEodScheduler)();
+// connectToKafka();
 exports.prismaDB = new client_1.PrismaClient();
 app.get("/health", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.json({

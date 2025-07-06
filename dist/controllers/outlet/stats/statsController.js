@@ -675,7 +675,7 @@ const outletTopSellingItems = (req, res) => __awaiter(void 0, void 0, void 0, fu
         where: {
             order: {
                 restaurantId: outlet.id,
-                updatedAt: {
+                createdAt: {
                     gte: startDate,
                     lte: endDate,
                 },

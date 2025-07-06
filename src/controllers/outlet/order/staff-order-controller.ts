@@ -21,6 +21,7 @@ import { OrderStatus, OrderType, CashRegister } from "@prisma/client";
 import { getYear } from "date-fns";
 import { inviteCode, menuCardSchema } from "./orderOutletController";
 import { sendNewOrderNotification } from "../../../services/expo-notifications";
+import { Kafka } from "kafkajs";
 
 export const getByStaffLiveOrders = async (req: Request, res: Response) => {
   const { outletId } = req.params;
@@ -359,7 +360,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
     await Promise.all(
       orderItems.map(async (item: any) => {
         const menuItem = await prisma.menuItem.findUnique({
-          where: { id: item.menuId },
+          where: { id: item.menuId, restaurantId: outletId },
           include: { itemRecipe: { include: { ingredients: true } } },
         });
 
@@ -367,7 +368,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
           await Promise.all(
             menuItem.itemRecipe.ingredients.map(async (ingredient) => {
               const rawMaterial = await prisma.rawMaterial.findUnique({
-                where: { id: ingredient.rawMaterialId },
+                where: { id: ingredient.rawMaterialId, restaurantId: outletId },
               });
 
               if (rawMaterial) {
@@ -400,7 +401,7 @@ export const postOrderForStaf = async (req: Request, res: Response) => {
                 }
 
                 await prisma.rawMaterial.update({
-                  where: { id: rawMaterial.id },
+                  where: { id: rawMaterial.id, restaurantId: outletId },
                   data: {
                     currentStock:
                       Number(rawMaterial.currentStock) - Number(decrementStock),
@@ -662,6 +663,7 @@ export const postOrderForStafUsingQueue = async (
     generatedOrderId(getOutlet.id),
     generateBillNo(getOutlet.id),
   ]);
+
   // Determine order status
   const orderStatus =
     orderMode === "KOT"
@@ -832,64 +834,6 @@ export const postOrderForStafUsingQueue = async (
         },
       },
     });
-
-    // Update raw material stock if `chooseProfit` is "itemRecipe"
-    await Promise.all(
-      orderItems.map(async (item: any) => {
-        const menuItem = await prisma.menuItem.findUnique({
-          where: { id: item.menuId },
-          include: { itemRecipe: { include: { ingredients: true } } },
-        });
-
-        if (menuItem?.chooseProfit === "itemRecipe" && menuItem.itemRecipe) {
-          await Promise.all(
-            menuItem.itemRecipe.ingredients.map(async (ingredient) => {
-              const rawMaterial = await prisma.rawMaterial.findUnique({
-                where: { id: ingredient.rawMaterialId },
-              });
-
-              if (rawMaterial) {
-                let decrementStock = 0;
-
-                // Check if the ingredient's unit matches the purchase unit or consumption unit
-                if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
-                  // If MOU is linked to purchaseUnit, multiply directly with quantity
-                  decrementStock =
-                    Number(ingredient.quantity) * Number(item.quantity || 1);
-                } else if (
-                  ingredient.unitId === rawMaterial.consumptionUnitId
-                ) {
-                  // If MOU is linked to consumptionUnit, apply conversion factor
-                  decrementStock =
-                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
-                    Number(rawMaterial.conversionFactor || 1);
-                } else {
-                  // Default fallback if MOU doesn't match either unit
-                  decrementStock =
-                    (Number(ingredient.quantity) * Number(item.quantity || 1)) /
-                    Number(rawMaterial.conversionFactor || 1);
-                }
-
-                if (Number(rawMaterial.currentStock) < decrementStock) {
-                  throw new BadRequestsException(
-                    `Insufficient stock for raw material: ${rawMaterial.name}`,
-                    ErrorCode.UNPROCESSABLE_ENTITY
-                  );
-                }
-
-                await prisma.rawMaterial.update({
-                  where: { id: rawMaterial.id },
-                  data: {
-                    currentStock:
-                      Number(rawMaterial.currentStock) - Number(decrementStock),
-                  },
-                });
-              }
-            })
-          );
-        }
-      })
-    );
 
     if (tableId) {
       const table = await prisma.table.findFirst({

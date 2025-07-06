@@ -105,12 +105,12 @@ export const getPosStats = async (req: Request, res: Response) => {
   });
 
   //active orders
-  const activeOrders = await prismaDB.order.count({
+  const activeOrders = await prismaDB.orderSession.count({
     where: {
       restaurantId: outletId,
       staffId: staffId,
-      orderStatus: {
-        in: ["PREPARING", "FOODREADY", "INCOMMING", "SERVED", "OUTFORDELIVERY"],
+      sessionStatus: {
+        in: ["ONPROGRESS"],
       },
     },
   });

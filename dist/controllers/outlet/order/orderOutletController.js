@@ -1518,6 +1518,7 @@ const orderessionPaymentModePatch = (req, res) => __awaiter(void 0, void 0, void
         },
         data: {
             paymentMethod: paymentMethod,
+            updatedAt: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.updatedAt,
         },
     });
     const transaction = yield __1.prismaDB.cashTransaction.findFirst({
@@ -1534,6 +1535,7 @@ const orderessionPaymentModePatch = (req, res) => __awaiter(void 0, void 0, void
         },
         data: {
             paymentMethod: paymentMethod,
+            updatedAt: transaction === null || transaction === void 0 ? void 0 : transaction.updatedAt,
         },
     });
     yield Promise.all([
@@ -1707,6 +1709,7 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
             data: {
                 sessionStatus: "CANCELLED",
                 active: false,
+                updatedAt: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.updatedAt,
             },
         });
         // Update all related orders' status to "CANCELLED"
@@ -1717,6 +1720,7 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
             },
             data: {
                 orderStatus: "CANCELLED",
+                updatedAt: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.updatedAt,
             },
         });
         // Delete all alerts linked to any order in this order session
@@ -2050,6 +2054,7 @@ const orderStatusOnlinePatch = (req, res) => __awaiter(void 0, void 0, void 0, f
         data: {
             preparationTime,
             orderStatus: "PREPARING",
+            updatedAt: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.updatedAt,
         },
     });
     // Update related alerts to resolved
@@ -2100,6 +2105,7 @@ const orderStatusPatch = (req, res) => __awaiter(void 0, void 0, void 0, functio
         },
         data: {
             orderStatus: orderStatus,
+            updatedAt: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.updatedAt,
         },
     });
     // Update related alerts to resolved

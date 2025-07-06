@@ -89,12 +89,12 @@ const getPosStats = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         },
     });
     //active orders
-    const activeOrders = yield __1.prismaDB.order.count({
+    const activeOrders = yield __1.prismaDB.orderSession.count({
         where: {
             restaurantId: outletId,
             staffId: staffId,
-            orderStatus: {
-                in: ["PREPARING", "FOODREADY", "INCOMMING", "SERVED", "OUTFORDELIVERY"],
+            sessionStatus: {
+                in: ["ONPROGRESS"],
             },
         },
     });

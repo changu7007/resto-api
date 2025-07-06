@@ -246,13 +246,13 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
         // Update raw material stock if `chooseProfit` is "itemRecipe"
         yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
             const menuItem = yield prisma.menuItem.findUnique({
-                where: { id: item.menuId },
+                where: { id: item.menuId, restaurantId: outletId },
                 include: { itemRecipe: { include: { ingredients: true } } },
             });
             if ((menuItem === null || menuItem === void 0 ? void 0 : menuItem.chooseProfit) === "itemRecipe" && menuItem.itemRecipe) {
                 yield Promise.all(menuItem.itemRecipe.ingredients.map((ingredient) => __awaiter(void 0, void 0, void 0, function* () {
                     const rawMaterial = yield prisma.rawMaterial.findUnique({
-                        where: { id: ingredient.rawMaterialId },
+                        where: { id: ingredient.rawMaterialId, restaurantId: outletId },
                     });
                     if (rawMaterial) {
                         let decrementStock = 0;
@@ -278,7 +278,7 @@ const postOrderForStaf = (req, res) => __awaiter(void 0, void 0, void 0, functio
                             throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
                         }
                         yield prisma.rawMaterial.update({
-                            where: { id: rawMaterial.id },
+                            where: { id: rawMaterial.id, restaurantId: outletId },
                             data: {
                                 currentStock: Number(rawMaterial.currentStock) - Number(decrementStock),
                             },
@@ -586,50 +586,6 @@ const postOrderForStafUsingQueue = (req, res) => __awaiter(void 0, void 0, void 
                 },
             },
         });
-        // Update raw material stock if `chooseProfit` is "itemRecipe"
-        yield Promise.all(orderItems.map((item) => __awaiter(void 0, void 0, void 0, function* () {
-            const menuItem = yield prisma.menuItem.findUnique({
-                where: { id: item.menuId },
-                include: { itemRecipe: { include: { ingredients: true } } },
-            });
-            if ((menuItem === null || menuItem === void 0 ? void 0 : menuItem.chooseProfit) === "itemRecipe" && menuItem.itemRecipe) {
-                yield Promise.all(menuItem.itemRecipe.ingredients.map((ingredient) => __awaiter(void 0, void 0, void 0, function* () {
-                    const rawMaterial = yield prisma.rawMaterial.findUnique({
-                        where: { id: ingredient.rawMaterialId },
-                    });
-                    if (rawMaterial) {
-                        let decrementStock = 0;
-                        // Check if the ingredient's unit matches the purchase unit or consumption unit
-                        if (ingredient.unitId === rawMaterial.minimumStockLevelUnit) {
-                            // If MOU is linked to purchaseUnit, multiply directly with quantity
-                            decrementStock =
-                                Number(ingredient.quantity) * Number(item.quantity || 1);
-                        }
-                        else if (ingredient.unitId === rawMaterial.consumptionUnitId) {
-                            // If MOU is linked to consumptionUnit, apply conversion factor
-                            decrementStock =
-                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
-                                    Number(rawMaterial.conversionFactor || 1);
-                        }
-                        else {
-                            // Default fallback if MOU doesn't match either unit
-                            decrementStock =
-                                (Number(ingredient.quantity) * Number(item.quantity || 1)) /
-                                    Number(rawMaterial.conversionFactor || 1);
-                        }
-                        if (Number(rawMaterial.currentStock) < decrementStock) {
-                            throw new bad_request_1.BadRequestsException(`Insufficient stock for raw material: ${rawMaterial.name}`, root_1.ErrorCode.UNPROCESSABLE_ENTITY);
-                        }
-                        yield prisma.rawMaterial.update({
-                            where: { id: rawMaterial.id },
-                            data: {
-                                currentStock: Number(rawMaterial.currentStock) - Number(decrementStock),
-                            },
-                        });
-                    }
-                })));
-            }
-        })));
         if (tableId) {
             const table = yield prisma.table.findFirst({
                 where: { id: tableId, restaurantId: getOutlet.id },

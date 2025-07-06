@@ -848,7 +848,7 @@ export const outletTopSellingItems = async (req: Request, res: Response) => {
     where: {
       order: {
         restaurantId: outlet.id,
-        updatedAt: {
+        createdAt: {
           gte: startDate,
           lte: endDate,
         },
