@@ -176,6 +176,7 @@ const getOrderSessionById = (outletId, orderSessionId) => __awaiter(void 0, void
         include: {
             table: true,
             orders: true,
+            CashTransaction: true,
         },
     });
     return getOrderSession;

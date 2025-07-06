@@ -1701,6 +1701,21 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
                 }
             }
         }
+        if ((getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.isPaid) && (getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.paymentMethod)) {
+            const transaction = yield tx.cashTransaction.findFirst({
+                where: {
+                    register: {
+                        restaurantId: outletId,
+                    },
+                    orderId: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.id,
+                },
+            });
+            yield tx.cashTransaction.delete({
+                where: {
+                    id: transaction === null || transaction === void 0 ? void 0 : transaction.id,
+                },
+            });
+        }
         // Update the `orderSession` status to "CANCELLED"
         yield tx.orderSession.update({
             where: {
@@ -1708,6 +1723,7 @@ const orderessionCancelPatch = (req, res) => __awaiter(void 0, void 0, void 0, f
             },
             data: {
                 sessionStatus: "CANCELLED",
+                paymentMethod: null,
                 active: false,
                 updatedAt: getOrderById === null || getOrderById === void 0 ? void 0 : getOrderById.updatedAt,
             },

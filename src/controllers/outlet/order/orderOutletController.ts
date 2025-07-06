@@ -2182,6 +2182,22 @@ export const orderessionCancelPatch = async (req: Request, res: Response) => {
       }
     }
 
+    if (getOrderById?.isPaid && getOrderById?.paymentMethod) {
+      const transaction = await tx.cashTransaction.findFirst({
+        where: {
+          register: {
+            restaurantId: outletId,
+          },
+          orderId: getOrderById?.id,
+        },
+      });
+      await tx.cashTransaction.delete({
+        where: {
+          id: transaction?.id,
+        },
+      });
+    }
+
     // Update the `orderSession` status to "CANCELLED"
     await tx.orderSession.update({
       where: {
@@ -2189,6 +2205,7 @@ export const orderessionCancelPatch = async (req: Request, res: Response) => {
       },
       data: {
         sessionStatus: "CANCELLED",
+        paymentMethod: null,
         active: false,
         updatedAt: getOrderById?.updatedAt,
       },
